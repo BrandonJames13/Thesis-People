@@ -1,0 +1,1972 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>TSU CCS — Room Scheduling System</title>
+    <link rel="stylesheet" href="index.css">
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+     
+    <header>
+      <div class="logo">
+        <div class="logo-icon">📅</div>
+        TSU&nbsp;·&nbsp;CCS&nbsp;&nbsp;<span
+          style="color: var(--text3); font-weight: 400"
+          >/ Room Scheduling System</span
+        >
+      </div>
+      <div class="header-right">
+        <span class="badge">v1.0 · BETA</span>
+        <div style="font-size: 12px; color: var(--text2)">Admin User</div>
+        <div class="avatar">AU</div>
+      </div>
+    </header>
+    <div class="layout">
+      <nav>
+        <div class="nav-section">Main</div>
+        <a class="nav-item active" onclick="switchPage('dashboard', this)"
+          ><span class="icon">⊞</span>Dashboard</a
+        >
+        <a class="nav-item" onclick="switchPage('schedule', this)"
+          ><span class="icon">📆</span>Schedule</a
+        >
+        <a class="nav-item" onclick="switchPage('conflicts', this)"
+          ><span class="icon">⚠</span>Conflicts<span class="nav-badge"
+            >3</span
+          ></a
+        >
+        <div class="nav-section">Management</div>
+        <a class="nav-item" onclick="switchPage('rooms', this)"
+          ><span class="icon">🏫</span>Rooms</a
+        >
+        <a class="nav-item" onclick="switchPage('faculty', this)"
+          ><span class="icon">👤</span>Faculty</a
+        >
+        <a class="nav-item" onclick="switchPage('courses', this)"
+          ><span class="icon">📚</span>Courses</a
+        >
+        <div class="nav-section">System</div>
+        <a class="nav-item" onclick="switchPage('algorithm', this)"
+          ><span class="icon">⚙</span>Algorithm</a
+        >
+        <a class="nav-item" onclick="switchPage('analytics', this)"
+          ><span class="icon">📊</span>Analytics</a
+        >
+      </nav>
+      <main>
+        <div class="tabs">
+          <div
+            class="tab active"
+            id="tab-dashboard"
+            onclick="switchTab('dashboard')"
+          >
+            ⊞ Dashboard
+          </div>
+          <div class="tab" id="tab-schedule" onclick="switchTab('schedule')">
+            📆 Schedule <span class="tab-count">124</span>
+          </div>
+          <div class="tab" id="tab-conflicts" onclick="switchTab('conflicts')">
+            ⚠ Conflicts
+            <span class="tab-count" style="color: var(--red)">3</span>
+          </div>
+          <div class="tab" id="tab-rooms" onclick="switchTab('rooms')">
+            🏫 Rooms <span class="tab-count">48</span>
+          </div>
+          <div class="tab" id="tab-algorithm" onclick="switchTab('algorithm')">
+            ⚙ Algorithm
+          </div>
+          <div class="tab" id="tab-analytics" onclick="switchTab('analytics')">
+            📊 Analytics
+          </div>
+        </div>
+
+        <!-- DASH BOARD PAGE DITO TANGA KA TALAGA -->
+        <div class="page active" id="page-dashboard">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Dashboard</div>
+              <div class="section-subtitle">
+                AY 2025–2026 · 1st Semester · College of Computer Studies, TSU
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px">
+              <button class="btn btn-secondary">↓ Export</button>
+              <button class="btn btn-primary" onclick="runAlgorithm()">
+                ▶ Generate Schedule
+              </button>
+            </div>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-card blue">
+              <div class="stat-icon">🏫</div>
+              <div class="stat-label">Total Rooms</div>
+              <div class="stat-value">48</div>
+              <div class="stat-delta">12 labs · 36 lecture</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon">✅</div>
+              <div class="stat-label">Scheduled</div>
+              <div class="stat-value">124</div>
+              <div class="stat-delta">of 127 courses assigned</div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon">⚠</div>
+              <div class="stat-label">Conflicts</div>
+              <div class="stat-value">3</div>
+              <div class="stat-delta">requires manual review</div>
+            </div>
+            <div class="stat-card purple">
+              <div class="stat-icon">📊</div>
+              <div class="stat-label">Utilization</div>
+              <div class="stat-value">78%</div>
+              <div class="stat-delta">target ≥ 80%</div>
+            </div>
+          </div>
+          <div class="dashboard-grid">
+            <div>
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">📋 Recent Assignments</div>
+                  <button
+                    class="btn btn-secondary"
+                    style="padding: 4px 10px; font-size: 11px"
+                  >
+                    View All
+                  </button>
+                </div>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Course</th>
+                      <th>Room</th>
+                      <th>Time Slot</th>
+                      <th>Instructor</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <span class="monospace">CS301</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >Data Structures</span
+                        >
+                      </td>
+                      <td class="monospace">Room 201</td>
+                      <td class="monospace">MWF 8:00</td>
+                      <td>Dela Cruz, J.</td>
+                      <td><span class="pill pill-green">Assigned</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span class="monospace">IT204</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >Web Development</span
+                        >
+                      </td>
+                      <td class="monospace">Lab 01</td>
+                      <td class="monospace">TTH 10:00</td>
+                      <td>Santos, M.</td>
+                      <td><span class="pill pill-green">Assigned</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span class="monospace">CS401</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >Algorithms</span
+                        >
+                      </td>
+                      <td class="monospace">Room 101</td>
+                      <td class="monospace">MWF 11:00</td>
+                      <td>Reyes, A.</td>
+                      <td><span class="pill pill-red">Conflict</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span class="monospace">IS301</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >Info Systems</span
+                        >
+                      </td>
+                      <td class="monospace">Room 302</td>
+                      <td class="monospace">TTH 1:00</td>
+                      <td>Garcia, L.</td>
+                      <td><span class="pill pill-green">Assigned</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span class="monospace">CS202</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >OOP</span
+                        >
+                      </td>
+                      <td class="monospace">Room 103</td>
+                      <td class="monospace">MWF 1:00</td>
+                      <td>Lim, K.</td>
+                      <td><span class="pill pill-orange">Pending</span></td>
+                    </tr>
+                    <tr>
+                      <td>
+                        <span class="monospace">IT301</span><br /><span
+                          style="font-size: 11px; color: var(--text3)"
+                          >Networks</span
+                        >
+                      </td>
+                      <td class="monospace">Lab 02</td>
+                      <td class="monospace">TTH 8:00</td>
+                      <td>Cruz, P.</td>
+                      <td><span class="pill pill-green">Assigned</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">
+                    ⚙ Constraint-Based Greedy Algorithm — Last Run
+                  </div>
+                  <span class="pill pill-green">Completed · 7.4s</span>
+                </div>
+                <div class="algo-steps">
+                  <div class="algo-step">
+                    <div class="step-dot done">✓</div>
+                    <div>
+                      <div class="step-name">Input Data Collection</div>
+                      <div class="step-desc">
+                        127 courses · 48 rooms · 34 instructors · 30 time slots
+                        loaded
+                      </div>
+                    </div>
+                    <div class="step-time">0.3s</div>
+                  </div>
+                  <div class="algo-step">
+                    <div class="step-dot done">✓</div>
+                    <div>
+                      <div class="step-name">
+                        Data Validation &amp; Constraint Check
+                      </div>
+                      <div class="step-desc">
+                        Hard constraints verified · Tier-1 rules activated
+                      </div>
+                    </div>
+                    <div class="step-time">0.6s</div>
+                  </div>
+                  <div class="algo-step">
+                    <div class="step-dot done">✓</div>
+                    <div>
+                      <div class="step-name">
+                        Greedy Assignment — Tier 1 (Hard)
+                      </div>
+                      <div class="step-desc">
+                        No double-booking · Capacity compliance · Instructor
+                        conflicts checked
+                      </div>
+                    </div>
+                    <div class="step-time">3.1s</div>
+                  </div>
+                  <div class="algo-step">
+                    <div class="step-dot done">✓</div>
+                    <div>
+                      <div class="step-name">
+                        Soft Constraint Optimization — Tier 2
+                      </div>
+                      <div class="step-desc">
+                        Time pref 30% · Room type 25% · Compactness 25% ·
+                        Balance 20%
+                      </div>
+                    </div>
+                    <div class="step-time">2.1s</div>
+                  </div>
+                  <div class="algo-step">
+                    <div class="step-dot active">!</div>
+                    <div>
+                      <div class="step-name">Localized Reallocation</div>
+                      <div class="step-desc">
+                        3 conflicts detected — attempting alternative
+                        assignments without full regeneration
+                      </div>
+                    </div>
+                    <div class="step-time">1.3s</div>
+                  </div>
+                  <div class="algo-step">
+                    <div class="step-dot idle">○</div>
+                    <div>
+                      <div class="step-name">
+                        Cloud Synchronization (PostgreSQL)
+                      </div>
+                      <div class="step-desc">
+                        Awaiting conflict resolution before push to cloud
+                        storage
+                      </div>
+                    </div>
+                    <div class="step-time">—</div>
+                  </div>
+                </div>
+                <div class="progress-wrap">
+                  <div class="progress-header">
+                    <span>Generation Progress</span
+                    ><span>124 / 127 courses assigned</span>
+                  </div>
+                  <div class="progress-bar">
+                    <div class="progress-fill" style="width: 97.6%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="side-panel">
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">⚡ Quick Actions</div>
+                </div>
+                <div
+                  style="
+                    padding: 14px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 8px;
+                  "
+                >
+                  <button
+                    class="btn btn-primary"
+                    style="justify-content: center"
+                    onclick="runAlgorithm()"
+                  >
+                    ▶ Re-generate Schedule
+                  </button>
+                  <button
+                    class="btn btn-danger"
+                    style="justify-content: center"
+                    onclick="switchTab('conflicts')"
+                  >
+                    ⚠ Resolve 3 Conflicts
+                  </button>
+                  <button
+                    class="btn btn-secondary"
+                    style="justify-content: center"
+                  >
+                    ↓ Export to Excel
+                  </button>
+                  <button
+                    class="btn btn-success"
+                    style="justify-content: center"
+                  >
+                    ☁ Sync to PostgreSQL
+                  </button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">📊 Room Utilization by Floor</div>
+                </div>
+                <div class="util-row">
+                  <div class="util-label">Labs</div>
+                  <div class="util-bar-wrap">
+                    <div
+                      class="util-fill"
+                      style="width: 91%; background: var(--purple)"
+                    ></div>
+                  </div>
+                  <div class="util-pct" style="color: var(--purple)">91%</div>
+                </div>
+                <div class="util-row">
+                  <div class="util-label">Floor 1</div>
+                  <div class="util-bar-wrap">
+                    <div
+                      class="util-fill"
+                      style="width: 85%; background: var(--green)"
+                    ></div>
+                  </div>
+                  <div class="util-pct" style="color: var(--green)">85%</div>
+                </div>
+                <div class="util-row">
+                  <div class="util-label">Floor 2</div>
+                  <div class="util-bar-wrap">
+                    <div
+                      class="util-fill"
+                      style="width: 78%; background: var(--accent2)"
+                    ></div>
+                  </div>
+                  <div class="util-pct" style="color: var(--accent2)">78%</div>
+                </div>
+                <div class="util-row">
+                  <div class="util-label">Floor 3</div>
+                  <div class="util-bar-wrap">
+                    <div
+                      class="util-fill"
+                      style="width: 64%; background: var(--orange)"
+                    ></div>
+                  </div>
+                  <div class="util-pct" style="color: var(--orange)">64%</div>
+                </div>
+                <div
+                  style="
+                    padding: 12px 20px;
+                    font-size: 11px;
+                    color: var(--text3);
+                    border-top: 1px solid var(--border);
+                  "
+                >
+                  Intl benchmark: 80–90% · Labs &amp; Floor 1 on target ✓
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <div class="card-title">🛈 System Status</div>
+                </div>
+                <div
+                  style="
+                    padding: 12px 16px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 10px;
+                  "
+                >
+                  <div class="mini-stat">
+                    <div
+                      class="mini-icon"
+                      style="background: rgba(47, 129, 247, 0.15)"
+                    >
+                      ⚡
+                    </div>
+                    <div>
+                      <div class="mini-label">Generation Time</div>
+                      <div class="mini-value">
+                        7.4s
+                        <span style="font-size: 11px; color: var(--text3)"
+                          >/ 127 courses</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mini-stat">
+                    <div
+                      class="mini-icon"
+                      style="background: rgba(63, 185, 80, 0.15)"
+                    >
+                      🔄
+                    </div>
+                    <div>
+                      <div class="mini-label">Last Sync</div>
+                      <div class="mini-value">
+                        2m
+                        <span style="font-size: 11px; color: var(--text3)"
+                          >ago · Cloud OK</span
+                        >
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mini-stat">
+                    <div
+                      class="mini-icon"
+                      style="background: rgba(188, 140, 255, 0.15)"
+                    >
+                      📦
+                    </div>
+                    <div>
+                      <div class="mini-label">Algorithm</div>
+                      <div class="mini-value" style="font-size: 12px">
+                        Greedy+LocalRe
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BOBO KA SCHEDULE PAGE ETO OH TANGA -->
+        <div class="page" id="page-schedule">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Weekly Schedule</div>
+              <div class="section-subtitle">
+                AY 2025–2026 · 1st Semester · Color-coded by time block
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center">
+              <select class="search-input" style="width: 150px">
+                <option>All Rooms</option>
+                <option>Room 101</option>
+                <option>Room 201</option>
+                <option>Lab 01</option>
+              </select>
+              <button class="btn btn-secondary">← Prev</button>
+              <button class="btn btn-secondary">Next →</button>
+              <button class="btn btn-primary">↓ Export</button>
+            </div>
+          </div>
+          <div class="card">
+            <!-- SAMPLE LANG TO WAG KANG TANGA -->>
+            <div class="schedule-grid">
+              <div></div>
+              <div class="sched-header">MON</div>
+              <div class="sched-header">TUE</div>
+              <div class="sched-header">WED</div>
+              <div class="sched-header">THU</div>
+              <div class="sched-header">FRI</div>
+              <div class="sched-header">SAT</div>
+              
+              <div class="time-label">7:00<br />AM</div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">CS101</div>
+                <div class="sched-room">Room 101</div>
+                <div class="sched-prof">Dela Cruz, J.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">CS101</div>
+                <div class="sched-room">Room 101</div>
+                <div class="sched-prof">Dela Cruz, J.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">IT204</div>
+                <div class="sched-room">Lab 01</div>
+                <div class="sched-prof">Santos, M.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+             
+              <div class="time-label">9:00<br />AM</div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">CS301</div>
+                <div class="sched-room">Room 201</div>
+                <div class="sched-prof">Reyes, A.</div>
+              </div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">IS201</div>
+                <div class="sched-room">Room 102</div>
+                <div class="sched-prof">Garcia, L.</div>
+              </div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">CS301</div>
+                <div class="sched-room">Room 201</div>
+                <div class="sched-prof">Reyes, A.</div>
+              </div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">IS201</div>
+                <div class="sched-room">Room 102</div>
+                <div class="sched-prof">Garcia, L.</div>
+              </div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">CS301</div>
+                <div class="sched-room">Room 201</div>
+                <div class="sched-prof">Reyes, A.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              
+              <div class="time-label">11:00<br />AM</div>
+              <div class="sched-cell conflict">
+                <div class="sched-course" style="color: var(--red)">
+                  CS401 ⚠
+                </div>
+                <div class="sched-room">Room 101</div>
+                <div class="sched-prof">Reyes, A. ← conflict</div>
+              </div>
+              <div class="sched-cell occupied-purple">
+                <div class="sched-course">IT301</div>
+                <div class="sched-room">Lab 02</div>
+                <div class="sched-prof">Cruz, P.</div>
+              </div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">CS202</div>
+                <div class="sched-room">Room 103</div>
+                <div class="sched-prof">Lim, K.</div>
+              </div>
+              <div class="sched-cell occupied-purple">
+                <div class="sched-course">IT301</div>
+                <div class="sched-room">Lab 02</div>
+                <div class="sched-prof">Cruz, P.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">CS202</div>
+                <div class="sched-room">Room 103</div>
+                <div class="sched-prof">Lim, K.</div>
+              </div>
+              
+              <div class="time-label">1:00<br />PM</div>
+              <div class="sched-cell occupied-purple">
+                <div class="sched-course">CS202</div>
+                <div class="sched-room">Room 103</div>
+                <div class="sched-prof">Lim, K.</div>
+              </div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">IS301</div>
+                <div class="sched-room">Room 302</div>
+                <div class="sched-prof">Garcia, L.</div>
+              </div>
+              <div class="sched-cell occupied-purple">
+                <div class="sched-course">CS202</div>
+                <div class="sched-room">Room 103</div>
+                <div class="sched-prof">Lim, K.</div>
+              </div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">IS301</div>
+                <div class="sched-room">Room 302</div>
+                <div class="sched-prof">Garcia, L.</div>
+              </div>
+              <div class="sched-cell occupied-purple">
+                <div class="sched-course">CS202</div>
+                <div class="sched-room">Room 103</div>
+                <div class="sched-prof">Lim, K.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              
+              <div class="time-label">3:00<br />PM</div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">IT401</div>
+                <div class="sched-room">Lab 03</div>
+                <div class="sched-prof">Santos, M.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-blue">
+                <div class="sched-course">IT401</div>
+                <div class="sched-room">Lab 03</div>
+                <div class="sched-prof">Santos, M.</div>
+              </div>
+              <div class="sched-cell empty"></div>
+              <div class="sched-cell occupied-green">
+                <div class="sched-course">IS402</div>
+                <div class="sched-room">Room 201</div>
+                <div class="sched-prof">Dela Cruz, J.</div>
+              </div>
+            </div>
+            <div class="legend">
+              <div class="legend-item">
+                <div
+                  class="legend-dot"
+                  style="
+                    background: rgba(47, 129, 247, 0.5);
+                    border: 1px solid var(--accent);
+                  "
+                ></div>
+                Morning Block
+              </div>
+              <div class="legend-item">
+                <div
+                  class="legend-dot"
+                  style="
+                    background: rgba(63, 185, 80, 0.5);
+                    border: 1px solid var(--green);
+                  "
+                ></div>
+                Mid-Day Block
+              </div>
+              <div class="legend-item">
+                <div
+                  class="legend-dot"
+                  style="
+                    background: rgba(188, 140, 255, 0.5);
+                    border: 1px solid var(--purple);
+                  "
+                ></div>
+                Afternoon Block
+              </div>
+              <div class="legend-item">
+                <div
+                  class="legend-dot"
+                  style="
+                    background: rgba(248, 81, 73, 0.5);
+                    border: 1px solid var(--red);
+                  "
+                ></div>
+                Conflict Detected
+              </div>
+              <div class="legend-item">
+                <div
+                  class="legend-dot"
+                  style="
+                    background: var(--surface2);
+                    border: 1px solid var(--border);
+                  "
+                ></div>
+                Available Slot
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CONFLICTS PAGE ETO MAG HANAP KA KASI BANO -->
+        <div class="page" id="page-conflicts">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Conflict Detection</div>
+              <div class="section-subtitle">
+                3 active conflicts · Localized Reallocation available for all
+              </div>
+            </div>
+            <button
+              class="btn btn-primary"
+              onclick="
+                alert(
+                  'Localized Reallocation running...\n\nAttempting alternative assignments for 3 conflicts.\nNo full schedule regeneration needed.\n\n✓ CS105 moved to Room 103 · MON 11AM\n✓ CS401 rescheduled to WED 3PM\n⚠ Room IT204 — soft constraint only, dismissed.',
+                )
+              "
+            >
+              ⚙ Auto-Resolve All
+            </button>
+          </div>
+          <div
+            style="
+              font-size: 11px;
+              font-weight: 700;
+              color: var(--text3);
+              text-transform: uppercase;
+              letter-spacing: 1.2px;
+              font-family: var(--mono);
+              margin-bottom: 12px;
+            "
+          >
+            🔴 Hard Constraint Violations (2)
+          </div>
+          <div class="conflict-card">
+            <div class="conflict-icon">🔴</div>
+            <div style="flex: 1">
+              <div class="conflict-title">
+                Double Booking — Room 101 · Monday 11:00 AM
+              </div>
+              <div class="conflict-desc">
+                <strong>CS401</strong> (Algorithms · Reyes, A. · 38 enrolled)
+                and <strong>CS105</strong> (Intro to CS · Lim, K. · 42 enrolled)
+                are both assigned to Room 101 at the same time. Room 101
+                capacity: 40.
+              </div>
+              <div class="conflict-meta">
+                TYPE: DOUBLE_BOOKING · SEVERITY: HARD · ROOM: 101 · SLOT:
+                MON-1100
+              </div>
+              <div class="conflict-actions">
+                <button
+                  class="btn btn-danger"
+                  onclick="
+                    alert(
+                      'Localized Reallocation triggered for CS401.\nSearching Room 103 (45 seats) · MON 11AM — Available ✓\nReallocated successfully. No full regeneration needed.',
+                    )
+                  "
+                >
+                  ⚙ Localized Reallocation
+                </button>
+                <button class="btn btn-secondary">✏ Manual Override</button>
+                <button
+                  class="btn btn-secondary"
+                  onclick="switchTab('schedule')"
+                >
+                  👁 View in Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="conflict-card">
+            <div class="conflict-icon">🔴</div>
+            <div style="flex: 1">
+              <div class="conflict-title">
+                Instructor Conflict — Reyes, A. · Tuesday 9:00 AM
+              </div>
+              <div class="conflict-desc">
+                Instructor <strong>Reyes, A.</strong> is simultaneously
+                scheduled for <strong>CS301</strong> (Room 201) and
+                <strong>CS401</strong> (Room 101) on Tuesday at 9:00 AM. A
+                faculty member cannot be assigned to overlapping courses.
+              </div>
+              <div class="conflict-meta">
+                TYPE: INSTRUCTOR_CONFLICT · SEVERITY: HARD · INSTRUCTOR: REYES_A
+                · SLOT: TUE-0900
+              </div>
+              <div class="conflict-actions">
+                <button
+                  class="btn btn-danger"
+                  onclick="
+                    alert(
+                      'Searching alternative time slots for CS401...\nWED 3PM · Room 201 — Available ✓\nReallocated successfully.',
+                    )
+                  "
+                >
+                  ⚙ Localized Reallocation
+                </button>
+                <button class="btn btn-secondary">✏ Manual Override</button>
+                <button
+                  class="btn btn-secondary"
+                  onclick="switchTab('faculty')"
+                >
+                  📋 Faculty Schedule
+                </button>
+              </div>
+            </div>
+          </div>
+          <div
+            style="
+              font-size: 11px;
+              font-weight: 700;
+              color: var(--text3);
+              text-transform: uppercase;
+              letter-spacing: 1.2px;
+              font-family: var(--mono);
+              margin-bottom: 12px;
+              margin-top: 24px;
+            "
+          >
+            🟡 Soft Constraint Warnings (1)
+          </div>
+          <div class="conflict-card warning">
+            <div class="conflict-icon">🟡</div>
+            <div style="flex: 1">
+              <div class="conflict-title">
+                Room Underutilization — IT204 assigned to Lab 01 (45 seats)
+              </div>
+              <div class="conflict-desc">
+                <strong>IT204</strong> (Web Development · 18 enrolled) is in Lab
+                01 (capacity 45) at 40% utilization. Lab 02 (25 seats) would be
+                more appropriate. Soft constraint — does not violate hard rules.
+              </div>
+              <div class="conflict-meta">
+                TYPE: ROOM_UNDERUTILIZATION · SEVERITY: SOFT · WEIGHT: 25% ·
+                SCORE_IMPACT: −8pts
+              </div>
+              <div class="conflict-actions">
+                <button
+                  class="btn btn-secondary"
+                  onclick="
+                    alert(
+                      'Suggesting Lab 02 (25 seats) as a more efficient alternative.',
+                    )
+                  "
+                >
+                  💡 Suggest Alternative
+                </button>
+                <button class="btn btn-secondary">↷ Dismiss Warning</button>
+              </div>
+            </div>
+          </div>
+          <div class="card" style="margin-top: 24px">
+            <div class="card-header">
+              <div class="card-title">📋 Localized Reallocation Log</div>
+              <span class="pill pill-green"
+                >12 auto-resolved this semester</span
+              >
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Original Assignment</th>
+                  <th>Reallocated To</th>
+                  <th>Conflict Type</th>
+                  <th>Time</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="monospace">IT302</td>
+                  <td class="monospace">Room 201 · MWF 9AM</td>
+                  <td class="monospace">Room 302 · MWF 9AM</td>
+                  <td>
+                    <span class="pill pill-orange" style="font-size: 10px"
+                      >Capacity</span
+                    >
+                  </td>
+                  <td style="font-size: 12px; color: var(--text3)">2h ago</td>
+                  <td><span class="pill pill-green">Resolved</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">CS305</td>
+                  <td class="monospace">Room 101 · TTH 1PM</td>
+                  <td class="monospace">Room 105 · TTH 1PM</td>
+                  <td>
+                    <span class="pill pill-red" style="font-size: 10px"
+                      >Double Book</span
+                    >
+                  </td>
+                  <td style="font-size: 12px; color: var(--text3)">
+                    Yesterday
+                  </td>
+                  <td><span class="pill pill-green">Resolved</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ROOMS PAGE OH TANGA MANGMANG SUPOT -->
+        <div class="page" id="page-rooms">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Room Inventory</div>
+              <div class="section-subtitle">
+                48 rooms total · 12 computer labs · 36 lecture rooms
+              </div>
+            </div>
+            <div class="filter-row">
+              <input
+                class="search-input"
+                type="text"
+                placeholder="Search rooms…"
+              />
+              <select class="search-input" style="width: 140px">
+                <option>All Types</option>
+                <option>Lecture</option>
+                <option>Computer Lab</option>
+              </select>
+              <select class="search-input" style="width: 140px">
+                <option>All Status</option>
+                <option>Available</option>
+                <option>Occupied</option>
+                <option>Maintenance</option>
+              </select>
+              <button class="btn btn-primary" onclick="addRoom()">+ Add Room</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="rooms-grid">
+              <div class="room-card selected">
+                <div class="room-number">Room 101</div>
+                <div class="room-type">Lecture Room</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-green">Available</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 75%"></div>
+                  </div>
+                  <span class="monospace">40</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Room 102</div>
+                <div class="room-type">Lecture Room</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-blue">Occupied</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 63%"></div>
+                  </div>
+                  <span class="monospace">35</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Room 103</div>
+                <div class="room-type">Lecture Room</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-blue">Occupied</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 80%"></div>
+                  </div>
+                  <span class="monospace">45</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Room 201</div>
+                <div class="room-type">Lecture Room</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-blue">Occupied</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 100%"></div>
+                  </div>
+                  <span class="monospace">50</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Room 302</div>
+                <div class="room-type">Lecture Room</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-green">Available</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 75%"></div>
+                  </div>
+                  <span class="monospace">40</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Lab 01</div>
+                <div class="room-type">Computer Lab</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-blue">Occupied</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 91%"></div>
+                  </div>
+                  <span class="monospace">45</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Lab 02</div>
+                <div class="room-type">Computer Lab</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-green">Available</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div class="cap-fill" style="width: 55%"></div>
+                  </div>
+                  <span class="monospace">25</span>
+                </div>
+              </div>
+              <div class="room-card">
+                <div class="room-number">Lab 03</div>
+                <div class="room-type">Computer Lab</div>
+                <div style="margin-bottom: 10px">
+                  <span class="pill pill-orange">Maintenance</span>
+                </div>
+                <div class="room-capacity">
+                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+                  <div class="cap-bar">
+                    <div
+                      class="cap-fill"
+                      style="width: 55%; background: var(--orange)"
+                    ></div>
+                  </div>
+                  <span class="monospace">30</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ALGORITHM PAGE SAMPLE LANG TO BONAK JEMWEL -->
+        <div class="page" id="page-algorithm">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Algorithm Configuration</div>
+              <div class="section-subtitle">
+                Constraint-Based Greedy · Tier 1 (Hard) + Tier 2 (Soft) ·
+                Transparent &amp; customizable
+              </div>
+            </div>
+            <button class="btn btn-primary">💾 Save Config</button>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  🔴 Tier 1 — Hard Constraints (Mandatory)
+                </div>
+                <span class="pill pill-red">Binary Pass/Fail</span>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Constraint</th>
+                    <th>Rule Definition</th>
+                    <th>Active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>No Double Booking</strong></td>
+                    <td style="font-size: 11px; color: var(--text3)">
+                      Room ≠ 2 courses at same slot
+                    </td>
+                    <td><span class="pill pill-green">ON</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Room Capacity</strong></td>
+                    <td style="font-size: 11px; color: var(--text3)">
+                      Capacity ≥ Enrollment count
+                    </td>
+                    <td><span class="pill pill-green">ON</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Instructor Conflict</strong></td>
+                    <td style="font-size: 11px; color: var(--text3)">
+                      Faculty ≠ 2 courses simultaneously
+                    </td>
+                    <td><span class="pill pill-green">ON</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Time Slot Validity</strong></td>
+                    <td style="font-size: 11px; color: var(--text3)">
+                      Within TSU academic calendar
+                    </td>
+                    <td><span class="pill pill-green">ON</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  🟡 Tier 2 — Soft Constraint Weights
+                </div>
+                <span class="pill pill-orange">Total = 100%</span>
+              </div>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-name">⏰ Instructor Time Preference</span
+                  ><span class="weight-pct">30%</span>
+                </div>
+                <div class="weight-bar">
+                  <div
+                    class="weight-fill"
+                    style="width: 30%; background: var(--accent2)"
+                  ></div>
+                </div>
+              </div>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-name">🏫 Room Type Matching</span
+                  ><span class="weight-pct">25%</span>
+                </div>
+                <div class="weight-bar">
+                  <div
+                    class="weight-fill"
+                    style="width: 25%; background: var(--green)"
+                  ></div>
+                </div>
+              </div>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-name">🗜 Schedule Compactness</span
+                  ><span class="weight-pct">25%</span>
+                </div>
+                <div class="weight-bar">
+                  <div
+                    class="weight-fill"
+                    style="width: 25%; background: var(--purple)"
+                  ></div>
+                </div>
+              </div>
+              <div class="weight-item">
+                <div class="weight-header">
+                  <span class="weight-name">⚖ Balanced Time Utilization</span
+                  ><span class="weight-pct">20%</span>
+                </div>
+                <div class="weight-bar">
+                  <div
+                    class="weight-fill"
+                    style="width: 20%; background: var(--orange)"
+                  ></div>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">🔄 Localized Reallocation Settings</div>
+              </div>
+              <div
+                style="
+                  padding: 16px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 12px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px;
+                    background: var(--surface2);
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: var(--text);
+                      "
+                    >
+                      Auto-Resolve Hard Conflicts
+                    </div>
+                    <div style="font-size: 11px; color: var(--text3)">
+                      Before flagging for manual review
+                    </div>
+                  </div>
+                  <span class="pill pill-green">Enabled</span>
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px;
+                    background: var(--surface2);
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: var(--text);
+                      "
+                    >
+                      Max Reallocation Attempts
+                    </div>
+                    <div style="font-size: 11px; color: var(--text3)">
+                      Per conflict resolution cycle
+                    </div>
+                  </div>
+                  <span class="pill pill-blue" style="font-family: var(--mono)"
+                    >10</span
+                  >
+                </div>
+                <div
+                  style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    padding: 12px;
+                    background: var(--surface2);
+                    border-radius: 8px;
+                    border: 1px solid var(--border);
+                  "
+                >
+                  <div>
+                    <div
+                      style="
+                        font-size: 13px;
+                        font-weight: 600;
+                        color: var(--text);
+                      "
+                    >
+                      Full Regeneration Fallback
+                    </div>
+                    <div style="font-size: 11px; color: var(--text3)">
+                      If &gt;30% conflicts remain unresolved
+                    </div>
+                  </div>
+                  <span class="pill pill-orange">Manual</span>
+                </div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  ⚡ Performance Benchmarks vs. Target
+                </div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>Target</th>
+                    <th>Achieved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Schedule Generation (127 courses)</td>
+                    <td class="monospace">&lt; 10s</td>
+                    <td><span class="pill pill-green">7.4s ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td>Localized Reallocation (4 courses)</td>
+                    <td class="monospace">&lt; 30s</td>
+                    <td><span class="pill pill-green">8.1s ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td>Conflict Rate</td>
+                    <td class="monospace">&lt; 5%</td>
+                    <td><span class="pill pill-green">2.4% ✓</span></td>
+                  </tr>
+                  <tr>
+                    <td>Room Utilization</td>
+                    <td class="monospace">&gt; 80%</td>
+                    <td><span class="pill pill-orange">78% ≈</span></td>
+                  </tr>
+                  <tr>
+                    <td>Admin Time per Semester</td>
+                    <td class="monospace">&lt; 1h</td>
+                    <td><span class="pill pill-green">~0.8h ✓</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANALYTICS PAGE ETO OH TANGA BRANDON-->
+        <div class="page" id="page-analytics">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Room Utilization Analytics</div>
+              <div class="section-subtitle">
+                ISO/IEC 25010 · Performance Efficiency &amp; Functional
+                Suitability
+              </div>
+            </div>
+            <button class="btn btn-secondary">↓ Export PDF Report</button>
+          </div>
+          <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr)">
+            <div class="stat-card blue">
+              <div class="stat-label">Avg Utilization</div>
+              <div class="stat-value">78%</div>
+              <div class="stat-delta">↑ +20% vs manual (58%)</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-label">Conflict Reduction</div>
+              <div class="stat-value">96%</div>
+              <div class="stat-delta">from 18 → 0.7 conflicts/semester</div>
+            </div>
+            <div class="stat-card purple">
+              <div class="stat-label">Admin Time Saved</div>
+              <div class="stat-value">29h</div>
+              <div class="stat-delta">30h manual → &lt;1h automated</div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px">
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">📊 Room-by-Room Utilization Rate</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Lab 01</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 92%; background: var(--purple)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--purple)">92%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Room 201</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 87%; background: var(--green)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--green)">87%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Room 101</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 83%; background: var(--green)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--green)">83%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Room 103</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 78%; background: var(--accent2)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--accent2)">78%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Lab 02</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 72%; background: var(--accent2)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--accent2)">72%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Room 302</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 64%; background: var(--orange)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--orange)">64%</div>
+              </div>
+              <div class="util-row">
+                <div class="util-label">Room 102</div>
+                <div class="util-bar-wrap">
+                  <div
+                    class="util-fill"
+                    style="width: 57%; background: var(--orange)"
+                  ></div>
+                </div>
+                <div class="util-pct" style="color: var(--orange)">57%</div>
+              </div>
+              <div
+                style="
+                  padding: 12px 20px;
+                  font-size: 11px;
+                  color: var(--text3);
+                  border-top: 1px solid var(--border);
+                "
+              >
+                International benchmark: 80–90% (CHED 2024)
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-header">
+                <div class="card-title">
+                  📋 ISO/IEC 25010 Quality Assessment
+                </div>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Attribute</th>
+                    <th>Method</th>
+                    <th>Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Functional Suitability</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Black Box</span
+                      >
+                    </td>
+                    <td><span class="pill pill-green">97.4%</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Performance Efficiency</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Benchmark</span
+                      >
+                    </td>
+                    <td><span class="pill pill-green">7.4s gen</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Compatibility</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Cross-platform</span
+                      >
+                    </td>
+                    <td><span class="pill pill-green">Pass</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Usability</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >User Testing</span
+                      >
+                    </td>
+                    <td><span class="pill pill-orange">Pending</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Reliability</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Stress Test</span
+                      >
+                    </td>
+                    <td><span class="pill pill-orange">Pending</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Security</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Auth Audit</span
+                      >
+                    </td>
+                    <td><span class="pill pill-orange">Pending</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Maintainability</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Code Review</span
+                      >
+                    </td>
+                    <td><span class="pill pill-green">Pass</span></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Portability</strong></td>
+                    <td>
+                      <span class="pill pill-blue" style="font-size: 10px"
+                        >Browser Test</span
+                      >
+                    </td>
+                    <td><span class="pill pill-green">Pass</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- FACULTY PAGE -->
+        <div class="page" id="page-faculty">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Faculty Management</div>
+              <div class="section-subtitle">
+                34 instructors · Teaching load &amp; availability tracking
+              </div>
+            </div>
+            <button class="btn btn-primary">+ Add Instructor</button>
+          </div>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Instructor</th>
+                  <th>Assigned Courses</th>
+                  <th>Load</th>
+                  <th>Availability</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Dela Cruz, J.</td>
+                  <td class="monospace">CS101, IS402</td>
+                  <td>2 courses</td>
+                  <td>MWF All Day</td>
+                  <td><span class="pill pill-green">Active</span></td>
+                </tr>
+                <tr>
+                  <td>Reyes, A.</td>
+                  <td class="monospace">CS301, CS401</td>
+                  <td>2 courses</td>
+                  <td>TTHF Morning</td>
+                  <td><span class="pill pill-red">⚠ Conflict</span></td>
+                </tr>
+                <tr>
+                  <td>Santos, M.</td>
+                  <td class="monospace">IT204, IT401</td>
+                  <td>2 courses</td>
+                  <td>TTH + Friday</td>
+                  <td><span class="pill pill-green">Active</span></td>
+                </tr>
+                <tr>
+                  <td>Garcia, L.</td>
+                  <td class="monospace">IS201, IS301</td>
+                  <td>2 courses</td>
+                  <td>MWF</td>
+                  <td><span class="pill pill-green">Active</span></td>
+                </tr>
+                <tr>
+                  <td>Lim, K.</td>
+                  <td class="monospace">CS105, CS202</td>
+                  <td>2 courses</td>
+                  <td>MWF + Saturday</td>
+                  <td><span class="pill pill-green">Active</span></td>
+                </tr>
+                <tr>
+                  <td>Cruz, P.</td>
+                  <td class="monospace">IT301</td>
+                  <td>1 course</td>
+                  <td>TTH</td>
+                  <td><span class="pill pill-green">Active</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- COURSES PAGE -->
+        <div class="page" id="page-courses">
+          <div class="section-header">
+            <div>
+              <div class="section-title">Course Catalog</div>
+              <div class="section-subtitle">
+                127 courses · CS · IT · IS programs · AY 2025–2026
+              </div>
+            </div>
+            <button class="btn btn-primary">+ Add Course</button>
+          </div>
+          <div class="card">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th>
+                  <th>Title</th>
+                  <th>Program</th>
+                  <th>Year</th>
+                  <th>Enrolled</th>
+                  <th>Room Type Required</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="monospace">CS101</td>
+                  <td>Intro to Computer Science</td>
+                  <td>CS</td>
+                  <td>1st</td>
+                  <td>42</td>
+                  <td>Lecture</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">CS202</td>
+                  <td>Object-Oriented Programming</td>
+                  <td>CS</td>
+                  <td>2nd</td>
+                  <td>38</td>
+                  <td>Lab</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">CS301</td>
+                  <td>Data Structures</td>
+                  <td>CS</td>
+                  <td>3rd</td>
+                  <td>35</td>
+                  <td>Lecture</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">CS401</td>
+                  <td>Algorithms</td>
+                  <td>CS</td>
+                  <td>4th</td>
+                  <td>38</td>
+                  <td>Lecture</td>
+                  <td><span class="pill pill-red">Conflict</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">IT204</td>
+                  <td>Web Development</td>
+                  <td>IT</td>
+                  <td>2nd</td>
+                  <td>18</td>
+                  <td>Lab</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">IT301</td>
+                  <td>Computer Networks</td>
+                  <td>IT</td>
+                  <td>3rd</td>
+                  <td>30</td>
+                  <td>Lab</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">IS201</td>
+                  <td>Information Systems</td>
+                  <td>IS</td>
+                  <td>2nd</td>
+                  <td>28</td>
+                  <td>Lecture</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">IS301</td>
+                  <td>Systems Analysis &amp; Design</td>
+                  <td>IS</td>
+                  <td>3rd</td>
+                  <td>32</td>
+                  <td>Lecture</td>
+                  <td><span class="pill pill-green">Assigned</span></td>
+                </tr>
+                <tr>
+                  <td class="monospace">IS402</td>
+                  <td>IS Capstone Project</td>
+                  <td>IS</td>
+                  <td>4th</td>
+                  <td>22</td>
+                  <td>Lab</td>
+                  <td><span class="pill pill-orange">Pending</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+    <div id="add-room-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; width:360px; display:flex; flex-direction:column; gap:16px;">
+    <div style="font-size:15px; font-weight:700; color:var(--text);">+ Add New Room</div>
+    <form id="add-room-form" style="display:flex; flex-direction:column; gap:10px;">
+      <input id="room-number" class="search-input" type="text" placeholder="Room Number (e.g. Room 104)" style="width:100%;" />
+      <select id="room-type" class="search-input" style="width:100%;">
+        <option value="">-- Select Type --</option>
+        <option value="Lecture">Lecture</option>
+        <option value="Computer Lab">Computer Lab</option>
+      </select>
+      <input id="room-capacity" class="search-input" type="number" placeholder="Capacity" min="1" style="width:100%;" />
+      <select id="room-status" class="search-input" style="width:100%;">
+        <option value="Available">Available</option>
+        <option value="Occupied">Occupied</option>
+        <option value="Maintenance">Maintenance</option>
+      </select>
+    </form>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddRoom()">+ Add Room</button>
+    </div>
+  </div>
+</div>
+    <script>
+      let courses = [
+    { code: 'CS101', title: 'Intro to Computer Science', program: 'CS', year: '1st', enrolled: 42, roomType: 'Lecture', status: 'Assigned', instructor: 'Dela Cruz, J.', room: 'Room 101', time: 'MWF 8:00' },
+    { code: 'CS202', title: 'Object-Oriented Programming', program: 'CS', year: '2nd', enrolled: 38, roomType: 'Lab', status: 'Assigned', instructor: 'Lim, K.', room: 'Room 103', time: 'MWF 1:00' },
+    { code: 'CS301', title: 'Data Structures', program: 'CS', year: '3rd', enrolled: 35, roomType: 'Lecture', status: 'Assigned', instructor: 'Reyes, A.', room: 'Room 201', time: 'MWF 9:00' },
+    { code: 'CS401', title: 'Algorithms', program: 'CS', year: '4th', enrolled: 38, roomType: 'Lecture', status: 'Conflict', instructor: 'Reyes, A.', room: 'Room 101', time: 'MWF 11:00' },
+    { code: 'IT204', title: 'Web Development', program: 'IT', year: '2nd', enrolled: 18, roomType: 'Lab', status: 'Assigned', instructor: 'Santos, M.', room: 'Lab 01', time: 'TTH 10:00' },
+    { code: 'IT301', title: 'Computer Networks', program: 'IT', year: '3rd', enrolled: 30, roomType: 'Lab', status: 'Assigned', instructor: 'Cruz, P.', room: 'Lab 02', time: 'TTH 8:00' },
+    { code: 'IS201', title: 'Information Systems', program: 'IS', year: '2nd', enrolled: 28, roomType: 'Lecture', status: 'Assigned', instructor: 'Garcia, L.', room: 'Room 102', time: 'TTH 9:00' },
+    { code: 'IS301', title: 'Systems Analysis & Design', program: 'IS', year: '3rd', enrolled: 32, roomType: 'Lecture', status: 'Assigned', instructor: 'Garcia, L.', room: 'Room 302', time: 'TTH 1:00' },
+    { code: 'IS402', title: 'IS Capstone Project', program: 'IS', year: '4th', enrolled: 22, roomType: 'Lab', status: 'Pending', instructor: '', room: '', time: '' }
+  ];
+
+  let rooms = [
+    { number: 'Room 101', type: 'Lecture', capacity: 40, status: 'Available' },
+    { number: 'Room 102', type: 'Lecture', capacity: 35, status: 'Occupied' },
+    { number: 'Room 103', type: 'Lecture', capacity: 45, status: 'Occupied' },
+    { number: 'Room 201', type: 'Lecture', capacity: 50, status: 'Occupied' },
+    { number: 'Room 302', type: 'Lecture', capacity: 40, status: 'Available' },
+    { number: 'Lab 01', type: 'Computer Lab', capacity: 45, status: 'Occupied' },
+    { number: 'Lab 02', type: 'Computer Lab', capacity: 25, status: 'Available' },
+    { number: 'Lab 03', type: 'Computer Lab', capacity: 30, status: 'Maintenance' }
+  ];
+
+  let assignments = courses.filter(c => c.status === 'Assigned');
+  let conflicts = courses.filter(c => c.status === 'Conflict');
+
+  // Utility functions
+  function switchPage(id, el) {
+    document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
+    if (el) el.classList.add("active");
+    switchTab(id);
+  }
+
+  function switchTab(id) {
+    document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+    var page = document.getElementById("page-" + id);
+    if (page) page.classList.add("active");
+    var tab = document.getElementById("tab-" + id);
+    if (tab) tab.classList.add("active");
+    document.querySelectorAll(".nav-item").forEach((n) => {
+      if (n.getAttribute("onclick") && n.getAttribute("onclick").includes("'" + id + "'")) n.classList.add("active");
+    });
+  }
+
+  // Render functions
+  function renderDashboard() {
+    document.querySelector('.stat-card.blue .stat-value').textContent = rooms.length;
+    document.querySelector('.stat-card.green .stat-value').textContent = assignments.length;
+    document.querySelector('.stat-card.red .stat-value').textContent = conflicts.length;
+    document.querySelector('.stat-card.purple .stat-value').textContent = Math.round((assignments.length / courses.length) * 100) + '%';
+
+    const tbody = document.querySelector('#page-dashboard table tbody');
+    tbody.innerHTML = '';
+    assignments.slice(0, 6).forEach(course => {
+      const row = `<tr>
+        <td><span class="monospace">${course.code}</span><br /><span style="font-size: 11px; color: var(--text3)">${course.title}</span></td>
+        <td class="monospace">${course.room}</td>
+        <td class="monospace">${course.time}</td>
+        <td>${course.instructor}</td>
+        <td><span class="pill pill-${course.status === 'Assigned' ? 'green' : 'red'}">${course.status}</span></td>
+      </tr>`;
+      tbody.innerHTML += row;
+    });
+
+    document.querySelector('#tab-schedule .tab-count').textContent = assignments.length;
+    document.querySelector('#tab-conflicts .tab-count').textContent = conflicts.length;
+    document.querySelector('#tab-conflicts .tab-count').style.color = 'var(--red)';
+  }
+
+  function renderSchedule() {
+    const cells = document.querySelectorAll('.sched-cell');
+    cells.forEach(cell => cell.className = 'sched-cell empty');
+    assignments.forEach(course => {
+      let row, col;
+      if (course.time.includes('7:00')) row = 1;
+      else if (course.time.includes('9:00')) row = 2;
+      if (course.time.includes('MON')) col = 1;
+      if (row && col) {
+        const cell = document.querySelector(`.schedule-grid .sched-cell:nth-child(${row * 7 + col})`);
+        if (cell) {
+          cell.className = 'sched-cell occupied-blue';
+          cell.innerHTML = `<div class="sched-course">${course.code}</div><div class="sched-room">${course.room}</div><div class="sched-prof">${course.instructor}</div>`;
+        }
+      }
+    });
+  }
+
+  function renderConflicts() {
+    const container = document.querySelector('#page-conflicts .page');
+    const existingCards = container.querySelectorAll('.conflict-card');
+    existingCards.forEach(card => card.remove());
+    conflicts.forEach(conflict => {
+      const card = `<div class="conflict-card">
+        <div class="conflict-icon">🔴</div>
+        <div style="flex: 1">
+          <div class="conflict-title">${conflict.code} Conflict</div>
+          <div class="conflict-desc">${conflict.title} assigned to ${conflict.room} at ${conflict.time}.</div>
+          <div class="conflict-actions">
+            <button class="btn btn-danger" onclick="resolveConflict('${conflict.code}')">⚙ Localized Reallocation</button>
+          </div>
+        </div>
+      </div>`;
+      container.insertAdjacentHTML('beforeend', card);
+    });
+  }
+
+  function renderRooms() {
+    const grid = document.querySelector('.rooms-grid');
+    grid.innerHTML = '';
+    rooms.forEach((room, index) => {
+      const statusColor = room.status === 'Available' ? 'green' : room.status === 'Maintenance' ? 'orange' : 'blue';
+      const card = `<div class="room-card">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+          <div class="room-number">${room.number}</div>
+          <button onclick="deleteRoom(${index})" style="background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; line-height:1; padding:0;" title="Delete room">✕</button>
+        </div>
+        <div class="room-type">${room.type}</div>
+        <div style="margin-bottom: 10px"><span class="pill pill-${statusColor}">${room.status}</span></div>
+        <div class="room-capacity">
+          <span style="font-size: 11px; color: var(--text3)">Cap:</span>
+          <div class="cap-bar"><div class="cap-fill" style="width: ${Math.round((room.capacity / 50) * 100)}%"></div></div>
+          <span class="monospace">${room.capacity}</span>
+        </div>
+      </div>`;
+      grid.innerHTML += card;
+    });
+  }
+  function deleteRoom(index) {
+    const room = rooms[index];
+    if (confirm(`Delete ${room.number}? This cannot be undone.`)) {
+      rooms.splice(index, 1);
+      renderRooms();
+      renderDashboard();
+    }
+  }
+
+  function renderCourses() {
+    const tbody = document.querySelector('#page-courses table tbody');
+    tbody.innerHTML = '';
+    courses.forEach(course => {
+      const row = `<tr>
+        <td class="monospace">${course.code}</td>
+        <td>${course.title}</td>
+        <td>${course.program}</td>
+        <td>${course.year}</td>
+        <td>${course.enrolled}</td>
+        <td>${course.roomType}</td>
+        <td><span class="pill pill-${course.status === 'Assigned' ? 'green' : course.status === 'Conflict' ? 'red' : 'orange'}">${course.status}</span></td>
+      </tr>`;
+      tbody.innerHTML += row;
+    });
+  }
+
+  // Action functions
+  function runAlgorithm() {
+    courses.forEach(course => {
+      if (course.status === 'Pending') {
+        const availableRoom = rooms.find(r => r.status === 'Available' && r.type === course.roomType);
+        if (availableRoom) {
+          course.room = availableRoom.number;
+          course.time = 'MWF 10:00';
+          course.status = 'Assigned';
+          availableRoom.status = 'Occupied';
+        }
+      }
+    });
+    assignments = courses.filter(c => c.status === 'Assigned');
+    conflicts = courses.filter(c => c.status === 'Conflict');
+    renderDashboard();
+    renderSchedule();
+    alert('Schedule generated! Updated assignments.');
+  }
+
+  function resolveConflicts() {
+    conflicts.forEach(conflict => resolveConflict(conflict.code));
+    renderConflicts();
+    renderDashboard();
+    alert('All conflicts resolved!');
+  }
+
+  function resolveConflict(code) {
+    const conflict = courses.find(c => c.code === code);
+    if (conflict) {
+      conflict.room = 'Room 103';
+      conflict.time = 'WED 3PM';
+      conflict.status = 'Assigned';
+    }
+    conflicts = courses.filter(c => c.status === 'Conflict');
+  }
+
+  function addRoom() {
+    const modal = document.getElementById('add-room-modal');
+  modal.style.display = 'flex';
+    document.getElementById('room-number').focus();
+  }
+
+  function submitAddRoom() {
+    const number = document.getElementById('room-number').value.trim();
+    const type = document.getElementById('room-type').value;
+    const capacity = parseInt(document.getElementById('room-capacity').value);
+    const status = document.getElementById('room-status').value;
+
+    if (!number || !type || isNaN(capacity) || capacity <= 0) {
+      alert('Please fill in all fields correctly.');
+      return;
+    }
+
+    rooms.push({ number, type, capacity, status });
+    renderRooms();
+    closeModal();
+    alert('Room added successfully!');
+  }
+
+  function closeModal() {
+    const modal = document.getElementById('add-room-modal');
+    modal.style.display = 'none';
+    document.getElementById('add-room-form').reset();
+  }
+
+  function addCourse() {
+    const code = prompt('Course Code:');
+    const title = prompt('Title:');
+    const program = prompt('Program:');
+    const year = prompt('Year:');
+    const enrolled = parseInt(prompt('Enrolled:'));
+    const roomType = prompt('Room Type:');
+    if (code && title) {
+      courses.push({ code, title, program, year, enrolled, roomType, status: 'Pending', instructor: '', room: '', time: '' });
+      renderCourses();
+      alert('Course added!');
+    }
+  }
+
+  // Initial render eto para mag load ng maayos bobo ka wala kang future sa IT inamo Enzo
+  document.addEventListener('DOMContentLoaded', () => {
+    renderDashboard();
+    renderSchedule();
+    renderConflicts();
+    renderRooms();
+    renderCourses();
+
+    // Event listeners dito kasi ilagay bobo amputa
+    document.querySelector('#page-rooms .btn-primary').addEventListener('click', addRoom);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeModal();
+    });
+  });
+  
+    </script>
+    
+  </body>
+</html>
