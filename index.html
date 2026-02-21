@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1.0" />
     <title>TSU CCS — Room Scheduling System</title>
-    <link rel="stylesheet" href="index.css">
+    <link rel="stylesheet" href="index.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
-      rel="stylesheet"
-    />
+      rel="stylesheet"/>
+      <script src="myScript.js"></script>
   </head>
+
   <body>
-     
     <header>
       <div class="logo">
         <div class="logo-icon">📅</div>
@@ -22,7 +22,14 @@
       </div>
       <div class="header-right">
         <span class="badge">v1.0 · BETA</span>
-        <button id="theme-toggle" class="btn btn-secondary" style="font-size:13px; padding:6px 12px;" title="Toggle light/dark mode">🌙</button>
+        <button
+          id="theme-toggle"
+          class="btn btn-secondary"
+          style="font-size: 13px; padding: 6px 12px"
+          title="Toggle light/dark mode"
+        >
+          🌙
+        </button>
         <div style="font-size: 12px; color: var(--text2)">Admin User</div>
         <div class="avatar">AU</div>
       </div>
@@ -150,76 +157,10 @@
                       <th>Status</th>
                     </tr>
                   </thead>
-                  <tbody>
-                    <tr>
-                      <td>
-                        <span class="monospace">CS301</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >Data Structures</span>
-                      </td>
-                      <td class="monospace">Room 201</td>
-                      <td class="monospace">MWF 8:00</td>
-                      <td>Dela Cruz, J.</td>
-                      <td><span class="pill pill-green">Assigned</span></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="monospace">IT204</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >Web Development</span>
-                      </td>
-                      <td class="monospace">Lab 01</td>
-                      <td class="monospace">TTH 10:00</td>
-                      <td>Santos, M.</td>
-                      <td><span class="pill pill-green">Assigned</span></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="monospace">CS401</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >Algorithms</span>
-                      </td>
-                      <td class="monospace">Room 101</td>
-                      <td class="monospace">MWF 11:00</td>
-                      <td>Reyes, A.</td>
-                      <td><span class="pill pill-red">Conflict</span></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="monospace">IS301</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >Info Systems</span>
-                      </td>
-                      <td class="monospace">Room 302</td>
-                      <td class="monospace">TTH 1:00</td>
-                      <td>Garcia, L.</td>
-                      <td><span class="pill pill-green">Assigned</span></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="monospace">CS202</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >OOP</span>
-                      </td>
-                      <td class="monospace">Room 103</td>
-                      <td class="monospace">MWF 1:00</td>
-                      <td>Lim, K.</td>
-                      <td><span class="pill pill-orange">Pending</span></td>
-                    </tr>
-                    <tr>
-                      <td>
-                        <span class="monospace">IT301</span><br /><span
-                          style="font-size: 11px; color: var(--text3)"
-                          >Networks</span>
-                      </td>
-                      <td class="monospace">Lab 02</td>
-                      <td class="monospace">TTH 8:00</td>
-                      <td>Cruz, P.</td>
-                      <td><span class="pill pill-green">Assigned</span></td>
-                    </tr>
-                  </tbody>
+                  <tbody></tbody>
                 </table>
               </div>
+
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">
@@ -313,6 +254,7 @@
                 </div>
               </div>
             </div>
+
             <div class="side-panel">
               <div class="card">
                 <div class="card-header">
@@ -354,6 +296,7 @@
                   </button>
                 </div>
               </div>
+
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">📊 Room Utilization by Floor</div>
@@ -409,6 +352,7 @@
                   Intl benchmark: 80–90% · Labs &amp; Floor 1 on target ✓
                 </div>
               </div>
+
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">🛈 System Status</div>
@@ -433,7 +377,8 @@
                       <div class="mini-value">
                         7.4s
                         <span style="font-size: 11px; color: var(--text3)"
-                          >/ 127 courses</span>
+                          >/ 127 courses</span
+                        >
                       </div>
                     </div>
                   </div>
@@ -449,7 +394,8 @@
                       <div class="mini-value">
                         2m
                         <span style="font-size: 11px; color: var(--text3)"
-                          >ago · Cloud OK</span>
+                          >ago · Cloud OK</span
+                        >
                       </div>
                     </div>
                   </div>
@@ -472,7 +418,6 @@
             </div>
           </div>
         </div>
-
         <!-- BOBO KA SCHEDULE PAGE ETO OH TANGA -->
         <div class="page" id="page-schedule">
           <div class="section-header">
@@ -504,7 +449,7 @@
               <div class="sched-header">THU</div>
               <div class="sched-header">FRI</div>
               <div class="sched-header">SAT</div>
-              
+
               <div class="time-label">7:00<br />AM</div>
               <div class="sched-cell occupied-blue">
                 <div class="sched-course">CS101</div>
@@ -524,7 +469,7 @@
                 <div class="sched-prof">Santos, M.</div>
               </div>
               <div class="sched-cell empty"></div>
-             
+
               <div class="time-label">9:00<br />AM</div>
               <div class="sched-cell occupied-green">
                 <div class="sched-course">CS301</div>
@@ -552,7 +497,7 @@
                 <div class="sched-prof">Reyes, A.</div>
               </div>
               <div class="sched-cell empty"></div>
-              
+
               <div class="time-label">11:00<br />AM</div>
               <div class="sched-cell conflict">
                 <div class="sched-course" style="color: var(--red)">
@@ -582,7 +527,7 @@
                 <div class="sched-room">Room 103</div>
                 <div class="sched-prof">Lim, K.</div>
               </div>
-              
+
               <div class="time-label">1:00<br />PM</div>
               <div class="sched-cell occupied-purple">
                 <div class="sched-course">CS202</div>
@@ -610,7 +555,7 @@
                 <div class="sched-prof">Lim, K.</div>
               </div>
               <div class="sched-cell empty"></div>
-              
+
               <div class="time-label">3:00<br />PM</div>
               <div class="sched-cell empty"></div>
               <div class="sched-cell occupied-blue">
@@ -862,7 +807,8 @@
                   <td class="monospace">Room 302 · MWF 9AM</td>
                   <td>
                     <span class="pill pill-orange" style="font-size: 10px"
-                      >Capacity</span>
+                      >Capacity</span
+                    >
                     >
                   </td>
                   <td style="font-size: 12px; color: var(--text3)">2h ago</td>
@@ -874,7 +820,8 @@
                   <td class="monospace">Room 105 · TTH 1PM</td>
                   <td>
                     <span class="pill pill-red" style="font-size: 10px"
-                      >Double Book</span>
+                      >Double Book</span
+                    >
                     >
                   </td>
                   <td style="font-size: 12px; color: var(--text3)">
@@ -913,7 +860,9 @@
                 <option>Occupied</option>
                 <option>Maintenance</option>
               </select>
-              <button class="btn btn-primary" onclick="addRoom()">+ Add Room</button>
+              <button class="btn btn-primary" onclick="addRoom()">
+                + Add Room
+              </button>
             </div>
           </div>
           <div class="card">
@@ -1430,7 +1379,8 @@
                     <td><strong>Functional Suitability</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Black Box</span>
+                        >Black Box</span
+                      >
                     </td>
                     <td><span class="pill pill-green">97.4%</span></td>
                   </tr>
@@ -1438,7 +1388,8 @@
                     <td><strong>Performance Efficiency</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Benchmark</span>
+                        >Benchmark</span
+                      >
                     </td>
                     <td><span class="pill pill-green">7.4s gen</span></td>
                   </tr>
@@ -1446,7 +1397,8 @@
                     <td><strong>Compatibility</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Cross-platform</span>
+                        >Cross-platform</span
+                      >
                     </td>
                     <td><span class="pill pill-green">Pass</span></td>
                   </tr>
@@ -1454,7 +1406,8 @@
                     <td><strong>Usability</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >User Testing</span>
+                        >User Testing</span
+                      >
                     </td>
                     <td><span class="pill pill-orange">Pending</span></td>
                   </tr>
@@ -1462,7 +1415,8 @@
                     <td><strong>Reliability</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Stress Test</span>
+                        >Stress Test</span
+                      >
                     </td>
                     <td><span class="pill pill-orange">Pending</span></td>
                   </tr>
@@ -1470,7 +1424,8 @@
                     <td><strong>Security</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Auth Audit</span>
+                        >Auth Audit</span
+                      >
                     </td>
                     <td><span class="pill pill-orange">Pending</span></td>
                   </tr>
@@ -1478,7 +1433,8 @@
                     <td><strong>Maintainability</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Code Review</span>
+                        >Code Review</span
+                      >
                     </td>
                     <td><span class="pill pill-green">Pass</span></td>
                   </tr>
@@ -1486,7 +1442,8 @@
                     <td><strong>Portability</strong></td>
                     <td>
                       <span class="pill pill-blue" style="font-size: 10px"
-                        >Browser Test</span>
+                        >Browser Test</span
+                      >
                     </td>
                     <td><span class="pill pill-green">Pass</span></td>
                   </tr>
@@ -1502,10 +1459,12 @@
             <div>
               <div class="section-title">Faculty Management</div>
               <div class="section-subtitle">
-                34 instructors · Teaching load &amp; availability tracking
+                Teaching load &amp; availability tracking
               </div>
             </div>
-            <button class="btn btn-primary">+ Add Instructor</button>
+            <button class="btn btn-primary" onclick="openAddInstructorModal()">
+              + Add Instructor
+            </button>
           </div>
           <div class="card">
             <table>
@@ -1518,49 +1477,8 @@
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td>Dela Cruz, J.</td>
-                  <td class="monospace">CS101, IS402</td>
-                  <td>2 courses</td>
-                  <td>MWF All Day</td>
-                  <td><span class="pill pill-green">Active</span></td>
-                </tr>
-                <tr>
-                  <td>Reyes, A.</td>
-                  <td class="monospace">CS301, CS401</td>
-                  <td>2 courses</td>
-                  <td>TTHF Morning</td>
-                  <td><span class="pill pill-red">⚠ Conflict</span></td>
-                </tr>
-                <tr>
-                  <td>Santos, M.</td>
-                  <td class="monospace">IT204, IT401</td>
-                  <td>2 courses</td>
-                  <td>TTH + Friday</td>
-                  <td><span class="pill pill-green">Active</span></td>
-                </tr>
-                <tr>
-                  <td>Garcia, L.</td>
-                  <td class="monospace">IS201, IS301</td>
-                  <td>2 courses</td>
-                  <td>MWF</td>
-                  <td><span class="pill pill-green">Active</span></td>
-                </tr>
-                <tr>
-                  <td>Lim, K.</td>
-                  <td class="monospace">CS105, CS202</td>
-                  <td>2 courses</td>
-                  <td>MWF + Saturday</td>
-                  <td><span class="pill pill-green">Active</span></td>
-                </tr>
-                <tr>
-                  <td>Cruz, P.</td>
-                  <td class="monospace">IT301</td>
-                  <td>1 course</td>
-                  <td>TTH</td>
-                  <td><span class="pill pill-green">Active</span></td>
-                </tr>
+              <tbody id="faculty-tbody">
+                <!-- Populated by renderFaculty() -->
               </tbody>
             </table>
           </div>
@@ -1678,294 +1596,72 @@
         </div>
       </main>
     </div>
-    <div id="add-room-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
-  <div style="background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:24px; width:360px; display:flex; flex-direction:column; gap:16px;">
-    <div style="font-size:15px; font-weight:700; color:var(--text);">+ Add New Room</div>
-    <form id="add-room-form" style="display:flex; flex-direction:column; gap:10px;">
-      <input id="room-number" class="search-input" type="text" placeholder="Room Number (e.g. Room 104)" style="width:100%;" />
-      <select id="room-type" class="search-input" style="width:100%;">
-        <option value="">-- Select Type --</option>
-        <option value="Lecture">Lecture</option>
-        <option value="Computer Lab">Computer Lab</option>
-      </select>
-      <input id="room-capacity" class="search-input" type="number" placeholder="Capacity" min="1" style="width:100%;" />
-      <select id="room-status" class="search-input" style="width:100%;">
-        <option value="Available">Available</option>
-        <option value="Occupied">Occupied</option>
-        <option value="Maintenance">Maintenance</option>
-      </select>
-    </form>
-    <div style="display:flex; gap:8px; justify-content:flex-end;">
-      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="submitAddRoom()">+ Add Room</button>
+    <div
+      id="add-room-modal"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      "
+    >
+      <div
+        style="
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 24px;
+          width: 360px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+        "
+      >
+        <div style="font-size: 15px; font-weight: 700; color: var(--text)">
+          + Add New Room
+        </div>
+        <form
+          id="add-room-form"
+          style="display: flex; flex-direction: column; gap: 10px"
+        >
+          <input
+            id="room-number"
+            class="search-input"
+            type="text"
+            placeholder="Room Number (e.g. Room 104)"
+            style="width: 100%"
+          />
+          <select id="room-type" class="search-input" style="width: 100%">
+            <option value="">-- Select Type --</option>
+            <option value="Lecture">Lecture</option>
+            <option value="Computer Lab">Computer Lab</option>
+          </select>
+          <input
+            id="room-capacity"
+            class="search-input"
+            type="number"
+            placeholder="Capacity"
+            min="1"
+            style="width: 100%"
+          />
+          <select id="room-status" class="search-input" style="width: 100%">
+            <option value="Available">Available</option>
+            <option value="Occupied">Occupied</option>
+            <option value="Maintenance">Maintenance</option>
+          </select>
+        </form>
+        <div style="display: flex; gap: 8px; justify-content: flex-end">
+          <button class="btn btn-secondary" onclick="closeModal()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="submitAddRoom()">
+            + Add Room
+          </button>
+        </div>
+      </div>
     </div>
-  </div>
-</div>
-    <script>
-      let courses = [
-    { code: 'CS101', title: 'Intro to Computer Science', program: 'CS', year: '1st', enrolled: 42, roomType: 'Lecture', status: 'Assigned', instructor: 'Dela Cruz, J.', room: 'Room 101', time: 'MWF 8:00' },
-    { code: 'CS202', title: 'Object-Oriented Programming', program: 'CS', year: '2nd', enrolled: 38, roomType: 'Lab', status: 'Assigned', instructor: 'Lim, K.', room: 'Room 103', time: 'MWF 1:00' },
-    { code: 'CS301', title: 'Data Structures', program: 'CS', year: '3rd', enrolled: 35, roomType: 'Lecture', status: 'Assigned', instructor: 'Reyes, A.', room: 'Room 201', time: 'MWF 9:00' },
-    { code: 'CS401', title: 'Algorithms', program: 'CS', year: '4th', enrolled: 38, roomType: 'Lecture', status: 'Conflict', instructor: 'Reyes, A.', room: 'Room 101', time: 'MWF 11:00' },
-    { code: 'IT204', title: 'Web Development', program: 'IT', year: '2nd', enrolled: 18, roomType: 'Lab', status: 'Assigned', instructor: 'Santos, M.', room: 'Lab 01', time: 'TTH 10:00' },
-    { code: 'IT301', title: 'Computer Networks', program: 'IT', year: '3rd', enrolled: 30, roomType: 'Lab', status: 'Assigned', instructor: 'Cruz, P.', room: 'Lab 02', time: 'TTH 8:00' },
-    { code: 'IS201', title: 'Information Systems', program: 'IS', year: '2nd', enrolled: 28, roomType: 'Lecture', status: 'Assigned', instructor: 'Garcia, L.', room: 'Room 102', time: 'TTH 9:00' },
-    { code: 'IS301', title: 'Systems Analysis & Design', program: 'IS', year: '3rd', enrolled: 32, roomType: 'Lecture', status: 'Assigned', instructor: 'Garcia, L.', room: 'Room 302', time: 'TTH 1:00' },
-    { code: 'IS402', title: 'IS Capstone Project', program: 'IS', year: '4th', enrolled: 22, roomType: 'Lab', status: 'Pending', instructor: '', room: '', time: '' }
-  ];
-
-  let rooms = [
-    { number: 'Room 101', type: 'Lecture', capacity: 40, status: 'Available' },
-    { number: 'Room 102', type: 'Lecture', capacity: 35, status: 'Occupied' },
-    { number: 'Room 103', type: 'Lecture', capacity: 45, status: 'Occupied' },
-    { number: 'Room 201', type: 'Lecture', capacity: 50, status: 'Occupied' },
-    { number: 'Room 302', type: 'Lecture', capacity: 40, status: 'Available' },
-    { number: 'Lab 01', type: 'Computer Lab', capacity: 45, status: 'Occupied' },
-    { number: 'Lab 02', type: 'Computer Lab', capacity: 25, status: 'Available' },
-    { number: 'Lab 03', type: 'Computer Lab', capacity: 30, status: 'Maintenance' }
-  ];
-
-  let assignments = courses.filter(c => c.status === 'Assigned');
-  let conflicts = courses.filter(c => c.status === 'Conflict');
-
-  // Utility functions
-  function switchPage(id, el) {
-    document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
-    if (el) el.classList.add("active");
-    switchTab(id);
-  }
-
-  function switchTab(id) {
-    document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
-    document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
-    var page = document.getElementById("page-" + id);
-    if (page) page.classList.add("active");
-    var tab = document.getElementById("tab-" + id);
-    if (tab) tab.classList.add("active");
-    document.querySelectorAll(".nav-item").forEach((n) => {
-      if (n.getAttribute("onclick") && n.getAttribute("onclick").includes("'" + id + "'")) n.classList.add("active");
-    });
-  }
-
-  // Render functions
-  function renderDashboard() {
-    document.querySelector('.stat-card.blue .stat-value').textContent = rooms.length;
-    document.querySelector('.stat-card.green .stat-value').textContent = assignments.length;
-    document.querySelector('.stat-card.red .stat-value').textContent = conflicts.length;
-    document.querySelector('.stat-card.purple .stat-value').textContent = Math.round((assignments.length / courses.length) * 100) + '%';
-
-    const tbody = document.querySelector('#page-dashboard table tbody');
-    tbody.innerHTML = '';
-    assignments.slice(0, 6).forEach(course => {
-      const row = `<tr>
-        <td><span class="monospace">${course.code}</span><br /><span style="font-size: 11px; color: var(--text3)">${course.title}</span></td>
-        <td class="monospace">${course.room}</td>
-        <td class="monospace">${course.time}</td>
-        <td>${course.instructor}</td>
-        <td><span class="pill pill-${course.status === 'Assigned' ? 'green' : 'red'}">${course.status}</span></td>
-      </tr>`;
-      tbody.innerHTML += row;
-    });
-
-    document.querySelector('#tab-schedule .tab-count').textContent = assignments.length;
-    document.querySelector('#tab-conflicts .tab-count').textContent = conflicts.length;
-    document.querySelector('#tab-conflicts .tab-count').style.color = 'var(--red)';
-  }
-
-  function renderSchedule() {
-    const cells = document.querySelectorAll('.sched-cell');
-    cells.forEach(cell => cell.className = 'sched-cell empty');
-    assignments.forEach(course => {
-      let row, col;
-      if (course.time.includes('7:00')) row = 1;
-      else if (course.time.includes('9:00')) row = 2;
-      if (course.time.includes('MON')) col = 1;
-      if (row && col) {
-        const cell = document.querySelector(`.schedule-grid .sched-cell:nth-child(${row * 7 + col})`);
-        if (cell) {
-          cell.className = 'sched-cell occupied-blue';
-          cell.innerHTML = `<div class="sched-course">${course.code}</div><div class="sched-room">${course.room}</div><div class="sched-prof">${course.instructor}</div>`;
-        }
-      }
-    });
-  }
-
-  function renderConflicts() {
-    const container = document.getElementById('page-conflicts');
-    const existingCards = container.querySelectorAll('.conflict-card');
-    existingCards.forEach(card => card.remove());
-    conflicts.forEach(conflict => {
-      const card = `<div class="conflict-card">
-        <div class="conflict-icon">🔴</div>
-        <div style="flex: 1">
-          <div class="conflict-title">${conflict.code} Conflict</div>
-          <div class="conflict-desc">${conflict.title} assigned to ${conflict.room} at ${conflict.time}.</div>
-          <div class="conflict-actions">
-            <button class="btn btn-danger" onclick="resolveConflict('${conflict.code}')">⚙ Localized Reallocation</button>
-          </div>
-        </div>
-      </div>`;
-      container.insertAdjacentHTML('beforeend', card);
-    });
-  }
-
-  function renderRooms() {
-    const grid = document.querySelector('.rooms-grid');
-    grid.innerHTML = '';
-    rooms.forEach((room, index) => {
-      const statusColor = room.status === 'Available' ? 'green' : room.status === 'Maintenance' ? 'orange' : 'blue';
-      const card = `<div class="room-card">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-          <div class="room-number">${room.number}</div>
-          <button onclick="deleteRoom(${index})" style="background:none; border:none; color:var(--text3); cursor:pointer; font-size:16px; line-height:1; padding:0;" title="Delete room">✕</button>
-        </div>
-        <div class="room-type">${room.type}</div>
-        <div style="margin-bottom: 10px"><span class="pill pill-${statusColor}">${room.status}</span></div>
-        <div class="room-capacity">
-          <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-          <div class="cap-bar"><div class="cap-fill" style="width: ${Math.round((room.capacity / 50) * 100)}%"></div></div>
-          <span class="monospace">${room.capacity}</span>
-        </div>
-      </div>`;
-      grid.innerHTML += card;
-    });
-  }
-  function deleteRoom(index) {
-    const room = rooms[index];
-    if (confirm(`Delete ${room.number}? This cannot be undone.`)) {
-      rooms.splice(index, 1);
-      renderRooms();
-      renderDashboard();
-    }
-  }
-
-  function renderCourses() {
-    const tbody = document.querySelector('#page-courses table tbody');
-    tbody.innerHTML = '';
-    courses.forEach(course => {
-      const row = `<tr>
-        <td class="monospace">${course.code}</td>
-        <td>${course.title}</td>
-        <td>${course.program}</td>
-        <td>${course.year}</td>
-        <td>${course.enrolled}</td>
-        <td>${course.roomType}</td>
-        <td><span class="pill pill-${course.status === 'Assigned' ? 'green' : course.status === 'Conflict' ? 'red' : 'orange'}">${course.status}</span></td>
-      </tr>`;
-      tbody.innerHTML += row;
-    });
-  }
-
-  // Action functions
-  function runAlgorithm() {
-    courses.forEach(course => {
-      if (course.status === 'Pending') {
-        const availableRoom = rooms.find(r => r.status === 'Available' && r.type === course.roomType);
-        if (availableRoom) {
-          course.room = availableRoom.number;
-          course.time = 'MWF 10:00';
-          course.status = 'Assigned';
-          availableRoom.status = 'Occupied';
-        }
-      }
-    });
-    assignments = courses.filter(c => c.status === 'Assigned');
-    conflicts = courses.filter(c => c.status === 'Conflict');
-    renderDashboard();
-    renderSchedule();
-    alert('Schedule generated! Updated assignments.');
-  }
-
-  function resolveConflicts() {
-    conflicts.forEach(conflict => resolveConflict(conflict.code));
-    renderConflicts();
-    renderDashboard();
-    alert('All conflicts resolved!');
-  }
-
-  function resolveConflict(code) {
-    const conflict = courses.find(c => c.code === code);
-    if (conflict) {
-      conflict.room = 'Room 103';
-      conflict.time = 'WED 3PM';
-      conflict.status = 'Assigned';
-    }
-    conflicts = courses.filter(c => c.status === 'Conflict');
-  }
-
-  function addRoom() {
-    const modal = document.getElementById('add-room-modal');
-    modal.style.display = 'flex';
-    document.getElementById('room-number').focus();
-  }
-
-  function submitAddRoom() {
-    const number = document.getElementById('room-number').value.trim();
-    const type = document.getElementById('room-type').value;
-    const capacity = parseInt(document.getElementById('room-capacity').value);
-    const status = document.getElementById('room-status').value;
-
-    if (!number || !type || isNaN(capacity) || capacity <= 0) {
-      alert('Please fill in all fields correctly.');
-      return;
-    }
-
-    rooms.push({ number, type, capacity, status });
-    renderRooms();
-    closeModal();
-    alert('Room added successfully!');
-  }
-
-  function closeModal() {
-    const modal = document.getElementById('add-room-modal');
-    modal.style.display = 'none';
-    document.getElementById('add-room-form').reset();
-  }
-
-  function addCourse() {
-    const code = prompt('Course Code:');
-    const title = prompt('Title:');
-    const program = prompt('Program:');
-    const year = prompt('Year:');
-    const enrolled = parseInt(prompt('Enrolled:'));
-    const roomType = prompt('Room Type:');
-    if (code && title) {
-      courses.push({ code, title, program, year, enrolled, roomType, status: 'Pending', instructor: '', room: '', time: '' });
-      renderCourses();
-      alert('Course added!');
-    }
-  }
-
-  // Initial render eto para mag load ng maayos bobo ka wala kang future sa IT inamo Enzo
-  document.addEventListener('DOMContentLoaded', () => {
-    renderDashboard();
-    renderSchedule();
-    renderConflicts();
-    renderRooms();
-    renderCourses();
-
-    // Event listeners
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModal();
-    });
-
-    // Theme toggle
-    const themeBtn = document.getElementById('theme-toggle');
-    function setTheme(light) {
-      document.body.classList.toggle('light', light);
-      themeBtn.textContent = light ? '🌞' : '🌙';
-      themeBtn.title = light ? 'Switch to dark mode' : 'Switch to light mode';
-      try { localStorage.setItem('theme', light ? 'light' : 'dark'); } catch(e) {}
-    }
-
-    let savedTheme = false;
-    try { savedTheme = localStorage.getItem('theme') === 'light'; } catch(e) {}
-    setTheme(savedTheme);
-
-    themeBtn.addEventListener('click', () => setTheme(!document.body.classList.contains('light')));
-});
-  
-    </script>
-    
   </body>
 </html>
