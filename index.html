@@ -7,10 +7,9 @@
     <link rel="stylesheet" href="index.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
-      rel="stylesheet"/>
-      <script src="myScript.js"></script>
+      rel="stylesheet"
+    />
   </head>
-
   <body>
     <header>
       <div class="logo">
@@ -34,6 +33,7 @@
         <div class="avatar">AU</div>
       </div>
     </header>
+
     <div class="layout">
       <nav>
         <div class="nav-section">Main</div>
@@ -66,6 +66,7 @@
           ><span class="icon">📊</span>Analytics</a
         >
       </nav>
+
       <main>
         <div class="tabs">
           <div
@@ -93,7 +94,7 @@
           </div>
         </div>
 
-        <!-- DASH BOARD PAGE DITO TANGA KA TALAGA -->
+        <!-- DASHBOARD PAGE -->
         <div class="page active" id="page-dashboard">
           <div class="section-header">
             <div>
@@ -104,7 +105,7 @@
             </div>
             <div style="display: flex; gap: 10px">
               <button class="btn btn-secondary">↓ Export</button>
-              <button class="btn btn-primary" onclick="runAlgorithm()">
+              <button class="btn btn-primary" onclick="openScheduleModal()">
                 ▶ Generate Schedule
               </button>
             </div>
@@ -160,7 +161,6 @@
                   <tbody></tbody>
                 </table>
               </div>
-
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">
@@ -224,7 +224,7 @@
                       <div class="step-name">Localized Reallocation</div>
                       <div class="step-desc">
                         3 conflicts detected — attempting alternative
-                        assignments without full regeneration
+                        assignments
                       </div>
                     </div>
                     <div class="step-time">1.3s</div>
@@ -254,7 +254,6 @@
                 </div>
               </div>
             </div>
-
             <div class="side-panel">
               <div class="card">
                 <div class="card-header">
@@ -271,16 +270,17 @@
                   <button
                     class="btn btn-primary"
                     style="justify-content: center"
-                    onclick="runAlgorithm()"
+                    onclick="openScheduleModal()"
                   >
                     ▶ Re-generate Schedule
                   </button>
                   <button
                     class="btn btn-danger"
+                    id="dashboard-resolve-btn"
                     style="justify-content: center"
                     onclick="switchTab('conflicts')"
                   >
-                    ⚠ Resolve 3 Conflicts
+                    ⚠ Resolve Conflicts
                   </button>
                   <button
                     class="btn btn-secondary"
@@ -296,7 +296,6 @@
                   </button>
                 </div>
               </div>
-
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">📊 Room Utilization by Floor</div>
@@ -352,7 +351,6 @@
                   Intl benchmark: 80–90% · Labs &amp; Floor 1 on target ✓
                 </div>
               </div>
-
               <div class="card">
                 <div class="card-header">
                   <div class="card-title">🛈 System Status</div>
@@ -418,7 +416,8 @@
             </div>
           </div>
         </div>
-        <!-- BOBO KA SCHEDULE PAGE ETO OH TANGA -->
+
+        <!-- SCHEDULE PAGE -->
         <div class="page" id="page-schedule">
           <div class="section-header">
             <div>
@@ -440,140 +439,22 @@
             </div>
           </div>
           <div class="card">
-            <!-- SAMPLE LANG TO WAG KANG TANGA -->>
-            <div class="schedule-grid">
-              <div></div>
-              <div class="sched-header">MON</div>
-              <div class="sched-header">TUE</div>
-              <div class="sched-header">WED</div>
-              <div class="sched-header">THU</div>
-              <div class="sched-header">FRI</div>
-              <div class="sched-header">SAT</div>
-
-              <div class="time-label">7:00<br />AM</div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">CS101</div>
-                <div class="sched-room">Room 101</div>
-                <div class="sched-prof">Dela Cruz, J.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">CS101</div>
-                <div class="sched-room">Room 101</div>
-                <div class="sched-prof">Dela Cruz, J.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">IT204</div>
-                <div class="sched-room">Lab 01</div>
-                <div class="sched-prof">Santos, M.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-
-              <div class="time-label">9:00<br />AM</div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">CS301</div>
-                <div class="sched-room">Room 201</div>
-                <div class="sched-prof">Reyes, A.</div>
-              </div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">IS201</div>
-                <div class="sched-room">Room 102</div>
-                <div class="sched-prof">Garcia, L.</div>
-              </div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">CS301</div>
-                <div class="sched-room">Room 201</div>
-                <div class="sched-prof">Reyes, A.</div>
-              </div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">IS201</div>
-                <div class="sched-room">Room 102</div>
-                <div class="sched-prof">Garcia, L.</div>
-              </div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">CS301</div>
-                <div class="sched-room">Room 201</div>
-                <div class="sched-prof">Reyes, A.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-
-              <div class="time-label">11:00<br />AM</div>
-              <div class="sched-cell conflict">
-                <div class="sched-course" style="color: var(--red)">
-                  CS401 ⚠
-                </div>
-                <div class="sched-room">Room 101</div>
-                <div class="sched-prof">Reyes, A. ← conflict</div>
-              </div>
-              <div class="sched-cell occupied-purple">
-                <div class="sched-course">IT301</div>
-                <div class="sched-room">Lab 02</div>
-                <div class="sched-prof">Cruz, P.</div>
-              </div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">CS202</div>
-                <div class="sched-room">Room 103</div>
-                <div class="sched-prof">Lim, K.</div>
-              </div>
-              <div class="sched-cell occupied-purple">
-                <div class="sched-course">IT301</div>
-                <div class="sched-room">Lab 02</div>
-                <div class="sched-prof">Cruz, P.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">CS202</div>
-                <div class="sched-room">Room 103</div>
-                <div class="sched-prof">Lim, K.</div>
-              </div>
-
-              <div class="time-label">1:00<br />PM</div>
-              <div class="sched-cell occupied-purple">
-                <div class="sched-course">CS202</div>
-                <div class="sched-room">Room 103</div>
-                <div class="sched-prof">Lim, K.</div>
-              </div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">IS301</div>
-                <div class="sched-room">Room 302</div>
-                <div class="sched-prof">Garcia, L.</div>
-              </div>
-              <div class="sched-cell occupied-purple">
-                <div class="sched-course">CS202</div>
-                <div class="sched-room">Room 103</div>
-                <div class="sched-prof">Lim, K.</div>
-              </div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">IS301</div>
-                <div class="sched-room">Room 302</div>
-                <div class="sched-prof">Garcia, L.</div>
-              </div>
-              <div class="sched-cell occupied-purple">
-                <div class="sched-course">CS202</div>
-                <div class="sched-room">Room 103</div>
-                <div class="sched-prof">Lim, K.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-
-              <div class="time-label">3:00<br />PM</div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">IT401</div>
-                <div class="sched-room">Lab 03</div>
-                <div class="sched-prof">Santos, M.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-blue">
-                <div class="sched-course">IT401</div>
-                <div class="sched-room">Lab 03</div>
-                <div class="sched-prof">Santos, M.</div>
-              </div>
-              <div class="sched-cell empty"></div>
-              <div class="sched-cell occupied-green">
-                <div class="sched-course">IS402</div>
-                <div class="sched-room">Room 201</div>
-                <div class="sched-prof">Dela Cruz, J.</div>
+            <div class="schedule-wrapper">
+              <div class="schedule-table-wrap">
+                <table class="schedule-table">
+                  <thead>
+                    <tr id="schedule-header-row">
+                      <th class="time-col">Time</th>
+                      <th>MON</th>
+                      <th>TUE</th>
+                      <th>WED</th>
+                      <th>THU</th>
+                      <th>FRI</th>
+                      <th>SAT</th>
+                    </tr>
+                  </thead>
+                  <tbody id="schedule-tbody"></tbody>
+                </table>
               </div>
             </div>
             <div class="legend">
@@ -585,7 +466,7 @@
                     border: 1px solid var(--accent);
                   "
                 ></div>
-                Morning Block
+                MWF Block
               </div>
               <div class="legend-item">
                 <div
@@ -595,7 +476,7 @@
                     border: 1px solid var(--green);
                   "
                 ></div>
-                Mid-Day Block
+                TTH Block
               </div>
               <div class="legend-item">
                 <div
@@ -605,7 +486,7 @@
                     border: 1px solid var(--purple);
                   "
                 ></div>
-                Afternoon Block
+                Other Pattern
               </div>
               <div class="legend-item">
                 <div
@@ -615,7 +496,7 @@
                     border: 1px solid var(--red);
                   "
                 ></div>
-                Conflict Detected
+                Conflict
               </div>
               <div class="legend-item">
                 <div
@@ -625,169 +506,54 @@
                     border: 1px solid var(--border);
                   "
                 ></div>
-                Available Slot
+                Available
               </div>
             </div>
           </div>
         </div>
 
-        <!-- CONFLICTS PAGE ETO MAG HANAP KA KASI BANO -->
+        <!-- CONFLICTS PAGE -->
         <div class="page" id="page-conflicts">
           <div class="section-header">
             <div>
               <div class="section-title">Conflict Detection</div>
-              <div class="section-subtitle">
-                3 active conflicts · Localized Reallocation available for all
+              <div class="section-subtitle" id="conflicts-subtitle">
+                No schedule generated yet · Generate a schedule to detect conflicts
               </div>
             </div>
-            <button
-              class="btn btn-primary"
-              onclick="
-                alert(
-                  'Localized Reallocation running...\n\nAttempting alternative assignments for 3 conflicts.\nNo full schedule regeneration needed.\n\n✓ CS105 moved to Room 103 · MON 11AM\n✓ CS401 rescheduled to WED 3PM\n⚠ Room IT204 — soft constraint only, dismissed.',
-                )
-              "
-            >
+            <button class="btn btn-primary" onclick="autoResolveAll()">
               ⚙ Auto-Resolve All
             </button>
           </div>
-          <div
-            style="
-              font-size: 11px;
-              font-weight: 700;
-              color: var(--text3);
-              text-transform: uppercase;
-              letter-spacing: 1.2px;
-              font-family: var(--mono);
-              margin-bottom: 12px;
-            "
-          >
-            🔴 Hard Constraint Violations (2)
+
+          <!-- Empty state (shown when no schedule yet) -->
+          <div id="conflicts-empty-state" class="conflicts-empty">
+            <div class="empty-icon">🔍</div>
+            <div class="empty-title">No conflicts to show</div>
+            <div class="empty-sub">Generate a schedule first — conflicts detected from your assignments will appear here automatically.</div>
           </div>
-          <div class="conflict-card">
-            <div class="conflict-icon">🔴</div>
-            <div style="flex: 1">
-              <div class="conflict-title">
-                Double Booking — Room 101 · Monday 11:00 AM
-              </div>
-              <div class="conflict-desc">
-                <strong>CS401</strong> (Algorithms · Reyes, A. · 38 enrolled)
-                and <strong>CS105</strong> (Intro to CS · Lim, K. · 42 enrolled)
-                are both assigned to Room 101 at the same time. Room 101
-                capacity: 40.
-              </div>
-              <div class="conflict-meta">
-                TYPE: DOUBLE_BOOKING · SEVERITY: HARD · ROOM: 101 · SLOT:
-                MON-1100
-              </div>
-              <div class="conflict-actions">
-                <button
-                  class="btn btn-danger"
-                  onclick="
-                    alert(
-                      'Localized Reallocation triggered for CS401.\nSearching Room 103 (45 seats) · MON 11AM — Available ✓\nReallocated successfully. No full regeneration needed.',
-                    )
-                  "
-                >
-                  ⚙ Localized Reallocation
-                </button>
-                <button class="btn btn-secondary">✏ Manual Override</button>
-                <button
-                  class="btn btn-secondary"
-                  onclick="switchTab('schedule')"
-                >
-                  👁 View in Schedule
-                </button>
-              </div>
+
+          <!-- Hard conflicts section -->
+          <div id="hard-conflicts-section" style="display:none">
+            <div class="conflict-section-label" id="hard-conflicts-label">
+              🔴 Hard Constraint Violations (0)
             </div>
+            <div id="hard-conflicts-list"></div>
           </div>
-          <div class="conflict-card">
-            <div class="conflict-icon">🔴</div>
-            <div style="flex: 1">
-              <div class="conflict-title">
-                Instructor Conflict — Reyes, A. · Tuesday 9:00 AM
-              </div>
-              <div class="conflict-desc">
-                Instructor <strong>Reyes, A.</strong> is simultaneously
-                scheduled for <strong>CS301</strong> (Room 201) and
-                <strong>CS401</strong> (Room 101) on Tuesday at 9:00 AM. A
-                faculty member cannot be assigned to overlapping courses.
-              </div>
-              <div class="conflict-meta">
-                TYPE: INSTRUCTOR_CONFLICT · SEVERITY: HARD · INSTRUCTOR: REYES_A
-                · SLOT: TUE-0900
-              </div>
-              <div class="conflict-actions">
-                <button
-                  class="btn btn-danger"
-                  onclick="
-                    alert(
-                      'Searching alternative time slots for CS401...\nWED 3PM · Room 201 — Available ✓\nReallocated successfully.',
-                    )
-                  "
-                >
-                  ⚙ Localized Reallocation
-                </button>
-                <button class="btn btn-secondary">✏ Manual Override</button>
-                <button
-                  class="btn btn-secondary"
-                  onclick="switchTab('faculty')"
-                >
-                  📋 Faculty Schedule
-                </button>
-              </div>
+
+          <!-- Soft conflicts section -->
+          <div id="soft-conflicts-section" style="display:none">
+            <div class="conflict-section-label" id="soft-conflicts-label" style="margin-top:24px">
+              🟡 Soft Constraint Warnings (0)
             </div>
+            <div id="soft-conflicts-list"></div>
           </div>
-          <div
-            style="
-              font-size: 11px;
-              font-weight: 700;
-              color: var(--text3);
-              text-transform: uppercase;
-              letter-spacing: 1.2px;
-              font-family: var(--mono);
-              margin-bottom: 12px;
-              margin-top: 24px;
-            "
-          >
-            🟡 Soft Constraint Warnings (1)
-          </div>
-          <div class="conflict-card warning">
-            <div class="conflict-icon">🟡</div>
-            <div style="flex: 1">
-              <div class="conflict-title">
-                Room Underutilization — IT204 assigned to Lab 01 (45 seats)
-              </div>
-              <div class="conflict-desc">
-                <strong>IT204</strong> (Web Development · 18 enrolled) is in Lab
-                01 (capacity 45) at 40% utilization. Lab 02 (25 seats) would be
-                more appropriate. Soft constraint — does not violate hard rules.
-              </div>
-              <div class="conflict-meta">
-                TYPE: ROOM_UNDERUTILIZATION · SEVERITY: SOFT · WEIGHT: 25% ·
-                SCORE_IMPACT: −8pts
-              </div>
-              <div class="conflict-actions">
-                <button
-                  class="btn btn-secondary"
-                  onclick="
-                    alert(
-                      'Suggesting Lab 02 (25 seats) as a more efficient alternative.',
-                    )
-                  "
-                >
-                  💡 Suggest Alternative
-                </button>
-                <button class="btn btn-secondary">↷ Dismiss Warning</button>
-              </div>
-            </div>
-          </div>
-          <div class="card" style="margin-top: 24px">
+
+          <!-- Reallocation Log -->
+          <div class="card" id="reallocation-log-card" style="margin-top: 24px; display:none">
             <div class="card-header">
-              <div class="card-title">📋 Localized Reallocation Log</div>
-              <span class="pill pill-green"
-                >12 auto-resolved this semester</span
-              >
+              <div class="card-title">📋 Reallocation Log</div>
+              <span class="pill pill-green" id="reallocation-log-count">0 resolved this session</span>
             </div>
             <table>
               <thead>
@@ -796,45 +562,15 @@
                   <th>Original Assignment</th>
                   <th>Reallocated To</th>
                   <th>Conflict Type</th>
-                  <th>Time</th>
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td class="monospace">IT302</td>
-                  <td class="monospace">Room 201 · MWF 9AM</td>
-                  <td class="monospace">Room 302 · MWF 9AM</td>
-                  <td>
-                    <span class="pill pill-orange" style="font-size: 10px"
-                      >Capacity</span
-                    >
-                    >
-                  </td>
-                  <td style="font-size: 12px; color: var(--text3)">2h ago</td>
-                  <td><span class="pill pill-green">Resolved</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">CS305</td>
-                  <td class="monospace">Room 101 · TTH 1PM</td>
-                  <td class="monospace">Room 105 · TTH 1PM</td>
-                  <td>
-                    <span class="pill pill-red" style="font-size: 10px"
-                      >Double Book</span
-                    >
-                    >
-                  </td>
-                  <td style="font-size: 12px; color: var(--text3)">
-                    Yesterday
-                  </td>
-                  <td><span class="pill pill-green">Resolved</span></td>
-                </tr>
-              </tbody>
+              <tbody id="reallocation-log-tbody"></tbody>
             </table>
           </div>
         </div>
 
-        <!-- ROOMS PAGE OH TANGA MANGMANG SUPOT -->
+        <!-- ROOMS PAGE -->
         <div class="page" id="page-rooms">
           <div class="section-header">
             <div>
@@ -865,128 +601,10 @@
               </button>
             </div>
           </div>
-          <div class="card">
-            <div class="rooms-grid">
-              <div class="room-card selected">
-                <div class="room-number">Room 101</div>
-                <div class="room-type">Lecture Room</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-green">Available</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 75%"></div>
-                  </div>
-                  <span class="monospace">40</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Room 102</div>
-                <div class="room-type">Lecture Room</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-blue">Occupied</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 63%"></div>
-                  </div>
-                  <span class="monospace">35</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Room 103</div>
-                <div class="room-type">Lecture Room</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-blue">Occupied</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 80%"></div>
-                  </div>
-                  <span class="monospace">45</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Room 201</div>
-                <div class="room-type">Lecture Room</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-blue">Occupied</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 100%"></div>
-                  </div>
-                  <span class="monospace">50</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Room 302</div>
-                <div class="room-type">Lecture Room</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-green">Available</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 75%"></div>
-                  </div>
-                  <span class="monospace">40</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Lab 01</div>
-                <div class="room-type">Computer Lab</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-blue">Occupied</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 91%"></div>
-                  </div>
-                  <span class="monospace">45</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Lab 02</div>
-                <div class="room-type">Computer Lab</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-green">Available</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div class="cap-fill" style="width: 55%"></div>
-                  </div>
-                  <span class="monospace">25</span>
-                </div>
-              </div>
-              <div class="room-card">
-                <div class="room-number">Lab 03</div>
-                <div class="room-type">Computer Lab</div>
-                <div style="margin-bottom: 10px">
-                  <span class="pill pill-orange">Maintenance</span>
-                </div>
-                <div class="room-capacity">
-                  <span style="font-size: 11px; color: var(--text3)">Cap:</span>
-                  <div class="cap-bar">
-                    <div
-                      class="cap-fill"
-                      style="width: 55%; background: var(--orange)"
-                    ></div>
-                  </div>
-                  <span class="monospace">30</span>
-                </div>
-              </div>
-            </div>
-          </div>
+          <div class="card"><div class="rooms-grid"></div></div>
         </div>
 
-        <!-- ALGORITHM PAGE SAMPLE LANG TO BONAK JEMWEL -->
+        <!-- ALGORITHM PAGE -->
         <div class="page" id="page-algorithm">
           <div class="section-header">
             <div>
@@ -1245,7 +863,7 @@
           </div>
         </div>
 
-        <!-- ANALYTICS PAGE ETO OH TANGA BRANDON-->
+        <!-- ANALYTICS PAGE -->
         <div class="page" id="page-analytics">
           <div class="section-header">
             <div>
@@ -1477,9 +1095,7 @@
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody id="faculty-tbody">
-                <!-- Populated by renderFaculty() -->
-              </tbody>
+              <tbody id="faculty-tbody"></tbody>
             </table>
           </div>
         </div>
@@ -1508,94 +1124,14 @@
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody>
-                <tr>
-                  <td class="monospace">CS101</td>
-                  <td>Intro to Computer Science</td>
-                  <td>CS</td>
-                  <td>1st</td>
-                  <td>42</td>
-                  <td>Lecture</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">CS202</td>
-                  <td>Object-Oriented Programming</td>
-                  <td>CS</td>
-                  <td>2nd</td>
-                  <td>38</td>
-                  <td>Lab</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">CS301</td>
-                  <td>Data Structures</td>
-                  <td>CS</td>
-                  <td>3rd</td>
-                  <td>35</td>
-                  <td>Lecture</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">CS401</td>
-                  <td>Algorithms</td>
-                  <td>CS</td>
-                  <td>4th</td>
-                  <td>38</td>
-                  <td>Lecture</td>
-                  <td><span class="pill pill-red">Conflict</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">IT204</td>
-                  <td>Web Development</td>
-                  <td>IT</td>
-                  <td>2nd</td>
-                  <td>18</td>
-                  <td>Lab</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">IT301</td>
-                  <td>Computer Networks</td>
-                  <td>IT</td>
-                  <td>3rd</td>
-                  <td>30</td>
-                  <td>Lab</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">IS201</td>
-                  <td>Information Systems</td>
-                  <td>IS</td>
-                  <td>2nd</td>
-                  <td>28</td>
-                  <td>Lecture</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">IS301</td>
-                  <td>Systems Analysis & Design</td>
-                  <td>IS</td>
-                  <td>3rd</td>
-                  <td>32</td>
-                  <td>Lecture</td>
-                  <td><span class="pill pill-green">Assigned</span></td>
-                </tr>
-                <tr>
-                  <td class="monospace">IS402</td>
-                  <td>IS Capstone Project</td>
-                  <td>IS</td>
-                  <td>4th</td>
-                  <td>22</td>
-                  <td>Lab</td>
-                  <td><span class="pill pill-orange">Pending</span></td>
-                </tr>
-              </tbody>
+              <tbody></tbody>
             </table>
           </div>
         </div>
       </main>
     </div>
+
+    <!-- ADD ROOM MODAL -->
     <div
       id="add-room-modal"
       style="
@@ -1663,5 +1199,548 @@
         </div>
       </div>
     </div>
+
+    <!-- GENERATE SCHEDULE MODAL -->
+    <div
+      id="schedule-modal"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        align-items: flex-start;
+        justify-content: center;
+        overflow-y: auto;
+        padding: 30px 0;
+      "
+    >
+      <div
+        style="
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 16px;
+          width: 660px;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+          margin: auto;
+        "
+      >
+        <!-- Modal Header -->
+        <div
+          style="
+            padding: 24px 28px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <div>
+            <div style="font-size: 16px; font-weight: 700; color: var(--text)">
+              ▶ Generate Schedule
+            </div>
+            <div style="font-size: 12px; color: var(--text3); margin-top: 2px">
+              Manual entry or auto-generate · Flexible durations · Mon–Sat
+            </div>
+          </div>
+          <button
+            onclick="closeScheduleModal()"
+            style="
+              background: none;
+              border: none;
+              font-size: 20px;
+              color: var(--text3);
+              cursor: pointer;
+              padding: 0;
+              line-height: 1;
+            "
+          >
+            ✕
+          </button>
+        </div>
+
+        <!-- Mode Tabs -->
+        <div style="padding: 20px 28px 0; display: flex; gap: 8px">
+          <button
+            id="mode-auto-btn"
+            onclick="setScheduleMode('auto')"
+            class="btn btn-primary"
+            style="flex: 1; justify-content: center; font-size: 13px"
+          >
+            ⚙ Auto-Generate
+          </button>
+          <button
+            id="mode-manual-btn"
+            onclick="setScheduleMode('manual')"
+            class="btn btn-secondary"
+            style="flex: 1; justify-content: center; font-size: 13px"
+          >
+            ✏ Manual Entry
+          </button>
+        </div>
+
+        <!-- AUTO MODE -->
+        <div
+          id="schedule-mode-auto"
+          style="
+            padding: 20px 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+          "
+        >
+          <div
+            style="
+              background: var(--surface2);
+              border: 1px solid var(--border);
+              border-radius: 10px;
+              padding: 14px 16px;
+              font-size: 12px;
+              color: var(--text2);
+              line-height: 1.6;
+            "
+          >
+            ⚙ The algorithm will assign rooms and time slots to all
+            <strong>Pending</strong> courses automatically using the
+            Constraint-Based Greedy method.
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Duration per Class</label
+              >
+              <div style="display: flex; gap: 6px; align-items: center">
+                <input
+                  id="auto-duration-h"
+                  type="number"
+                  min="0"
+                  max="8"
+                  value="1"
+                  class="search-input"
+                  style="width: 70px; box-sizing: border-box"
+                  placeholder="hrs"
+                />
+                <span style="font-size: 12px; color: var(--text3)">h</span>
+                <input
+                  id="auto-duration-m"
+                  type="number"
+                  min="0"
+                  max="59"
+                  step="5"
+                  value="30"
+                  class="search-input"
+                  style="width: 70px; box-sizing: border-box"
+                  placeholder="min"
+                />
+                <span style="font-size: 12px; color: var(--text3)">min</span>
+              </div>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Start Time (Earliest Slot)</label
+              >
+              <select
+                id="auto-start"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              >
+                <option value="07:00">7:00 AM</option>
+                <option value="07:30">7:30 AM</option>
+                <option value="08:00" selected>8:00 AM</option>
+                <option value="08:30">8:30 AM</option>
+                <option value="09:00">9:00 AM</option>
+              </select>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >End Time (Latest Slot)</label
+              >
+              <select
+                id="auto-end"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              >
+                <option value="17:00">5:00 PM</option>
+                <option value="18:00" selected>6:00 PM</option>
+                <option value="19:00">7:00 PM</option>
+                <option value="20:00">8:00 PM</option>
+                <option value="21:00">9:00 PM</option>
+              </select>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Meeting Pattern</label
+              >
+              <select
+                id="auto-pattern"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              >
+                <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                <option value="TTH" selected>TTH (Tue · Thu)</option>
+                <option value="MW">MW (Mon · Wed)</option>
+                <option value="TF">TF (Tue · Fri)</option>
+                <option value="SAT">SAT (Saturday only)</option>
+                <option value="DAILY">Daily (Mon–Sat)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label
+              style="
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2);
+                margin-bottom: 8px;
+                display: block;
+              "
+              >Active Days</label
+            >
+            <div
+              style="display: flex; gap: 8px; flex-wrap: wrap"
+              id="auto-days"
+            >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="MON" checked /> Mon</label
+              >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="TUE" checked /> Tue</label
+              >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="WED" checked /> Wed</label
+              >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="THU" checked /> Thu</label
+              >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="FRI" checked /> Fri</label
+              >
+              <label
+                style="
+                  display: flex;
+                  align-items: center;
+                  gap: 6px;
+                  font-size: 12px;
+                  cursor: pointer;
+                  background: var(--surface2);
+                  padding: 6px 12px;
+                  border-radius: 6px;
+                  border: 1px solid var(--border);
+                "
+                ><input type="checkbox" value="SAT" /> Sat</label
+              >
+            </div>
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: 10px;
+              justify-content: flex-end;
+              padding-top: 8px;
+              border-top: 1px solid var(--border);
+            "
+          >
+            <button class="btn btn-secondary" onclick="closeScheduleModal()">
+              Cancel
+            </button>
+            <button class="btn btn-primary" onclick="runAutoSchedule()">
+              ⚙ Run Auto-Generate
+            </button>
+          </div>
+        </div>
+
+        <!-- MANUAL MODE -->
+        <div
+          id="schedule-mode-manual"
+          style="
+            padding: 20px 28px;
+            display: none;
+            flex-direction: column;
+            gap: 16px;
+          "
+        >
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Course *</label
+              >
+              <select
+                id="manual-course"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              ></select>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Room *</label
+              >
+              <select
+                id="manual-room"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              ></select>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Instructor</label
+              >
+              <input
+                id="manual-instructor"
+                class="search-input"
+                type="text"
+                placeholder="e.g. Dela Cruz, J."
+                style="width: 100%; box-sizing: border-box"
+              />
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Duration</label
+              >
+              <div style="display: flex; gap: 6px; align-items: center">
+                <input
+                  id="manual-duration-h"
+                  type="number"
+                  min="0"
+                  max="8"
+                  value="1"
+                  class="search-input"
+                  style="width: 70px; box-sizing: border-box"
+                  placeholder="hrs"
+                />
+                <span style="font-size: 12px; color: var(--text3)">h</span>
+                <input
+                  id="manual-duration-m"
+                  type="number"
+                  min="0"
+                  max="59"
+                  step="5"
+                  value="30"
+                  class="search-input"
+                  style="width: 70px; box-sizing: border-box"
+                  placeholder="min"
+                />
+                <span style="font-size: 12px; color: var(--text3)">min</span>
+              </div>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Start Time *</label
+              >
+              <select
+                id="manual-time"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              ></select>
+            </div>
+            <div>
+              <label
+                style="
+                  font-size: 12px;
+                  font-weight: 600;
+                  color: var(--text2);
+                  margin-bottom: 6px;
+                  display: block;
+                "
+                >Meeting Pattern *</label
+              >
+              <select
+                id="manual-pattern"
+                class="search-input"
+                style="width: 100%; box-sizing: border-box"
+              >
+                <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                <option value="TTH">TTH (Tue · Thu)</option>
+                <option value="MW">MW (Mon · Wed)</option>
+                <option value="TF">TF (Tue · Fri)</option>
+                <option value="SAT">SAT (Saturday only)</option>
+                <option value="DAILY">Daily (Mon–Sat)</option>
+                <option value="MON">Monday only</option>
+                <option value="TUE">Tuesday only</option>
+                <option value="WED">Wednesday only</option>
+                <option value="THU">Thursday only</option>
+                <option value="FRI">Friday only</option>
+              </select>
+            </div>
+          </div>
+          <div
+            id="manual-conflict-msg"
+            style="
+              display: none;
+              padding: 10px 14px;
+              border-radius: 8px;
+              font-size: 12px;
+            "
+          ></div>
+          <div id="manual-entries-wrap" style="display: none">
+            <div
+              style="
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2);
+                margin-bottom: 8px;
+              "
+            >
+              📋 Queued Assignments
+            </div>
+            <div
+              id="manual-entries-list"
+              style="
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                max-height: 160px;
+                overflow-y: auto;
+              "
+            ></div>
+          </div>
+          <div
+            style="
+              display: flex;
+              gap: 8px;
+              justify-content: space-between;
+              padding-top: 8px;
+              border-top: 1px solid var(--border);
+            "
+          >
+            <button class="btn btn-secondary" onclick="closeScheduleModal()">
+              Cancel
+            </button>
+            <div style="display: flex; gap: 8px">
+              <button class="btn btn-secondary" onclick="checkManualConflict()">
+                🔍 Check Conflicts
+              </button>
+              <button class="btn btn-secondary" onclick="addManualEntry()">
+                + Add Another
+              </button>
+              <button class="btn btn-primary" onclick="submitManualSchedule()">
+                ✓ Save Assignment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="myScript.js"></script>
   </body>
 </html>
