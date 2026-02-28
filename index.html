@@ -29,8 +29,128 @@
         >
           🌙
         </button>
-        <div style="font-size: 12px; color: var(--text2)">Admin User</div>
-        <div class="avatar">AU</div>
+        <!-- Auth: name + avatar + dropdown menu -->
+        <div style="position: relative">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              cursor: pointer;
+              padding: 4px 8px;
+              border-radius: 8px;
+              border: 1px solid transparent;
+              transition: all 0.15s;
+            "
+            onclick="showUserMenu(event)"
+            onmouseover="
+              this.style.background = 'var(--surface2)';
+              this.style.borderColor = 'var(--border)';
+            "
+            onmouseout="
+              this.style.background = 'transparent';
+              this.style.borderColor = 'transparent';
+            "
+          >
+            <div id="header-avatar" class="avatar">—</div>
+            <div
+              id="header-username"
+              style="font-size: 12px; color: var(--text2)"
+            >
+              —
+            </div>
+            <span
+              id="user-menu-caret"
+              style="
+                font-size: 10px;
+                color: var(--text3);
+                transition: transform 0.2s;
+              "
+              >▾</span
+            >
+          </div>
+          <!-- User dropdown menu -->
+          <div
+            id="user-menu"
+            style="
+              display: none;
+              position: absolute;
+              top: 40px;
+              right: 0;
+              background: var(--surface);
+              border: 1px solid var(--border);
+              border-radius: 10px;
+              padding: 8px;
+              min-width: 180px;
+              box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+              z-index: 200;
+            "
+          >
+            <div
+              id="menu-name"
+              style="
+                padding: 8px 10px;
+                font-size: 13px;
+                font-weight: 700;
+                color: var(--text);
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 4px;
+              "
+            >
+              —
+            </div>
+            <div
+              id="menu-role"
+              style="
+                padding: 2px 10px 8px;
+                font-size: 11px;
+                color: var(--text3);
+                border-bottom: 1px solid var(--border);
+                margin-bottom: 4px;
+              "
+            >
+              —
+            </div>
+            <button
+              onclick="openChangePassword()"
+              style="
+                width: 100%;
+                text-align: left;
+                background: none;
+                border: none;
+                padding: 8px 10px;
+                font-size: 13px;
+                color: var(--text2);
+                cursor: pointer;
+                border-radius: 6px;
+                font-family: var(--sans);
+              "
+              onmouseover="this.style.background = 'var(--surface2)'"
+              onmouseout="this.style.background = 'none'"
+            >
+              🔑 Change Password
+            </button>
+            <button
+              onclick="doLogout()"
+              style="
+                width: 100%;
+                text-align: left;
+                background: none;
+                border: none;
+                padding: 8px 10px;
+                font-size: 13px;
+                color: var(--red);
+                cursor: pointer;
+                border-radius: 6px;
+                font-family: var(--sans);
+              "
+              onmouseover="this.style.background = 'var(--surface2)'"
+              onmouseout="this.style.background = 'none'"
+            >
+              ↩ Logout
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -45,7 +165,7 @@
         >
         <a class="nav-item" onclick="switchPage('conflicts', this)"
           ><span class="icon">⚠</span>Conflicts<span class="nav-badge"
-            >3</span
+            >0</span
           ></a
         >
         <div class="nav-section">Management</div>
@@ -77,14 +197,14 @@
             ⊞ Dashboard
           </div>
           <div class="tab" id="tab-schedule" onclick="switchTab('schedule')">
-            📆 Schedule <span class="tab-count">124</span>
+            📆 Schedule <span class="tab-count">0</span>
           </div>
           <div class="tab" id="tab-conflicts" onclick="switchTab('conflicts')">
             ⚠ Conflicts
-            <span class="tab-count" style="color: var(--red)">3</span>
+            <span class="tab-count" style="color: var(--red)">0</span>
           </div>
           <div class="tab" id="tab-rooms" onclick="switchTab('rooms')">
-            🏫 Rooms <span class="tab-count">48</span>
+            🏫 Rooms
           </div>
           <div class="tab" id="tab-algorithm" onclick="switchTab('algorithm')">
             ⚙ Algorithm
@@ -114,25 +234,25 @@
             <div class="stat-card blue">
               <div class="stat-icon">🏫</div>
               <div class="stat-label">Total Rooms</div>
-              <div class="stat-value">48</div>
-              <div class="stat-delta">12 labs · 36 lecture</div>
+              <div class="stat-value">—</div>
+              <div class="stat-delta">—</div>
             </div>
             <div class="stat-card green">
               <div class="stat-icon">✅</div>
               <div class="stat-label">Scheduled</div>
-              <div class="stat-value">124</div>
-              <div class="stat-delta">of 127 courses assigned</div>
+              <div class="stat-value">—</div>
+              <div class="stat-delta">—</div>
             </div>
             <div class="stat-card red">
               <div class="stat-icon">⚠</div>
               <div class="stat-label">Conflicts</div>
-              <div class="stat-value">3</div>
+              <div class="stat-value">—</div>
               <div class="stat-delta">requires manual review</div>
             </div>
             <div class="stat-card purple">
               <div class="stat-icon">📊</div>
               <div class="stat-label">Utilization</div>
-              <div class="stat-value">78%</div>
+              <div class="stat-value">—</div>
               <div class="stat-delta">target ≥ 80%</div>
             </div>
           </div>
@@ -144,6 +264,7 @@
                   <button
                     class="btn btn-secondary"
                     style="padding: 4px 10px; font-size: 11px"
+                    onclick="switchTab('schedule')"
                   >
                     View All
                   </button>
@@ -283,7 +404,7 @@
                     ⚠ Resolve Conflicts
                   </button>
                   <button
-                    class="btn btn-secondary"
+                    class="btn btn-secondary export-excel-btn"
                     style="justify-content: center"
                   >
                     ↓ Export to Excel
@@ -427,15 +548,20 @@
               </div>
             </div>
             <div style="display: flex; gap: 10px; align-items: center">
-              <select class="search-input" style="width: 150px">
+              <select
+                id="schedule-room-filter"
+                class="search-input"
+                style="width: 150px"
+              >
                 <option>All Rooms</option>
-                <option>Room 101</option>
-                <option>Room 201</option>
-                <option>Lab 01</option>
               </select>
-              <button class="btn btn-secondary">← Prev</button>
-              <button class="btn btn-secondary">Next →</button>
-              <button class="btn btn-primary">↓ Export</button>
+              <button id="schedule-prev-btn" class="btn btn-secondary">
+                ← Prev
+              </button>
+              <button id="schedule-next-btn" class="btn btn-secondary">
+                Next →
+              </button>
+              <button class="btn btn-primary export-excel-btn">↓ Export</button>
             </div>
           </div>
           <div class="card">
@@ -518,7 +644,8 @@
             <div>
               <div class="section-title">Conflict Detection</div>
               <div class="section-subtitle" id="conflicts-subtitle">
-                No schedule generated yet · Generate a schedule to detect conflicts
+                No schedule generated yet · Generate a schedule to detect
+                conflicts
               </div>
             </div>
             <button class="btn btn-primary" onclick="autoResolveAll()">
@@ -526,34 +653,43 @@
             </button>
           </div>
 
-          <!-- Empty state (shown when no schedule yet) -->
           <div id="conflicts-empty-state" class="conflicts-empty">
             <div class="empty-icon">🔍</div>
             <div class="empty-title">No conflicts to show</div>
-            <div class="empty-sub">Generate a schedule first — conflicts detected from your assignments will appear here automatically.</div>
+            <div class="empty-sub">
+              Generate a schedule first — conflicts detected from your
+              assignments will appear here automatically.
+            </div>
           </div>
 
-          <!-- Hard conflicts section -->
-          <div id="hard-conflicts-section" style="display:none">
+          <div id="hard-conflicts-section" style="display: none">
             <div class="conflict-section-label" id="hard-conflicts-label">
               🔴 Hard Constraint Violations (0)
             </div>
             <div id="hard-conflicts-list"></div>
           </div>
 
-          <!-- Soft conflicts section -->
-          <div id="soft-conflicts-section" style="display:none">
-            <div class="conflict-section-label" id="soft-conflicts-label" style="margin-top:24px">
+          <div id="soft-conflicts-section" style="display: none">
+            <div
+              class="conflict-section-label"
+              id="soft-conflicts-label"
+              style="margin-top: 24px"
+            >
               🟡 Soft Constraint Warnings (0)
             </div>
             <div id="soft-conflicts-list"></div>
           </div>
 
-          <!-- Reallocation Log -->
-          <div class="card" id="reallocation-log-card" style="margin-top: 24px; display:none">
+          <div
+            class="card"
+            id="reallocation-log-card"
+            style="margin-top: 24px; display: none"
+          >
             <div class="card-header">
               <div class="card-title">📋 Reallocation Log</div>
-              <span class="pill pill-green" id="reallocation-log-count">0 resolved this session</span>
+              <span class="pill pill-green" id="reallocation-log-count"
+                >0 resolved this session</span
+              >
             </div>
             <table>
               <thead>
@@ -576,21 +712,30 @@
             <div>
               <div class="section-title">Room Inventory</div>
               <div class="section-subtitle">
-                48 rooms total · 12 computer labs · 36 lecture rooms
+                Manage lecture rooms and computer labs
               </div>
             </div>
             <div class="filter-row">
               <input
+                id="room-search-input"
                 class="search-input"
                 type="text"
                 placeholder="Search rooms…"
               />
-              <select class="search-input" style="width: 140px">
+              <select
+                id="room-type-filter"
+                class="search-input"
+                style="width: 140px"
+              >
                 <option>All Types</option>
                 <option>Lecture</option>
                 <option>Computer Lab</option>
               </select>
-              <select class="search-input" style="width: 140px">
+              <select
+                id="room-status-filter"
+                class="search-input"
+                style="width: 140px"
+              >
                 <option>All Status</option>
                 <option>Available</option>
                 <option>Occupied</option>
@@ -1106,10 +1251,12 @@
             <div>
               <div class="section-title">Course Catalog</div>
               <div class="section-subtitle">
-                127 courses · CS · IT · IS programs · AY 2025–2026
+                CS · IT · IS programs · AY 2025–2026
               </div>
             </div>
-            <button class="btn btn-primary">+ Add Course</button>
+            <button class="btn btn-primary" onclick="openAddCourseModal()">
+              + Add Course
+            </button>
           </div>
           <div class="card">
             <table>
@@ -1200,6 +1347,139 @@
       </div>
     </div>
 
+    <!-- CHANGE PASSWORD MODAL -->
+    <div
+      id="pw-modal"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+      "
+    >
+      <div
+        style="
+          background: var(--surface);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 24px;
+          width: 380px;
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        "
+      >
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          "
+        >
+          <div style="font-size: 16px; font-weight: 700; color: var(--text)">
+            🔑 Change Password
+          </div>
+          <button
+            onclick="closePwModal()"
+            style="
+              background: none;
+              border: none;
+              font-size: 20px;
+              color: var(--text3);
+              cursor: pointer;
+              padding: 0;
+              line-height: 1;
+            "
+          >
+            ✕
+          </button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <div>
+            <label
+              style="
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2);
+                margin-bottom: 4px;
+                display: block;
+              "
+              >Current Password</label
+            >
+            <input
+              id="pw-current"
+              class="search-input"
+              type="password"
+              placeholder="Enter current password"
+              style="width: 100%; box-sizing: border-box"
+            />
+          </div>
+          <div>
+            <label
+              style="
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2);
+                margin-bottom: 4px;
+                display: block;
+              "
+              >New Password</label
+            >
+            <input
+              id="pw-new"
+              class="search-input"
+              type="password"
+              placeholder="At least 6 characters"
+              style="width: 100%; box-sizing: border-box"
+            />
+          </div>
+          <div>
+            <label
+              style="
+                font-size: 12px;
+                font-weight: 600;
+                color: var(--text2);
+                margin-bottom: 4px;
+                display: block;
+              "
+              >Confirm New Password</label
+            >
+            <input
+              id="pw-confirm"
+              class="search-input"
+              type="password"
+              placeholder="Re-enter new password"
+              style="width: 100%; box-sizing: border-box"
+            />
+          </div>
+          <div
+            id="pw-error"
+            style="
+              display: none;
+              padding: 8px 12px;
+              border-radius: 6px;
+              font-size: 12px;
+              background: rgba(248, 81, 73, 0.1);
+              border: 1px solid var(--red);
+              color: var(--red);
+            "
+          ></div>
+        </div>
+        <div style="display: flex; gap: 10px; justify-content: flex-end">
+          <button class="btn btn-secondary" onclick="closePwModal()">
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick="submitChangePw()">
+            Save Password
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- GENERATE SCHEDULE MODAL -->
     <div
       id="schedule-modal"
@@ -1227,7 +1507,6 @@
           margin: auto;
         "
       >
-        <!-- Modal Header -->
         <div
           style="
             padding: 24px 28px 20px;
@@ -1260,8 +1539,6 @@
             ✕
           </button>
         </div>
-
-        <!-- Mode Tabs -->
         <div style="padding: 20px 28px 0; display: flex; gap: 8px">
           <button
             id="mode-auto-btn"

@@ -1,3 +1,90 @@
+let currentUser = null;
+
+function initAuth() {
+  try {
+    const stored = sessionStorage.getItem("rss_user");
+    if (!stored) {
+      window.location.href = "login.html";
+      return false;
+    }
+    currentUser = JSON.parse(stored);
+    document.getElementById("header-username").textContent = currentUser.name;
+    document.getElementById("header-avatar").textContent = currentUser.initials;
+    document.getElementById("menu-name").textContent = currentUser.name;
+    document.getElementById("menu-role").textContent =
+      currentUser.role === "admin" ? "Administrator" : "Faculty";
+    return true;
+  } catch (e) {
+    window.location.href = "login.html";
+    return false;
+  }
+}
+
+function doLogout() {
+  try {
+    sessionStorage.removeItem("rss_user");
+  } catch (e) {}
+  window.location.href = "login.html";
+}
+
+function showUserMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById("user-menu");
+  const caret = document.getElementById("user-menu-caret");
+  const isOpen = m.style.display === "block";
+  m.style.display = isOpen ? "none" : "block";
+  if (caret) caret.style.transform = isOpen ? "rotate(0deg)" : "rotate(180deg)";
+}
+
+function openChangePassword() {
+  document.getElementById("user-menu").style.display = "none";
+  ["pw-current", "pw-new", "pw-confirm"].forEach(
+    (id) => (document.getElementById(id).value = ""),
+  );
+  document.getElementById("pw-error").style.display = "none";
+  document.getElementById("pw-modal").style.display = "flex";
+}
+
+function closePwModal() {
+  document.getElementById("pw-modal").style.display = "none";
+}
+
+function submitChangePw() {
+  const cur = document.getElementById("pw-current").value;
+  const nw = document.getElementById("pw-new").value;
+  const conf = document.getElementById("pw-confirm").value;
+  const errEl = document.getElementById("pw-error");
+  const DEMO_PASSWORDS = {
+    admin: "admin123",
+    faculty: "faculty123",
+    reyes: "reyes2025",
+    lim: "lim2025",
+    santos: "santos2025",
+    garcia: "garcia2025",
+    cruz: "cruz2025",
+  };
+  const expected = DEMO_PASSWORDS[currentUser.username] || "admin123";
+  if (cur !== expected) {
+    errEl.textContent = "⚠ Current password is incorrect.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (nw.length < 6) {
+    errEl.textContent = "⚠ New password must be at least 6 characters.";
+    errEl.style.display = "block";
+    return;
+  }
+  if (nw !== conf) {
+    errEl.textContent = "⚠ Passwords do not match.";
+    errEl.style.display = "block";
+    return;
+  }
+  closePwModal();
+  showNotification("Password changed successfully!");
+}
+
+// ============ DATA ============
+
 let courses = [
   {
     code: "CS101",
@@ -144,14 +231,12 @@ let rooms = [
 ];
 
 let instructors = [];
-
-// Schedule starts empty — only populated after Generate Schedule is run
 let scheduleAssignments = [];
-
 let assignments = courses.filter((c) => c.status === "Assigned");
 let conflicts = courses.filter((c) => c.status === "Conflict");
 
 // ============ NAVIGATION ============
+
 function switchPage(id, el) {
   document
     .querySelectorAll(".nav-item")
@@ -167,20 +252,16 @@ function switchTab(id) {
   document
     .querySelectorAll(".tab")
     .forEach((t) => t.classList.remove("active"));
-  const page = document.getElementById("page-" + id);
-  if (page) page.classList.add("active");
-  const tab = document.getElementById("tab-" + id);
-  if (tab) tab.classList.add("active");
+  document.getElementById("page-" + id)?.classList.add("active");
+  document.getElementById("tab-" + id)?.classList.add("active");
   document.querySelectorAll(".nav-item").forEach((n) => {
-    if (
-      n.getAttribute("onclick") &&
-      n.getAttribute("onclick").includes("'" + id + "'")
-    )
+    if (n.getAttribute("onclick")?.includes("'" + id + "'"))
       n.classList.add("active");
   });
 }
 
 // ============ RENDER DASHBOARD ============
+
 function renderDashboard() {
   document.querySelector(".stat-card.blue .stat-value").textContent =
     rooms.length;
@@ -193,17 +274,21 @@ function renderDashboard() {
 
   const tbody = document.querySelector("#page-dashboard table tbody");
   if (tbody) {
-    tbody.innerHTML = "";
-    assignments.slice(0, 6).forEach((c) => {
-      tbody.innerHTML += `<tr>
+    tbody.innerHTML = assignments
+      .slice(0, 6)
+      .map(
+        (c) => `
+      <tr>
         <td><span class="monospace">${c.code}</span><br/><span style="font-size:11px;color:var(--text3)">${c.title}</span></td>
         <td class="monospace">${c.room}</td>
         <td class="monospace">${c.time}</td>
         <td>${c.instructor}</td>
         <td><span class="pill pill-${c.status === "Assigned" ? "green" : "red"}">${c.status}</span></td>
-      </tr>`;
-    });
+      </tr>`,
+      )
+      .join("");
   }
+
   document.querySelector("#tab-schedule .tab-count").textContent =
     assignments.length;
   document.querySelector("#tab-conflicts .tab-count").textContent =
@@ -211,22 +296,25 @@ function renderDashboard() {
   document.querySelector("#tab-conflicts .tab-count").style.color =
     "var(--red)";
 
-  // Update quick actions resolve button with live conflict count
   const resolveBtn = document.getElementById("dashboard-resolve-btn");
   if (resolveBtn) {
     const { hard } = detectConflicts();
-    resolveBtn.textContent = hard.length > 0
-      ? `⚠ Resolve ${hard.length} Conflict${hard.length !== 1 ? "s" : ""}`
-      : "✓ No Conflicts";
-    resolveBtn.className = hard.length > 0 ? "btn btn-danger" : "btn btn-success";
+    resolveBtn.textContent =
+      hard.length > 0
+        ? `⚠ Resolve ${hard.length} Conflict${hard.length !== 1 ? "s" : ""}`
+        : "✓ No Conflicts";
+    resolveBtn.className =
+      hard.length > 0 ? "btn btn-danger" : "btn btn-success";
     resolveBtn.style.justifyContent = "center";
   }
 }
 
 // ============ RENDER SCHEDULE ============
-// Uses a proper HTML <table> with rowspan for multi-hour blocks.
-// scheduleAssignments starts empty; it is populated when the user runs
-// Auto-Generate or saves a Manual entry from the Generate Schedule modal.
+
+// Fix #5 & #6: track current week offset and active room filter
+let scheduleWeekOffset = 0;
+let scheduleRoomFilter = "";
+
 function renderSchedule() {
   const timeSlots = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
   const days = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
@@ -245,54 +333,55 @@ function renderSchedule() {
     FRI: "blue",
   };
 
-  const patternDays = {
-    MWF: ["MON", "WED", "FRI"],
-    TTH: ["TUE", "THU"],
-    MW: ["MON", "WED"],
-    TF: ["TUE", "FRI"],
-    SAT: ["SAT"],
-    DAILY: ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
-    MON: ["MON"],
-    TUE: ["TUE"],
-    WED: ["WED"],
-    THU: ["THU"],
-    FRI: ["FRI"],
-  };
+  // Fix #6: filter assignments by selected room
+  const visibleAssignments = scheduleRoomFilter
+    ? scheduleAssignments.filter((c) => c.room === scheduleRoomFilter)
+    : scheduleAssignments;
 
-  // grid[day][hour] = { course, span, color } | "blocked" | null
+  // Fix #5: compute the week label and update the subtitle
+  const baseDate = new Date();
+  baseDate.setDate(
+    baseDate.getDate() - baseDate.getDay() + 1 + scheduleWeekOffset * 7,
+  );
+  const endDate = new Date(baseDate);
+  endDate.setDate(baseDate.getDate() + 5);
+  const fmt = (d) =>
+    d.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+  const weekLabel = `${fmt(baseDate)} – ${fmt(endDate)}, ${baseDate.getFullYear()}`;
+  const subtitle = document.querySelector("#page-schedule .section-subtitle");
+  if (subtitle)
+    subtitle.textContent = `AY 2025–2026 · 1st Semester · Week of ${weekLabel}`;
+
   const grid = {};
-  days.forEach((d) => { grid[d] = {}; });
+  days.forEach((d) => {
+    grid[d] = {};
+  });
 
-  scheduleAssignments.forEach((course) => {
+  visibleAssignments.forEach((course) => {
     if (!course.time || !course.pattern) return;
     const timeMatch = course.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!timeMatch) return;
-
     let h = parseInt(timeMatch[1]);
-    const m = parseInt(timeMatch[2]);
     const ampm = timeMatch[3].toUpperCase();
     if (ampm === "PM" && h !== 12) h += 12;
     if (ampm === "AM" && h === 12) h = 0;
-
-    // Snap to the nearest hour slot for display purposes
-    const startHour = h;
-    const durationMins = Math.round((course.duration || 1.5) * 60);
-    const spanCount = Math.max(1, Math.ceil(durationMins / 60));
-    const assignedDays = patternDays[course.pattern] || [];
-
+    const spanCount = Math.max(
+      1,
+      Math.ceil(Math.round((course.duration || 1.5) * 60) / 60),
+    );
+    const assignedDays = patternDaysMap[course.pattern] || [];
     assignedDays.forEach((day) => {
       for (let s = 0; s < spanCount; s++) {
-        const slotH = startHour + s;
+        const slotH = h + s;
         if (!timeSlots.includes(slotH)) continue;
-        if (s === 0) {
-          grid[day][slotH] = {
-            course,
-            span: spanCount,
-            color: colorMap[course.pattern] || "blue",
-          };
-        } else {
-          grid[day][slotH] = "blocked";
-        }
+        grid[day][slotH] =
+          s === 0
+            ? {
+                course,
+                span: spanCount,
+                color: colorMap[course.pattern] || "blue",
+              }
+            : "blocked";
       }
     });
   });
@@ -300,78 +389,57 @@ function renderSchedule() {
   const tbody = document.getElementById("schedule-tbody");
   if (!tbody) return;
 
-  // Show empty-state message if no assignments yet
   if (scheduleAssignments.length === 0) {
     tbody.innerHTML = `<tr>
       <td colspan="7" class="schedule-empty-state">
         <div class="empty-icon">📅</div>
         <div class="empty-title">No schedule generated yet</div>
         <div class="empty-sub">Click <strong>▶ Generate Schedule</strong> on the Dashboard to auto-assign or manually add courses.</div>
-      </td>
-    </tr>`;
+      </td></tr>`;
     return;
   }
 
-  let html = "";
-  timeSlots.forEach((h) => {
-    const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
-    const ampm = h >= 12 ? "PM" : "AM";
-    html += `<tr>`;
-    html += `<td class="time-col-cell">${displayH}:00<br/><span style="font-size:10px">${ampm}</span></td>`;
+  if (scheduleRoomFilter && visibleAssignments.length === 0) {
+    tbody.innerHTML = `<tr>
+      <td colspan="7" class="schedule-empty-state">
+        <div class="empty-icon">🏫</div>
+        <div class="empty-title">No classes in this room</div>
+        <div class="empty-sub">${scheduleRoomFilter} has no assignments in the current schedule.</div>
+      </td></tr>`;
+    return;
+  }
 
-    days.forEach((day) => {
-      const cell = grid[day][h];
-      if (cell === "blocked") {
-        // Skip — covered by a rowspan cell above
-        return;
-      }
-      if (!cell) {
-        html += `<td class="sched-td empty-slot"></td>`;
-      } else {
+  tbody.innerHTML = timeSlots
+    .map((h) => {
+      const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
+      const ampm = h >= 12 ? "PM" : "AM";
+      let row = `<tr><td class="time-col-cell">${displayH}:00<br/><span style="font-size:10px">${ampm}</span></td>`;
+      days.forEach((day) => {
+        const cell = grid[day][h];
+        if (cell === "blocked") return;
+        if (!cell) {
+          row += `<td class="sched-td empty-slot"></td>`;
+          return;
+        }
         const c = cell.course;
-        const isConflict = c.status === "Conflict";
         const dh = Math.floor(c.duration);
         const dm = Math.round((c.duration - dh) * 60);
-        const durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
-        html += `<td class="sched-td occupied-${cell.color}${isConflict ? " conflict-slot" : ""}" rowspan="${cell.span}">
-          <div class="sched-course${isConflict ? " conflict-text" : ""}">${c.code}${isConflict ? " ⚠" : ""}</div>
-          <div class="sched-room">${c.room}</div>
-          <div class="sched-prof">${c.instructor}</div>
-          <div class="sched-dur">${durLabel} · ${c.pattern}</div>
-        </td>`;
-      }
-    });
-
-    html += `</tr>`;
-  });
-
-  tbody.innerHTML = html;
+        row += `<td class="sched-td occupied-${cell.color}${c.status === "Conflict" ? " conflict-slot" : ""}" rowspan="${cell.span}">
+        <div class="sched-course${c.status === "Conflict" ? " conflict-text" : ""}">${c.code}${c.status === "Conflict" ? " ⚠" : ""}</div>
+        <div class="sched-room">${c.room}</div>
+        <div class="sched-prof">${c.instructor}</div>
+        <div class="sched-dur">${dm > 0 ? `${dh}h ${dm}m` : `${dh}h`} · ${c.pattern}</div>
+      </td>`;
+      });
+      return row + `</tr>`;
+    })
+    .join("");
 }
 
-// ============ CONFLICT DETECTION ENGINE ============
+// ============ CONFLICT DETECTION ============
 
-// Reallocation log persisted in memory
 let reallocationLog = [];
-// Dismissed soft conflict IDs
 let dismissedSoftConflicts = new Set();
-
-/**
- * Parse a course's time string (e.g. "MWF 8:00 AM") into
- * { startMin, endMin } in minutes-since-midnight.
- */
-function parseCourseTime(course) {
-  if (!course.time) return null;
-  const match = course.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return null;
-  let h = parseInt(match[1]);
-  const m = parseInt(match[2]);
-  const ampm = match[3].toUpperCase();
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-  const startMin = h * 60 + m;
-  const durationMins = Math.round((course.duration || 1.5) * 60);
-  return { startMin, endMin: startMin + durationMins };
-}
 
 const patternDaysMap = {
   MWF: ["MON", "WED", "FRI"],
@@ -380,120 +448,122 @@ const patternDaysMap = {
   TF: ["TUE", "FRI"],
   SAT: ["SAT"],
   DAILY: ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
-  MON: ["MON"], TUE: ["TUE"], WED: ["WED"], THU: ["THU"], FRI: ["FRI"],
+  MON: ["MON"],
+  TUE: ["TUE"],
+  WED: ["WED"],
+  THU: ["THU"],
+  FRI: ["FRI"],
 };
 
-/** Returns true if two courses overlap in time AND share at least one day */
+function parseCourseTime(course) {
+  if (!course.time) return null;
+  const match = course.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return null;
+  let h = parseInt(match[1]);
+  const ampm = match[3].toUpperCase();
+  if (ampm === "PM" && h !== 12) h += 12;
+  if (ampm === "AM" && h === 12) h = 0;
+  const startMin = h * 60 + parseInt(match[2]);
+  return {
+    startMin,
+    endMin: startMin + Math.round((course.duration || 1.5) * 60),
+  };
+}
+
 function coursesOverlap(a, b) {
-  const ta = parseCourseTime(a);
-  const tb = parseCourseTime(b);
+  const ta = parseCourseTime(a),
+    tb = parseCourseTime(b);
   if (!ta || !tb) return false;
-  // Time overlap: intervals must intersect
   if (ta.endMin <= tb.startMin || tb.endMin <= ta.startMin) return false;
-  // Day overlap
   const daysA = patternDaysMap[a.pattern] || [];
   const daysB = patternDaysMap[b.pattern] || [];
   return daysA.some((d) => daysB.includes(d));
 }
 
-/** Returns shared day names for two courses */
 function sharedDays(a, b) {
   const daysA = patternDaysMap[a.pattern] || [];
   const daysB = patternDaysMap[b.pattern] || [];
   return daysA.filter((d) => daysB.includes(d));
 }
 
-/**
- * Detect all conflicts from scheduleAssignments.
- * Returns { hard: [...], soft: [...] }
- * Each conflict has a unique id, type, severity, courses involved, and description.
- */
 function detectConflicts() {
-  const hard = [];
-  const soft = [];
-  const seen = new Set(); // deduplicate pairs
+  const hard = [],
+    soft = [];
+  const seen = new Set();
 
-  const assigned = scheduleAssignments;
-
-  for (let i = 0; i < assigned.length; i++) {
-    for (let j = i + 1; j < assigned.length; j++) {
-      const a = assigned[i];
-      const b = assigned[j];
+  for (let i = 0; i < scheduleAssignments.length; i++) {
+    for (let j = i + 1; j < scheduleAssignments.length; j++) {
+      const a = scheduleAssignments[i],
+        b = scheduleAssignments[j];
       if (!coursesOverlap(a, b)) continue;
-
       const pairKey = [a.code, b.code].sort().join("|");
 
-      // 1. Double booking: same room, same time, same day
       if (a.room && b.room && a.room === b.room) {
-        const conflictId = `DOUBLE_BOOK|${pairKey}`;
-        if (!seen.has(conflictId)) {
-          seen.add(conflictId);
+        const id = `DOUBLE_BOOK|${pairKey}`;
+        if (!seen.has(id)) {
+          seen.add(id);
           const days = sharedDays(a, b);
           const ta = parseCourseTime(a);
-          const slotLabel = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
+          const slot = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
           hard.push({
-            id: conflictId,
+            id,
             type: "DOUBLE_BOOKING",
             severity: "HARD",
             courses: [a, b],
             room: a.room,
             days,
-            slotLabel,
             title: `Double Booking — ${a.room} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)}`,
             desc: `<strong>${a.code}</strong> (${a.title}${a.instructor ? " · " + a.instructor : ""}${a.enrolled ? " · " + a.enrolled + " enrolled" : ""}) and <strong>${b.code}</strong> (${b.title}${b.instructor ? " · " + b.instructor : ""}${b.enrolled ? " · " + b.enrolled + " enrolled" : ""}) are both assigned to ${a.room} at the same time.`,
-            meta: `TYPE: DOUBLE_BOOKING · SEVERITY: HARD · ROOM: ${a.room} · SLOT: ${slotLabel}`,
+            meta: `TYPE: DOUBLE_BOOKING · SEVERITY: HARD · ROOM: ${a.room} · SLOT: ${slot}`,
           });
         }
       }
 
-      // 2. Instructor conflict: same instructor, same time, same day (different rooms)
       if (
-        a.instructor && b.instructor &&
-        a.instructor.trim() !== "" &&
-        a.instructor.trim().toLowerCase() === b.instructor.trim().toLowerCase() &&
+        a.instructor &&
+        b.instructor &&
+        a.instructor.trim().toLowerCase() ===
+          b.instructor.trim().toLowerCase() &&
         a.room !== b.room
       ) {
-        const conflictId = `INSTRUCTOR|${pairKey}`;
-        if (!seen.has(conflictId)) {
-          seen.add(conflictId);
+        const id = `INSTRUCTOR|${pairKey}`;
+        if (!seen.has(id)) {
+          seen.add(id);
           const days = sharedDays(a, b);
           const ta = parseCourseTime(a);
-          const slotLabel = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
+          const slot = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
           hard.push({
-            id: conflictId,
+            id,
             type: "INSTRUCTOR_CONFLICT",
             severity: "HARD",
             courses: [a, b],
             days,
-            slotLabel,
             title: `Instructor Conflict — ${a.instructor} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)}`,
             desc: `Instructor <strong>${a.instructor}</strong> is simultaneously scheduled for <strong>${a.code}</strong> (${a.room}) and <strong>${b.code}</strong> (${b.room}) on ${days.join("/")} at ${formatTimeFromMin(ta.startMin)}.`,
-            meta: `TYPE: INSTRUCTOR_CONFLICT · SEVERITY: HARD · INSTRUCTOR: ${a.instructor.replace(/[^a-zA-Z]/g, "_").toUpperCase()} · SLOT: ${slotLabel}`,
+            meta: `TYPE: INSTRUCTOR_CONFLICT · SEVERITY: HARD · INSTRUCTOR: ${a.instructor.replace(/[^a-zA-Z]/g, "_").toUpperCase()} · SLOT: ${slot}`,
           });
         }
       }
     }
 
-    // 3. Soft: Room underutilization (enrolled < 60% of capacity)
-    const course = assigned[i];
+    const course = scheduleAssignments[i];
     const room = rooms.find((r) => r.number === course.room);
-    if (room && course.enrolled && course.enrolled > 0) {
+    if (room && course.enrolled > 0) {
       const utilization = course.enrolled / room.capacity;
       if (utilization < 0.6) {
-        const softId = `UNDERUTIL|${course.code}`;
-        if (!dismissedSoftConflicts.has(softId)) {
+        const id = `UNDERUTIL|${course.code}`;
+        if (!dismissedSoftConflicts.has(id)) {
           const pct = Math.round(utilization * 100);
-          // Look for a better-fit room
           const betterRoom = rooms.find(
             (r) =>
               r.number !== room.number &&
               r.type === room.type &&
               r.capacity >= course.enrolled &&
               r.capacity < room.capacity &&
-              r.status !== "Maintenance"
+              r.status !== "Maintenance",
           );
           soft.push({
-            id: softId,
+            id,
             type: "ROOM_UNDERUTILIZATION",
             severity: "SOFT",
             courses: [course],
@@ -519,38 +589,36 @@ function formatTimeFromMin(totalMin) {
 }
 
 // ============ RENDER CONFLICTS ============
+
 function renderConflicts() {
   const { hard, soft } = detectConflicts();
-  const totalHard = hard.length;
-  const totalSoft = soft.length;
-  const total = totalHard + totalSoft;
+  const totalHard = hard.length,
+    totalSoft = soft.length,
+    total = totalHard + totalSoft;
 
-  // Update subtitle
   const subtitle = document.getElementById("conflicts-subtitle");
   if (scheduleAssignments.length === 0) {
-    subtitle.textContent = "No schedule generated yet · Generate a schedule to detect conflicts";
+    subtitle.textContent =
+      "No schedule generated yet · Generate a schedule to detect conflicts";
   } else if (total === 0) {
-    subtitle.textContent = "✓ No conflicts detected — all constraints satisfied";
+    subtitle.textContent =
+      "✓ No conflicts detected — all constraints satisfied";
   } else {
     subtitle.textContent = `${totalHard} hard violation${totalHard !== 1 ? "s" : ""} · ${totalSoft} soft warning${totalSoft !== 1 ? "s" : ""} · Localized Reallocation available`;
   }
 
-  // Update dashboard nav badge
   const navBadge = document.querySelector(".nav-item .nav-badge");
   if (navBadge) navBadge.textContent = totalHard;
 
-  // Update tab count
   const tabCount = document.querySelector("#tab-conflicts .tab-count");
   if (tabCount) {
     tabCount.textContent = totalHard;
     tabCount.style.color = totalHard > 0 ? "var(--red)" : "var(--text3)";
   }
 
-  // Update dashboard conflict stat
   const conflictStatVal = document.querySelector(".stat-card.red .stat-value");
   if (conflictStatVal) conflictStatVal.textContent = totalHard;
 
-  // Empty state
   const emptyState = document.getElementById("conflicts-empty-state");
   const hardSection = document.getElementById("hard-conflicts-section");
   const softSection = document.getElementById("soft-conflicts-section");
@@ -561,104 +629,101 @@ function renderConflicts() {
     softSection.style.display = "none";
     return;
   }
-
-  emptyState.style.display = total === 0 ? "block" : "none";
   if (total === 0) {
-    emptyState.querySelector(".empty-title").textContent = "✓ No conflicts found";
-    emptyState.querySelector(".empty-sub").textContent = "All assignments satisfy hard and soft constraints.";
+    emptyState.style.display = "block";
     hardSection.style.display = "none";
     softSection.style.display = "none";
+    emptyState.querySelector(".empty-title").textContent =
+      "✓ No conflicts found";
+    emptyState.querySelector(".empty-sub").textContent =
+      "All assignments satisfy hard and soft constraints.";
     return;
-  } else {
-    emptyState.querySelector(".empty-title").textContent = "No conflicts to show";
-    emptyState.querySelector(".empty-sub").textContent = "Generate a schedule first — conflicts detected from your assignments will appear here automatically.";
   }
 
-  // Render hard conflicts
+  emptyState.style.display = "none";
   hardSection.style.display = totalHard > 0 ? "block" : "none";
   document.getElementById("hard-conflicts-label").textContent =
     `🔴 Hard Constraint Violations (${totalHard})`;
-  const hardList = document.getElementById("hard-conflicts-list");
-  hardList.innerHTML = "";
-  hard.forEach((cf) => {
-    const primaryCourse = cf.courses[0];
-    hardList.innerHTML += `
-      <div class="conflict-card" id="conflict-${cf.id.replace(/[|]/g, "-")}">
-        <div class="conflict-icon">🔴</div>
-        <div style="flex:1">
-          <div class="conflict-title">${cf.title}</div>
-          <div class="conflict-desc">${cf.desc}</div>
-          <div class="conflict-meta">${cf.meta}</div>
-          <div class="conflict-actions">
-            <button class="btn btn-danger" onclick="resolveConflict(${JSON.stringify(cf.id)})">⚙ Localized Reallocation</button>
-            <button class="btn btn-secondary" onclick="switchTab('schedule')">👁 View in Schedule</button>
-            ${cf.type === "INSTRUCTOR_CONFLICT" ? `<button class="btn btn-secondary" onclick="switchTab('faculty')">📋 Faculty Schedule</button>` : ""}
-          </div>
+  document.getElementById("hard-conflicts-list").innerHTML = hard
+    .map(
+      (cf) => `
+    <div class="conflict-card" id="conflict-${cf.id.replace(/[|]/g, "-")}">
+      <div class="conflict-icon">🔴</div>
+      <div style="flex:1">
+        <div class="conflict-title">${cf.title}</div>
+        <div class="conflict-desc">${cf.desc}</div>
+        <div class="conflict-meta">${cf.meta}</div>
+        <div class="conflict-actions">
+          <button class="btn btn-danger" onclick="resolveConflict(${JSON.stringify(cf.id)})">⚙ Localized Reallocation</button>
+          <button class="btn btn-secondary" onclick="switchTab('schedule')">👁 View in Schedule</button>
+          ${cf.type === "INSTRUCTOR_CONFLICT" ? `<button class="btn btn-secondary" onclick="switchTab('faculty')">📋 Faculty Schedule</button>` : ""}
         </div>
-      </div>`;
-  });
+      </div>
+    </div>`,
+    )
+    .join("");
 
-  // Render soft conflicts
   softSection.style.display = totalSoft > 0 ? "block" : "none";
   document.getElementById("soft-conflicts-label").textContent =
     `🟡 Soft Constraint Warnings (${totalSoft})`;
-  const softList = document.getElementById("soft-conflicts-list");
-  softList.innerHTML = "";
-  soft.forEach((cf) => {
-    softList.innerHTML += `
-      <div class="conflict-card warning" id="conflict-${cf.id.replace(/[|]/g, "-")}">
-        <div class="conflict-icon">🟡</div>
-        <div style="flex:1">
-          <div class="conflict-title">${cf.title}</div>
-          <div class="conflict-desc">${cf.desc}</div>
-          <div class="conflict-meta">${cf.meta}</div>
-          <div class="conflict-actions">
-            ${cf.betterRoom ? `<button class="btn btn-secondary" onclick="suggestBetterRoom(${JSON.stringify(cf.id)})">💡 Suggest Alternative</button>` : ""}
-            <button class="btn btn-secondary" onclick="dismissSoftConflict(${JSON.stringify(cf.id)})">↷ Dismiss Warning</button>
-          </div>
+  document.getElementById("soft-conflicts-list").innerHTML = soft
+    .map(
+      (cf) => `
+    <div class="conflict-card warning" id="conflict-${cf.id.replace(/[|]/g, "-")}">
+      <div class="conflict-icon">🟡</div>
+      <div style="flex:1">
+        <div class="conflict-title">${cf.title}</div>
+        <div class="conflict-desc">${cf.desc}</div>
+        <div class="conflict-meta">${cf.meta}</div>
+        <div class="conflict-actions">
+          ${cf.betterRoom ? `<button class="btn btn-secondary" onclick="suggestBetterRoom(${JSON.stringify(cf.id)})">💡 Suggest Alternative</button>` : ""}
+          <button class="btn btn-secondary" onclick="dismissSoftConflict(${JSON.stringify(cf.id)})">↷ Dismiss Warning</button>
         </div>
-      </div>`;
-  });
+      </div>
+    </div>`,
+    )
+    .join("");
 
-  // Reallocation log
   const logCard = document.getElementById("reallocation-log-card");
   logCard.style.display = reallocationLog.length > 0 ? "block" : "none";
   document.getElementById("reallocation-log-count").textContent =
     `${reallocationLog.length} resolved this session`;
-  const logTbody = document.getElementById("reallocation-log-tbody");
-  logTbody.innerHTML = reallocationLog
-    .slice()
+  document.getElementById("reallocation-log-tbody").innerHTML = [
+    ...reallocationLog,
+  ]
     .reverse()
     .map(
-      (entry) => `<tr>
+      (entry) => `
+    <tr>
       <td class="monospace">${entry.code}</td>
       <td class="monospace" style="font-size:12px">${entry.from}</td>
       <td class="monospace" style="font-size:12px">${entry.to}</td>
       <td><span class="pill pill-${entry.type === "DOUBLE_BOOKING" ? "red" : entry.type === "INSTRUCTOR_CONFLICT" ? "orange" : "blue"}" style="font-size:10px">${entry.typeLabel}</span></td>
       <td><span class="pill pill-green">Resolved</span></td>
-    </tr>`
+    </tr>`,
     )
     .join("");
 }
 
 // ============ CONFLICT ACTIONS ============
+
 function resolveConflict(conflictId) {
   const { hard } = detectConflicts();
   const cf = hard.find((c) => c.id === conflictId);
-  if (!cf) { showNotification("Conflict already resolved."); return; }
+  if (!cf) {
+    showNotification("Conflict already resolved.");
+    return;
+  }
 
-  // Pick the second course to reallocate (the one that can move)
   const courseToMove = cf.courses[1];
+  const neededType =
+    courseToMove.roomType === "Lab" ? "Computer Lab" : "Lecture";
+  const target = scheduleAssignments.find((s) => s.code === courseToMove.code);
+  if (!target) return;
 
-  // Find an available room that fits
-  const originalRoom = courseToMove.room;
-  const originalTime = courseToMove.time;
-  const neededType = courseToMove.roomType === "Lab" ? "Computer Lab" : "Lecture";
-
-  // Try to find a room not in conflict
   const freeRoom = rooms.find(
     (r) =>
-      r.number !== originalRoom &&
+      r.number !== courseToMove.room &&
       r.type === neededType &&
       r.status !== "Maintenance" &&
       r.capacity >= (courseToMove.enrolled || 0) &&
@@ -666,21 +731,15 @@ function resolveConflict(conflictId) {
         (s) =>
           s.code !== courseToMove.code &&
           s.room === r.number &&
-          coursesOverlap(s, courseToMove)
-      )
+          coursesOverlap(s, courseToMove),
+      ),
   );
-
-  const target = scheduleAssignments.find((s) => s.code === courseToMove.code);
-  if (!target) return;
 
   if (freeRoom) {
     const oldRoom = target.room;
     target.room = freeRoom.number;
-
-    // Also update in courses array
     const c = courses.find((x) => x.code === target.code);
     if (c) c.room = freeRoom.number;
-
     reallocationLog.push({
       code: target.code,
       from: `${oldRoom} · ${target.time}`,
@@ -690,20 +749,32 @@ function resolveConflict(conflictId) {
     });
     showNotification(`${target.code} reallocated to ${freeRoom.number} ✓`);
   } else {
-    // No free room — try a different time slot instead
-    const timeSlots = ["08:00", "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00"];
+    const slots = [
+      "08:00",
+      "09:00",
+      "10:00",
+      "11:00",
+      "13:00",
+      "14:00",
+      "15:00",
+      "16:00",
+    ];
     let moved = false;
-    for (const slot of timeSlots) {
-      const testCourse = { ...target, time: `${target.pattern} ${formatTime(slot)}` };
-      const conflict = scheduleAssignments.some(
+    for (const slot of slots) {
+      const testCourse = {
+        ...target,
+        time: `${target.pattern} ${formatTime(slot)}`,
+      };
+      const hasConflict = scheduleAssignments.some(
         (s) =>
           s.code !== target.code &&
-          (s.room === target.room || (s.instructor && s.instructor === target.instructor)) &&
-          coursesOverlap(s, testCourse)
+          (s.room === target.room ||
+            (s.instructor && s.instructor === target.instructor)) &&
+          coursesOverlap(s, testCourse),
       );
-      if (!conflict) {
+      if (!hasConflict) {
         const oldTime = target.time;
-        target.time = `${target.pattern} ${formatTime(slot)}`;
+        target.time = testCourse.time;
         const c = courses.find((x) => x.code === target.code);
         if (c) c.time = target.time;
         reallocationLog.push({
@@ -711,16 +782,16 @@ function resolveConflict(conflictId) {
           from: `${target.room} · ${oldTime}`,
           to: `${target.room} · ${target.time}`,
           type: cf.type,
-          typeLabel: cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
+          typeLabel:
+            cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
         });
         showNotification(`${target.code} rescheduled to ${target.time} ✓`);
         moved = true;
         break;
       }
     }
-    if (!moved) {
-      showNotification(`Could not auto-resolve — try Manual Override.`);
-    }
+    if (!moved)
+      showNotification("Could not auto-resolve — try Manual Override.");
   }
 
   assignments = courses.filter((c) => c.status === "Assigned");
@@ -740,12 +811,9 @@ function autoResolveAll() {
     showNotification("No hard conflicts to resolve!");
     return;
   }
-  // Resolve one by one until none left or no progress
   let attempts = 0;
   while (detectConflicts().hard.length > 0 && attempts < 20) {
-    const remaining = detectConflicts().hard;
-    if (remaining.length === 0) break;
-    resolveConflict(remaining[0].id);
+    resolveConflict(detectConflicts().hard[0].id);
     attempts++;
   }
   renderConflicts();
@@ -756,25 +824,23 @@ function autoResolveAll() {
 function suggestBetterRoom(conflictId) {
   const { soft } = detectConflicts();
   const cf = soft.find((c) => c.id === conflictId);
-  if (!cf || !cf.betterRoom) return;
-  const course = cf.courses[0];
-  const target = scheduleAssignments.find((s) => s.code === course.code);
-  if (target) {
-    const oldRoom = target.room;
-    target.room = cf.betterRoom.number;
-    const c = courses.find((x) => x.code === target.code);
-    if (c) c.room = cf.betterRoom.number;
-    reallocationLog.push({
-      code: target.code,
-      from: `${oldRoom} · ${target.time}`,
-      to: `${cf.betterRoom.number} · ${target.time}`,
-      type: "ROOM_UNDERUTILIZATION",
-      typeLabel: "Underutil",
-    });
-    showNotification(`${target.code} moved to ${cf.betterRoom.number} ✓`);
-    renderConflicts();
-    renderSchedule();
-  }
+  if (!cf?.betterRoom) return;
+  const target = scheduleAssignments.find((s) => s.code === cf.courses[0].code);
+  if (!target) return;
+  const oldRoom = target.room;
+  target.room = cf.betterRoom.number;
+  const c = courses.find((x) => x.code === target.code);
+  if (c) c.room = cf.betterRoom.number;
+  reallocationLog.push({
+    code: target.code,
+    from: `${oldRoom} · ${target.time}`,
+    to: `${cf.betterRoom.number} · ${target.time}`,
+    type: "ROOM_UNDERUTILIZATION",
+    typeLabel: "Underutil",
+  });
+  showNotification(`${target.code} moved to ${cf.betterRoom.number} ✓`);
+  renderConflicts();
+  renderSchedule();
 }
 
 function dismissSoftConflict(conflictId) {
@@ -784,18 +850,35 @@ function dismissSoftConflict(conflictId) {
 }
 
 // ============ RENDER ROOMS ============
-function renderRooms() {
+
+function renderRooms(filterSearch = "", filterType = "", filterStatus = "") {
   const grid = document.querySelector(".rooms-grid");
   if (!grid) return;
-  grid.innerHTML = "";
-  rooms.forEach((room, index) => {
-    const statusColor =
-      room.status === "Available"
-        ? "green"
-        : room.status === "Maintenance"
-          ? "orange"
-          : "blue";
-    grid.innerHTML += `<div class="room-card">
+
+  const filtered = rooms.filter((room) => {
+    const matchSearch = room.number
+      .toLowerCase()
+      .includes(filterSearch.toLowerCase());
+    const matchType = !filterType || room.type === filterType;
+    const matchStatus = !filterStatus || room.status === filterStatus;
+    return matchSearch && matchType && matchStatus;
+  });
+
+  if (filtered.length === 0) {
+    grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--text3);font-size:13px;">No rooms match your search.</div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered
+    .map((room) => {
+      const index = rooms.indexOf(room);
+      const statusColor =
+        room.status === "Available"
+          ? "green"
+          : room.status === "Maintenance"
+            ? "orange"
+            : "blue";
+      return `<div class="room-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div class="room-number">${room.number}</div>
         <button onclick="deleteRoom(${index})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;line-height:1;padding:0;" title="Delete">✕</button>
@@ -808,47 +891,51 @@ function renderRooms() {
         <span class="monospace">${room.capacity}</span>
       </div>
     </div>`;
-  });
+    })
+    .join("");
 }
 
 // ============ RENDER COURSES ============
+
 function renderCourses() {
   const tbody = document.querySelector("#page-courses table tbody");
   if (!tbody) return;
-  tbody.innerHTML = "";
-  courses.forEach((c) => {
-    tbody.innerHTML += `<tr>
+  tbody.innerHTML = courses
+    .map(
+      (c) => `
+    <tr>
       <td class="monospace">${c.code}</td><td>${c.title}</td><td>${c.program}</td>
       <td>${c.year}</td><td>${c.enrolled}</td><td>${c.roomType}</td>
       <td><span class="pill pill-${c.status === "Assigned" ? "green" : c.status === "Conflict" ? "red" : "orange"}">${c.status}</span></td>
-    </tr>`;
-  });
+    </tr>`,
+    )
+    .join("");
 }
 
 // ============ RENDER FACULTY ============
+
 function renderFaculty() {
   const tbody = document.getElementById("faculty-tbody");
   if (!tbody) return;
-  tbody.innerHTML = "";
   if (instructors.length === 0) {
     tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3)">No instructors added yet. Click "+ Add Instructor" to add one.</td></tr>`;
     return;
   }
-  instructors.forEach((inst) => {
-    const cl =
-      inst.courses.length > 0
-        ? inst.courses.join(", ")
-        : '<span style="color:var(--text3)">None</span>';
-    const row = document.createElement("tr");
-    row.innerHTML = `<td><strong>${inst.name}</strong></td><td class="monospace" style="font-size:12px">${cl}</td>
+  tbody.innerHTML = instructors
+    .map(
+      (inst) => `
+    <tr>
+      <td><strong>${inst.name}</strong></td>
+      <td class="monospace" style="font-size:12px">${inst.courses.length > 0 ? inst.courses.join(", ") : '<span style="color:var(--text3)">None</span>'}</td>
       <td>${inst.courses.length} course${inst.courses.length !== 1 ? "s" : ""}</td>
       <td style="font-size:12px">${inst.availability}</td>
-      <td><span class="pill pill-${inst.status === "Active" ? "green" : "red"}">${inst.status}</span></td>`;
-    tbody.appendChild(row);
-  });
+      <td><span class="pill pill-${inst.status === "Active" ? "green" : "red"}">${inst.status}</span></td>
+    </tr>`,
+    )
+    .join("");
 }
 
-// ============ ACTIONS ============
+// ============ ROOM ACTIONS ============
 
 function deleteRoom(index) {
   if (confirm(`Delete ${rooms[index].number}? This cannot be undone.`)) {
@@ -858,11 +945,11 @@ function deleteRoom(index) {
   }
 }
 
-// ============ ROOM MODAL ============
 function addRoom() {
   document.getElementById("add-room-modal").style.display = "flex";
   document.getElementById("room-number").focus();
 }
+
 function submitAddRoom() {
   const number = document.getElementById("room-number").value.trim();
   const type = document.getElementById("room-type").value;
@@ -877,12 +964,74 @@ function submitAddRoom() {
   closeModal();
   showNotification("Room added successfully!");
 }
+
 function closeModal() {
   document.getElementById("add-room-modal").style.display = "none";
   document.getElementById("add-room-form").reset();
 }
 
+// ============ FIX #4: EXPORT TO EXCEL ============
+
+function exportToExcel() {
+  if (scheduleAssignments.length === 0) {
+    alert("No schedule to export. Please generate a schedule first.");
+    return;
+  }
+
+  // Build CSV content (opens in Excel)
+  const headers = [
+    "Course Code",
+    "Course Title",
+    "Program",
+    "Year",
+    "Enrolled",
+    "Room",
+    "Type Required",
+    "Pattern",
+    "Time",
+    "Duration (hrs)",
+    "Instructor",
+    "Status",
+  ];
+  const rows = scheduleAssignments.map((c) => [
+    c.code,
+    c.title,
+    c.program,
+    c.year,
+    c.enrolled,
+    c.room,
+    c.roomType,
+    c.pattern,
+    c.time,
+    c.duration,
+    c.instructor || "—",
+    c.status,
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map((row) =>
+      row
+        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
+        .join(","),
+    )
+    .join("\n");
+
+  const blob = new Blob(["\uFEFF" + csvContent], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `TSU_CCS_Schedule_AY2025-2026.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  showNotification("Schedule exported to Excel (CSV) ✓");
+}
+
 // ============ SCHEDULE MODAL ============
+
 let manualEntries = [];
 
 function openScheduleModal() {
@@ -893,9 +1042,11 @@ function openScheduleModal() {
   document.getElementById("schedule-modal").style.display = "flex";
   setScheduleMode("auto");
 }
+
 function closeScheduleModal() {
   document.getElementById("schedule-modal").style.display = "none";
 }
+
 function setScheduleMode(mode) {
   const isAuto = mode === "auto";
   document.getElementById("schedule-mode-auto").style.display = isAuto
@@ -914,16 +1065,21 @@ function setScheduleMode(mode) {
 
 function populateManualDropdowns() {
   const cs = document.getElementById("manual-course");
-  cs.innerHTML = '<option value="">-- Select Course --</option>';
-  courses.forEach((c) => {
-    cs.innerHTML += `<option value="${c.code}">${c.code} — ${c.title}</option>`;
-  });
+  cs.innerHTML =
+    '<option value="">-- Select Course --</option>' +
+    courses
+      .map((c) => `<option value="${c.code}">${c.code} — ${c.title}</option>`)
+      .join("");
 
   const rs = document.getElementById("manual-room");
-  rs.innerHTML = '<option value="">-- Select Room --</option>';
-  rooms.forEach((r) => {
-    rs.innerHTML += `<option value="${r.number}">${r.number} (${r.type} · Cap: ${r.capacity})${r.status === "Maintenance" ? " ⚠ Maintenance" : ""}</option>`;
-  });
+  rs.innerHTML =
+    '<option value="">-- Select Room --</option>' +
+    rooms
+      .map(
+        (r) =>
+          `<option value="${r.number}">${r.number} (${r.type} · Cap: ${r.capacity})${r.status === "Maintenance" ? " ⚠ Maintenance" : ""}</option>`,
+      )
+      .join("");
 
   const ts = document.getElementById("manual-time");
   ts.innerHTML = "";
@@ -931,22 +1087,21 @@ function populateManualDropdowns() {
     ["00", "30"].forEach((m) => {
       if (h === 21 && m === "30") return;
       const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-      const ampm = h >= 12 ? "PM" : "AM";
-      ts.innerHTML += `<option value="${String(h).padStart(2, "0")}:${m}">${h12}:${m} ${ampm}</option>`;
+      ts.innerHTML += `<option value="${String(h).padStart(2, "0")}:${m}">${h12}:${m} ${h >= 12 ? "PM" : "AM"}</option>`;
     });
   }
 }
 
 function getDuration(hId, mId) {
-  const dh = parseInt(document.getElementById(hId).value) || 0;
-  const dm = parseInt(document.getElementById(mId).value) || 0;
-  return dh + dm / 60;
+  return (
+    (parseInt(document.getElementById(hId).value) || 0) +
+    (parseInt(document.getElementById(mId).value) || 0) / 60
+  );
 }
 
 function formatTime(t24) {
   const [h, m] = t24.split(":").map(Number);
-  const h12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-  return `${h12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
+  return `${h > 12 ? h - 12 : h === 0 ? 12 : h}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 }
 
 function getEndTime(start24, durationHours) {
@@ -963,27 +1118,33 @@ function checkManualConflict() {
   const pattern = document.getElementById("manual-pattern").value;
   const msgEl = document.getElementById("manual-conflict-msg");
 
+  const errorStyle =
+    "display:block;padding:10px 14px;border-radius:8px;font-size:12px;background:rgba(248,81,73,0.1);border:1px solid var(--red);color:var(--red)";
+  const successStyle =
+    "display:block;padding:10px 14px;border-radius:8px;font-size:12px;background:rgba(63,185,80,0.1);border:1px solid var(--green);color:var(--green)";
+
   if (!courseCode || !roomName || !startTime) {
-    msgEl.style.cssText =
-      "display:block;padding:10px 14px;border-radius:8px;font-size:12px;background:rgba(248,81,73,0.1);border:1px solid var(--red);color:var(--red)";
+    msgEl.style.cssText = errorStyle;
     msgEl.textContent = "⚠ Please fill in Course, Room, and Start Time first.";
     return false;
   }
-
-  const endTime = getEndTime(startTime, duration);
-  const found = scheduleAssignments.filter(
-    (a) => a.room === roomName && a.pattern === pattern,
+  const testCourse = {
+    time: `${pattern} ${formatTime(startTime)}`,
+    duration,
+    pattern,
+    room: roomName,
+  };
+  const conflicting = scheduleAssignments.filter(
+    (a) => a.room === roomName && coursesOverlap(a, testCourse),
   );
-  if (found.length > 0) {
-    msgEl.style.cssText =
-      "display:block;padding:10px 14px;border-radius:8px;font-size:12px;background:rgba(248,81,73,0.1);border:1px solid var(--red);color:var(--red)";
+  if (conflicting.length > 0) {
+    msgEl.style.cssText = errorStyle;
     msgEl.textContent =
-      "⚠ Room conflict with: " + found.map((a) => a.code).join(", ");
+      "⚠ Room conflict with: " + conflicting.map((a) => a.code).join(", ");
     return false;
   }
-  msgEl.style.cssText =
-    "display:block;padding:10px 14px;border-radius:8px;font-size:12px;background:rgba(63,185,80,0.1);border:1px solid var(--green);color:var(--green)";
-  msgEl.textContent = `✓ No conflicts · ${pattern} ${formatTime(startTime)}–${formatTime(endTime)} in ${roomName}`;
+  msgEl.style.cssText = successStyle;
+  msgEl.textContent = `✓ No conflicts · ${pattern} ${formatTime(startTime)}–${formatTime(getEndTime(startTime, duration))} in ${roomName}`;
   return true;
 }
 
@@ -1008,9 +1169,9 @@ function addManualEntry() {
     pattern,
   });
   renderManualEntries();
-  document.getElementById("manual-course").value = "";
-  document.getElementById("manual-room").value = "";
-  document.getElementById("manual-instructor").value = "";
+  ["manual-course", "manual-room", "manual-instructor"].forEach(
+    (id) => (document.getElementById(id).value = ""),
+  );
   document.getElementById("manual-conflict-msg").style.display = "none";
 }
 
@@ -1027,16 +1188,16 @@ function renderManualEntries() {
     return;
   }
   wrap.style.display = "block";
-  list.innerHTML = "";
-  manualEntries.forEach((e, i) => {
-    const dh = Math.floor(e.duration),
-      dm = Math.round((e.duration - dh) * 60);
-    const durLabel = dm > 0 ? `${dh}h ${dm}m` : `${dh}h`;
-    list.innerHTML += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);font-size:12px;">
-      <span><strong>${e.courseCode}</strong> · ${e.roomName} · ${e.pattern} · ${formatTime(e.startTime)}–${formatTime(e.endTime)} (${durLabel})${e.instructor ? " · " + e.instructor : ""}</span>
+  list.innerHTML = manualEntries
+    .map((e, i) => {
+      const dh = Math.floor(e.duration),
+        dm = Math.round((e.duration - dh) * 60);
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface2);border-radius:6px;border:1px solid var(--border);font-size:12px;">
+      <span><strong>${e.courseCode}</strong> · ${e.roomName} · ${e.pattern} · ${formatTime(e.startTime)}–${formatTime(e.endTime)} (${dm > 0 ? `${dh}h ${dm}m` : `${dh}h`})${e.instructor ? " · " + e.instructor : ""}</span>
       <button onclick="removeManualEntry(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px;padding:0;line-height:1">✕</button>
     </div>`;
-  });
+    })
+    .join("");
 }
 
 function submitManualSchedule() {
@@ -1066,28 +1227,36 @@ function submitManualSchedule() {
 
   toSave.forEach((entry) => {
     const course = courses.find((c) => c.code === entry.courseCode);
-    if (course) {
-      course.room = entry.roomName;
-      course.time = `${entry.pattern} ${formatTime(entry.startTime)}`;
-      course.instructor = entry.instructor || course.instructor;
-      course.duration = entry.duration;
-      course.pattern = entry.pattern;
-      course.status = "Assigned";
-      // Add to scheduleAssignments (update if already there)
-      const idx = scheduleAssignments.findIndex((s) => s.code === course.code);
-      if (idx >= 0) {
-        scheduleAssignments[idx] = { ...course };
-      } else {
-        scheduleAssignments.push({ ...course });
-      }
-    }
+    if (!course) return;
+    Object.assign(course, {
+      room: entry.roomName,
+      time: `${entry.pattern} ${formatTime(entry.startTime)}`,
+      instructor: entry.instructor || course.instructor,
+      duration: entry.duration,
+      pattern: entry.pattern,
+      status: "Assigned",
+    });
+    const idx = scheduleAssignments.findIndex((s) => s.code === course.code);
+    if (idx >= 0) scheduleAssignments[idx] = { ...course };
+    else scheduleAssignments.push({ ...course });
   });
 
   assignments = courses.filter((c) => c.status === "Assigned");
   conflicts = courses.filter((c) => c.status === "Conflict");
+  instructors.forEach((inst) => {
+    inst.courses = scheduleAssignments
+      .filter(
+        (s) =>
+          s.instructor &&
+          s.instructor.trim().toLowerCase() === inst.name.trim().toLowerCase(),
+      )
+      .map((s) => s.code);
+  });
+
   renderDashboard();
   renderSchedule();
   renderCourses();
+  renderFaculty();
   closeScheduleModal();
   showNotification(
     `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved!`,
@@ -1104,46 +1273,56 @@ function runAutoSchedule() {
   const startTime = document.getElementById("auto-start").value;
   const endTime = document.getElementById("auto-end").value;
   const pattern = document.getElementById("auto-pattern").value;
-
-  const activeDays = [];
-  document
-    .querySelectorAll("#auto-days input:checked")
-    .forEach((cb) => activeDays.push(cb.value));
+  const activeDays = [
+    ...document.querySelectorAll("#auto-days input:checked"),
+  ].map((cb) => cb.value);
   if (activeDays.length === 0) {
     alert("Please select at least one active day.");
     return;
   }
 
-  const slots = [];
   const stepMins = Math.round(duration * 60);
+  const slots = [];
   let [sh, sm] = startTime.split(":").map(Number);
   const [eh, em] = endTime.split(":").map(Number);
   const endMins = eh * 60 + em;
-  while (true) {
-    const curMins = sh * 60 + sm;
-    if (curMins + stepMins > endMins) break;
+  while (sh * 60 + sm + stepMins <= endMins) {
     slots.push(`${String(sh).padStart(2, "0")}:${String(sm).padStart(2, "0")}`);
-    const next = curMins + stepMins;
+    const next = sh * 60 + sm + stepMins;
     sh = Math.floor(next / 60);
     sm = next % 60;
   }
-
   if (slots.length === 0) {
     alert("No valid time slots in that range for the selected duration.");
     return;
   }
 
+  rooms.forEach((r) => {
+    const isUsed = scheduleAssignments.some((s) => s.room === r.number);
+    if (!isUsed && r.status === "Occupied") r.status = "Available";
+  });
+
   const pending = courses.filter((c) => c.status === "Pending");
   if (pending.length === 0) {
-    // If no pending, populate the schedule with all assigned courses
-    scheduleAssignments = courses.filter(
-      (c) => c.status === "Assigned" || c.status === "Conflict"
-    ).map((c) => ({ ...c }));
+    scheduleAssignments = courses
+      .filter((c) => c.status === "Assigned" || c.status === "Conflict")
+      .map((c) => ({ ...c }));
     assignments = courses.filter((c) => c.status === "Assigned");
     conflicts = courses.filter((c) => c.status === "Conflict");
+    instructors.forEach((inst) => {
+      inst.courses = scheduleAssignments
+        .filter(
+          (s) =>
+            s.instructor &&
+            s.instructor.trim().toLowerCase() ===
+              inst.name.trim().toLowerCase(),
+        )
+        .map((s) => s.code);
+    });
     renderDashboard();
     renderSchedule();
     renderCourses();
+    renderFaculty();
     closeScheduleModal();
     showNotification("Schedule generated — all assigned courses loaded!");
     return;
@@ -1160,38 +1339,135 @@ function runAutoSchedule() {
           : r.type === "Lecture"),
     );
     if (avail && slotIdx < slots.length) {
-      const t = slots[slotIdx % slots.length];
-      course.room = avail.number;
-      course.time = `${pattern} ${formatTime(t)}`;
-      course.duration = duration;
-      course.pattern = pattern;
-      course.status = "Assigned";
+      Object.assign(course, {
+        room: avail.number,
+        time: `${pattern} ${formatTime(slots[slotIdx % slots.length])}`,
+        duration,
+        pattern,
+        status: "Assigned",
+      });
       avail.status = "Occupied";
       slotIdx++;
       assigned++;
     }
   });
 
-  // After auto-generation, populate scheduleAssignments with all assigned/conflict courses
-  scheduleAssignments = courses.filter(
-    (c) => c.status === "Assigned" || c.status === "Conflict"
-  ).map((c) => ({ ...c }));
-
+  scheduleAssignments = courses
+    .filter((c) => c.status === "Assigned" || c.status === "Conflict")
+    .map((c) => ({ ...c }));
   assignments = courses.filter((c) => c.status === "Assigned");
   conflicts = courses.filter((c) => c.status === "Conflict");
+  instructors.forEach((inst) => {
+    inst.courses = scheduleAssignments
+      .filter(
+        (s) =>
+          s.instructor &&
+          s.instructor.trim().toLowerCase() === inst.name.trim().toLowerCase(),
+      )
+      .map((s) => s.code);
+  });
+
   renderDashboard();
   renderSchedule();
   renderCourses();
+  renderFaculty();
   closeScheduleModal();
   showNotification(
     `Auto-generated ${assigned} assignment${assigned !== 1 ? "s" : ""}!`,
   );
 }
 
+// ============ ADD COURSE MODAL ============
+
+function openAddCourseModal() {
+  document.getElementById("add-course-modal")?.remove();
+  const modal = document.createElement("div");
+  modal.id = "add-course-modal";
+  modal.style.cssText =
+    "position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px;width:480px;display:flex;flex-direction:column;gap:16px;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div style="font-size:16px;font-weight:700;color:var(--text)">+ Add New Course</div>
+      <button onclick="closeAddCourseModal()" style="background:none;border:none;font-size:20px;color:var(--text3);cursor:pointer;padding:0;line-height:1">✕</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Course Code *</label>
+        <input id="course-code" class="search-input" type="text" placeholder="e.g. CS401" style="width:100%;box-sizing:border-box"/></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Title *</label>
+        <input id="course-title" class="search-input" type="text" placeholder="e.g. Algorithms" style="width:100%;box-sizing:border-box"/></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Program *</label>
+        <select id="course-program" class="search-input" style="width:100%;box-sizing:border-box">
+          <option value="">-- Select --</option><option value="CS">CS</option><option value="IT">IT</option><option value="IS">IS</option>
+        </select></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Year Level *</label>
+        <select id="course-year" class="search-input" style="width:100%;box-sizing:border-box">
+          <option value="1st">1st Year</option><option value="2nd">2nd Year</option><option value="3rd">3rd Year</option><option value="4th">4th Year</option>
+        </select></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Enrolled Students *</label>
+        <input id="course-enrolled" class="search-input" type="number" min="1" placeholder="e.g. 35" style="width:100%;box-sizing:border-box"/></div>
+      <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Room Type Required *</label>
+        <select id="course-roomtype" class="search-input" style="width:100%;box-sizing:border-box">
+          <option value="Lecture">Lecture</option><option value="Lab">Lab</option>
+        </select></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:4px;border-top:1px solid var(--border);">
+      <button class="btn btn-secondary" onclick="closeAddCourseModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="submitAddCourse()">+ Add Course</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  setTimeout(() => document.getElementById("course-code").focus(), 100);
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeAddCourseModal();
+  });
+}
+
+function closeAddCourseModal() {
+  document.getElementById("add-course-modal")?.remove();
+}
+
+function submitAddCourse() {
+  const code = document
+    .getElementById("course-code")
+    .value.trim()
+    .toUpperCase();
+  const title = document.getElementById("course-title").value.trim();
+  const program = document.getElementById("course-program").value;
+  const year = document.getElementById("course-year").value;
+  const enrolled = parseInt(document.getElementById("course-enrolled").value);
+  const roomType = document.getElementById("course-roomtype").value;
+  if (!code || !title || !program || isNaN(enrolled) || enrolled <= 0) {
+    alert("Please fill in all required fields correctly.");
+    return;
+  }
+  if (courses.find((c) => c.code === code)) {
+    alert(`Course code "${code}" already exists.`);
+    return;
+  }
+  courses.push({
+    code,
+    title,
+    program,
+    year,
+    enrolled,
+    roomType,
+    status: "Pending",
+    instructor: "",
+    room: "",
+    time: "",
+    duration: 0,
+    pattern: "",
+  });
+  closeAddCourseModal();
+  renderCourses();
+  renderDashboard();
+  showNotification(`Course ${code} added successfully!`);
+}
+
 // ============ INSTRUCTOR MODAL ============
+
 function openAddInstructorModal() {
-  const existing = document.getElementById("add-instructor-modal");
-  if (existing) existing.remove();
+  document.getElementById("add-instructor-modal")?.remove();
   const modal = document.createElement("div");
   modal.id = "add-instructor-modal";
   modal.style.cssText =
@@ -1207,9 +1483,7 @@ function openAddInstructorModal() {
       <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Department</label>
         <select id="instructor-dept" class="search-input" style="width:100%;box-sizing:border-box">
           <option value="">-- Select Department --</option>
-          <option value="CS">Computer Science (CS)</option>
-          <option value="IT">Information Technology (IT)</option>
-          <option value="IS">Information Systems (IS)</option>
+          <option value="CS">Computer Science (CS)</option><option value="IT">Information Technology (IT)</option><option value="IS">Information Systems (IS)</option>
         </select></div>
       <div><label style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;display:block">Availability</label>
         <textarea id="instructor-availability" class="search-input" placeholder="e.g. MWF All Day, TTH Morning" style="width:100%;height:70px;resize:none;box-sizing:border-box"></textarea></div>
@@ -1225,10 +1499,11 @@ function openAddInstructorModal() {
     if (e.target === modal) closeInstructorModal();
   });
 }
+
 function closeInstructorModal() {
-  const m = document.getElementById("add-instructor-modal");
-  if (m) m.remove();
+  document.getElementById("add-instructor-modal")?.remove();
 }
+
 function submitAddInstructor() {
   const name = document.getElementById("instructor-name").value.trim();
   const dept = document.getElementById("instructor-dept").value;
@@ -1253,6 +1528,7 @@ function submitAddInstructor() {
 }
 
 // ============ NOTIFICATION ============
+
 function showNotification(message) {
   const n = document.createElement("div");
   n.style.cssText =
@@ -1268,19 +1544,87 @@ function showNotification(message) {
 }
 
 // ============ INIT ============
+
 document.addEventListener("DOMContentLoaded", () => {
+  initAuth();
   renderDashboard();
-  renderSchedule(); // Will show empty state since scheduleAssignments = []
+  renderSchedule();
   renderConflicts();
   renderRooms();
   renderCourses();
   renderFaculty();
+
+  // Wire room search and filter inputs
+  const roomSearch = document.getElementById("room-search-input");
+  const roomTypeFilter = document.getElementById("room-type-filter");
+  const roomStatFilter = document.getElementById("room-status-filter");
+  function applyRoomFilters() {
+    const search = roomSearch?.value || "";
+    const type =
+      roomTypeFilter?.value === "All Types" ? "" : roomTypeFilter?.value || "";
+    const status =
+      roomStatFilter?.value === "All Status" ? "" : roomStatFilter?.value || "";
+    renderRooms(search, type, status);
+  }
+  roomSearch?.addEventListener("input", applyRoomFilters);
+  roomTypeFilter?.addEventListener("change", applyRoomFilters);
+  roomStatFilter?.addEventListener("change", applyRoomFilters);
+
+  //Wire all Export to Excel buttons
+  document
+    .querySelectorAll(".export-excel-btn")
+    .forEach((btn) => btn.addEventListener("click", exportToExcel));
+
+  //Wire Prev / Next week buttons
+  document
+    .getElementById("schedule-prev-btn")
+    ?.addEventListener("click", () => {
+      scheduleWeekOffset--;
+      renderSchedule();
+    });
+  document
+    .getElementById("schedule-next-btn")
+    ?.addEventListener("click", () => {
+      scheduleWeekOffset++;
+      renderSchedule();
+    });
+
+  //Wire room filter dropdown on Schedule page
+  const scheduleRoomSelect = document.getElementById("schedule-room-filter");
+  scheduleRoomSelect?.addEventListener("change", () => {
+    scheduleRoomFilter =
+      scheduleRoomSelect.value === "All Rooms" ? "" : scheduleRoomSelect.value;
+    renderSchedule();
+  });
+
+  //schedule room dropdown
+  if (scheduleRoomSelect) {
+    scheduleRoomSelect.innerHTML =
+      "<option>All Rooms</option>" +
+      rooms
+        .map((r) => `<option value="${r.number}">${r.number}</option>`)
+        .join("");
+  }
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeModal();
       closeScheduleModal();
       closeInstructorModal();
+      closePwModal();
+      closeAddCourseModal();
+    }
+  });
+
+  document.addEventListener("click", (e) => {
+    const menu = document.getElementById("user-menu");
+    const caret = document.getElementById("user-menu-caret");
+    if (
+      menu &&
+      !menu.closest("div[style*='position:relative']")?.contains(e.target)
+    ) {
+      menu.style.display = "none";
+      if (caret) caret.style.transform = "rotate(0deg)";
     }
   });
 
