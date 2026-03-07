@@ -1,0 +1,174 @@
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+
+.logoIcon {
+  width: 28px;
+  height: 28px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.logoSub {
+  color: var(--text3);
+  font-weight: 400;
+}
+
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.badge {
+  background: rgba(47, 129, 247, 0.15);
+  border: 1px solid rgba(47, 129, 247, 0.3);
+  color: var(--accent2);
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--mono);
+  letter-spacing: 0.5px;
+}
+
+.themeBtn {
+  font-size: 13px !important;
+  padding: 6px 12px !important;
+}
+
+.userWrap {
+  position: relative;
+}
+
+.userTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: all 0.15s;
+}
+
+.userTrigger:hover {
+  background: var(--surface2);
+  border-color: var(--border);
+}
+
+.userName {
+  font-size: 12px;
+  color: var(--text2);
+}
+
+.caret {
+  font-size: 10px;
+  color: var(--text3);
+  transition: transform 0.2s;
+}
+
+.dropdown {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+  min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 200;
+}
+
+.menuName {
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.menuRole {
+  padding: 2px 10px 8px;
+  font-size: 11px;
+  color: var(--text3);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.menuItem {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--text2);
+  cursor: pointer;
+  border-radius: 6px;
+  font-family: var(--sans);
+  display: block;
+}
+
+.menuItem:hover {
+  background: var(--surface2);
+}
+
+.menuLogout {
+  color: var(--red);
+}
+
+.pwForm {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pwLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  margin-bottom: 4px;
+  display: block;
+}
+
+.pwError {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  background: rgba(248, 81, 73, 0.1);
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+
+.pwActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
