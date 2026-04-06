@@ -10,23 +10,16 @@ export default function SchedulePage() {
   const { rooms, scheduleAssignments } = useData();
   const { showNotification } = useNotification();
 
-  const [weekOffset, setWeekOffset] = useState(0);
   const [roomFilter, setRoomFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
 
-  // Compute week label
-  const baseDate = new Date();
-  baseDate.setDate(baseDate.getDate() - baseDate.getDay() + 1 + weekOffset * 7);
-  const endDate = new Date(baseDate);
-  endDate.setDate(baseDate.getDate() + 5);
-  const fmt = (d) =>
-    d.toLocaleDateString("en-PH", { month: "short", day: "numeric" });
-  const weekLabel = `${fmt(baseDate)} – ${fmt(endDate)}, ${baseDate.getFullYear()}`;
-
-  // Filter assignments by selected room
-  const visibleAssignments = roomFilter
-    ? scheduleAssignments.filter((c) => c.room === roomFilter)
-    : scheduleAssignments;
+  // Filter assignments by selected room and year
+  const visibleAssignments = scheduleAssignments.filter((c) => {
+    const roomMatch = roomFilter ? c.room === roomFilter : true;
+    const yearMatch = yearFilter ? c.year === yearFilter : true;
+    return roomMatch && yearMatch;
+  });
 
   // Build grid
   const grid = {};
@@ -79,14 +72,14 @@ export default function SchedulePage() {
       );
     }
 
-    if (roomFilter && visibleAssignments.length === 0) {
+    if ((roomFilter || yearFilter) && visibleAssignments.length === 0) {
       return (
         <tr>
           <td colSpan={7} className="schedule-empty-state">
             <div className="empty-icon">🏫</div>
-            <div className="empty-title">No classes in this room</div>
+            <div className="empty-title">No classes found</div>
             <div className="empty-sub">
-              {roomFilter} has no assignments in the current schedule.
+              No assignments match the selected filters.
             </div>
           </td>
         </tr>
@@ -147,10 +140,25 @@ export default function SchedulePage() {
         <div>
           <div className="section-title">Weekly Schedule</div>
           <div className="section-subtitle">
-            AY 2025–2026 · 1st Semester · Week of {weekLabel}
+            AY 2025–2026 · 1st Semester · Permanent Schedule
+            {yearFilter ? ` · ${yearFilter} Year` : " · All Year Levels"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <select
+            className="search-input"
+            style={{ width: 150 }}
+            value={yearFilter || "All Years"}
+            onChange={(e) =>
+              setYearFilter(e.target.value === "All Years" ? "" : e.target.value)
+            }
+          >
+            <option>All Years</option>
+            <option value="1st">1st Year</option>
+            <option value="2nd">2nd Year</option>
+            <option value="3rd">3rd Year</option>
+            <option value="4th">4th Year</option>
+          </select>
           <select
             className="search-input"
             style={{ width: 150 }}
@@ -168,18 +176,6 @@ export default function SchedulePage() {
               </option>
             ))}
           </select>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setWeekOffset((w) => w - 1)}
-          >
-            ← Prev
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setWeekOffset((w) => w + 1)}
-          >
-            Next →
-          </button>
           <button
             className="btn btn-primary"
             onClick={() => {

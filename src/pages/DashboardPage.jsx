@@ -65,6 +65,7 @@ export default function DashboardPage() {
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [yearFilter, setYearFilter] = useState("");
 
   const utilization =
     courses.length > 0
@@ -138,13 +139,31 @@ export default function DashboardPage() {
           <div className="card">
             <div className="card-header">
               <div className="card-title">📋 Recent Assignments</div>
-              <button
-                className="btn btn-secondary"
-                style={{ padding: "4px 10px", fontSize: 11 }}
-                onClick={() => navigate("/schedule")}
-              >
-                View All
-              </button>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <select
+                  className="search-input"
+                  style={{ width: 120, padding: "4px 8px", fontSize: 11 }}
+                  value={yearFilter || "All Years"}
+                  onChange={(e) =>
+                    setYearFilter(
+                      e.target.value === "All Years" ? "" : e.target.value,
+                    )
+                  }
+                >
+                  <option>All Years</option>
+                  <option value="1st">1st Year</option>
+                  <option value="2nd">2nd Year</option>
+                  <option value="3rd">3rd Year</option>
+                  <option value="4th">4th Year</option>
+                </select>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: "4px 10px", fontSize: 11 }}
+                  onClick={() => navigate("/schedule")}
+                >
+                  View All
+                </button>
+              </div>
             </div>
             <table>
               <thead>
@@ -157,28 +176,33 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments.slice(0, 6).map((c) => (
-                  <tr key={c.code}>
-                    <td>
-                      <span className="monospace">{c.code}</span>
-                      <br />
-                      <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                        {c.title}
-                      </span>
-                    </td>
-                    <td className="monospace">{c.room}</td>
-                    <td className="monospace">{c.time}</td>
-                    <td>{c.instructor}</td>
-                    <td>
-                      <span
-                        className={`pill pill-${c.status === "Assigned" ? "green" : "red"}`}
-                      >
-                        {c.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {assignments.length === 0 && (
+                {assignments
+                  .filter((c) => (yearFilter ? c.year === yearFilter : true))
+                  .slice(0, 6)
+                  .map((c) => (
+                    <tr key={c.code}>
+                      <td>
+                        <span className="monospace">{c.code}</span>
+                        <br />
+                        <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                          {c.title}
+                        </span>
+                      </td>
+                      <td className="monospace">{c.room}</td>
+                      <td className="monospace">{c.time}</td>
+                      <td>{c.instructor}</td>
+                      <td>
+                        <span
+                          className={`pill pill-${c.status === "Assigned" ? "green" : "red"}`}
+                        >
+                          {c.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                {assignments.filter((c) =>
+                  yearFilter ? c.year === yearFilter : true,
+                ).length === 0 && (
                   <tr>
                     <td
                       colSpan={5}
