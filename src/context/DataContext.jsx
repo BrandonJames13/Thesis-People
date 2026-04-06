@@ -4,19 +4,51 @@ import {
   useState,
   useCallback,
   useMemo,
+  useEffect,
 } from "react";
 import { initialCourses } from "../data/initialCourses";
 import { initialRooms } from "../data/initialRooms";
 
+const STORAGE_KEY = "rss_data_v1";
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function saveToStorage(data) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch {}
+}
+
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
-  const [courses, setCourses] = useState(() =>
-    initialCourses.map((c) => ({ ...c })),
+  const saved = loadFromStorage();
+
+  const [courses, setCourses] = useState(
+    () => saved?.courses ?? initialCourses.map((c) => ({ ...c })),
   );
-  const [rooms, setRooms] = useState(() => initialRooms.map((r) => ({ ...r })));
-  const [instructors, setInstructors] = useState([]);
-  const [scheduleAssignments, setScheduleAssignments] = useState([]);
+  const [rooms, setRooms] = useState(
+    () => saved?.rooms ?? initialRooms.map((r) => ({ ...r })),
+  );
+  const [instructors, setInstructors] = useState(
+    () => saved?.instructors ?? [],
+  );
+  const [scheduleAssignments, setScheduleAssignments] = useState(
+    () => saved?.scheduleAssignments ?? [],
+  );
+
+  // Auto-save whenever any data changes
+  useEffect(() => {
+    saveToStorage({ courses, rooms, instructors, scheduleAssignments });
+  }, [courses, rooms, instructors, scheduleAssignments]);
 
   const assignments = useMemo(
     () => courses.filter((c) => c.status === "Assigned"),
@@ -76,6 +108,17 @@ export function DataProvider({ children }) {
     );
   }, []);
 
+  // Reset everything back to defaults and clear storage
+  const resetAllData = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    setCourses(initialCourses.map((c) => ({ ...c })));
+    setRooms(initialRooms.map((r) => ({ ...r })));
+    setInstructors([]);
+    setScheduleAssignments([]);
+  }, []);
+
   const value = useMemo(
     () => ({
       courses,
@@ -94,6 +137,7 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateScheduleAssignments,
       syncInstructorCourses,
+      resetAllData,
     }),
     [
       courses,
@@ -111,6 +155,7 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateScheduleAssignments,
       syncInstructorCourses,
+      resetAllData,
     ],
   );
 

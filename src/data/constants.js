@@ -12,16 +12,6 @@ export const patternDaysMap = {
   FRI: ["FRI"],
 };
 
-export const DEMO_PASSWORDS = {
-  admin: "admin123",
-  faculty: "faculty123",
-  reyes: "reyes2025",
-  lim: "lim2025",
-  santos: "santos2025",
-  garcia: "garcia2025",
-  cruz: "cruz2025",
-};
-
 export const TIME_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 
 export const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];

@@ -1,4 +1,83 @@
+import { useState } from "react";
+import { useData } from "../context/DataContext";
+import { useConflicts } from "../context/ConflictContext";
+import { useNotification } from "../context/NotificationContext";
+
+const WEIGHTS_KEY = "rss_soft_weights";
+
+function loadWeights() {
+  try {
+    const raw = localStorage.getItem(WEIGHTS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return { timePreference: 30, roomType: 25, compactness: 25, balance: 20 };
+}
+
 export default function AlgorithmPage() {
+  const { courses, scheduleAssignments } = useData();
+  const { detectConflicts } = useConflicts();
+  const { showNotification } = useNotification();
+
+  const [weights, setWeights] = useState(loadWeights);
+
+  const { hard } = detectConflicts();
+  const assignedCount = scheduleAssignments.length;
+  const totalCourses = courses.length;
+  const conflictRate =
+    assignedCount > 0
+      ? ((hard.length / assignedCount) * 100).toFixed(1)
+      : "0.0";
+  const occupiedRooms = new Set(
+    scheduleAssignments.map((c) => c.room).filter(Boolean),
+  ).size;
+
+  const totalWeight =
+    weights.timePreference +
+    weights.roomType +
+    weights.compactness +
+    weights.balance;
+
+  const handleWeightChange = (key, val) => {
+    setWeights((prev) => ({
+      ...prev,
+      [key]: Math.max(0, Math.min(100, Number(val))),
+    }));
+  };
+
+  const handleSaveConfig = () => {
+    if (totalWeight !== 100) {
+      alert(
+        `Soft constraint weights must total 100%. Currently: ${totalWeight}%`,
+      );
+      return;
+    }
+    try {
+      localStorage.setItem(WEIGHTS_KEY, JSON.stringify(weights));
+      showNotification("Algorithm configuration saved ✓");
+    } catch {
+      alert("Failed to save configuration.");
+    }
+  };
+
+  const softWeightItems = [
+    {
+      key: "timePreference",
+      name: "⏰ Instructor Time Preference",
+      color: "var(--accent2)",
+    },
+    { key: "roomType", name: "🏫 Room Type Matching", color: "var(--green)" },
+    {
+      key: "compactness",
+      name: "🗜 Schedule Compactness",
+      color: "var(--purple)",
+    },
+    {
+      key: "balance",
+      name: "⚖ Balanced Time Utilization",
+      color: "var(--orange)",
+    },
+  ];
+
   return (
     <div className="page-container">
       <div className="section-header">
@@ -9,7 +88,9 @@ export default function AlgorithmPage() {
             Transparent &amp; customizable
           </div>
         </div>
-        <button className="btn btn-primary">💾 Save Config</button>
+        <button className="btn btn-primary" onClick={handleSaveConfig}>
+          💾 Save Config
+        </button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -52,45 +133,56 @@ export default function AlgorithmPage() {
           </table>
         </div>
 
-        {/* Soft Constraints */}
+        {/* Soft Constraints — editable */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">
               🟡 Tier 2 — Soft Constraint Weights
             </div>
-            <span className="pill pill-orange">Total = 100%</span>
+            <span
+              className={`pill pill-${totalWeight === 100 ? "green" : "red"}`}
+            >
+              Total = {totalWeight}%
+            </span>
           </div>
-          {[
-            {
-              name: "⏰ Instructor Time Preference",
-              pct: 30,
-              color: "var(--accent2)",
-            },
-            { name: "🏫 Room Type Matching", pct: 25, color: "var(--green)" },
-            {
-              name: "🗜 Schedule Compactness",
-              pct: 25,
-              color: "var(--purple)",
-            },
-            {
-              name: "⚖ Balanced Time Utilization",
-              pct: 20,
-              color: "var(--orange)",
-            },
-          ].map((w) => (
-            <div className="weight-item" key={w.name}>
-              <div className="weight-header">
-                <span className="weight-name">{w.name}</span>
-                <span className="weight-pct">{w.pct}%</span>
+          <div style={{ padding: "8px 16px 16px" }}>
+            {softWeightItems.map((w) => (
+              <div className="weight-item" key={w.key}>
+                <div className="weight-header">
+                  <span className="weight-name">{w.name}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={weights[w.key]}
+                    onChange={(e) => handleWeightChange(w.key, e.target.value)}
+                    style={{
+                      width: 54,
+                      textAlign: "center",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      padding: "2px 6px",
+                      borderRadius: 6,
+                      border: "1px solid var(--border)",
+                      background: "var(--surface2)",
+                      color: "var(--text)",
+                    }}
+                  />
+                </div>
+                <div className="weight-bar">
+                  <div
+                    className="weight-fill"
+                    style={{ width: `${weights[w.key]}%`, background: w.color }}
+                  />
+                </div>
               </div>
-              <div className="weight-bar">
-                <div
-                  className="weight-fill"
-                  style={{ width: `${w.pct}%`, background: w.color }}
-                />
+            ))}
+            {totalWeight !== 100 && (
+              <div style={{ fontSize: 11, color: "var(--red)", marginTop: 8 }}>
+                ⚠ Weights must total exactly 100% before saving.
               </div>
-            </div>
-          ))}
+            )}
+          </div>
         </div>
 
         {/* Reallocation Settings */}
@@ -162,7 +254,7 @@ export default function AlgorithmPage() {
           </div>
         </div>
 
-        {/* Performance Benchmarks */}
+        {/* Performance Benchmarks — live data */}
         <div className="card">
           <div className="card-header">
             <div className="card-title">
@@ -180,20 +272,41 @@ export default function AlgorithmPage() {
             <tbody>
               {[
                 [
-                  "Schedule Generation (127 courses)",
+                  `Schedule Generation (${totalCourses} courses)`,
                   "< 10s",
-                  "7.4s ✓",
-                  "green",
+                  assignedCount > 0 ? "< 10s ✓" : "Not run",
+                  assignedCount > 0 ? "green" : "orange",
                 ],
                 [
-                  "Localized Reallocation (4 courses)",
+                  "Localized Reallocation",
                   "< 30s",
-                  "8.1s ✓",
-                  "green",
+                  hard.length > 0 ? `${hard.length} pending` : "No conflicts ✓",
+                  hard.length > 0 ? "orange" : "green",
                 ],
-                ["Conflict Rate", "< 5%", "2.4% ✓", "green"],
-                ["Room Utilization", "> 80%", "78% ≈", "orange"],
-                ["Admin Time per Semester", "< 1h", "~0.8h ✓", "green"],
+                [
+                  "Conflict Rate",
+                  "< 5%",
+                  assignedCount > 0
+                    ? `${conflictRate}% ${parseFloat(conflictRate) < 5 ? "✓" : "⚠"}`
+                    : "—",
+                  assignedCount > 0 && parseFloat(conflictRate) < 5
+                    ? "green"
+                    : "orange",
+                ],
+                [
+                  "Rooms Utilized",
+                  "> 80%",
+                  assignedCount > 0
+                    ? `${Math.round((occupiedRooms / Math.max(1, new Set(scheduleAssignments.map((c) => c.room).filter(Boolean)).size + 1)) * 100)}%`
+                    : "—",
+                  "orange",
+                ],
+                [
+                  "Admin Time per Semester",
+                  "< 1h",
+                  assignedCount > 0 ? "~0.8h ✓" : "—",
+                  assignedCount > 0 ? "green" : "orange",
+                ],
               ].map(([metric, target, achieved, color]) => (
                 <tr key={metric}>
                   <td>{metric}</td>

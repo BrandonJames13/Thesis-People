@@ -16,7 +16,7 @@ export default function ScheduleModal({ onClose }) {
     scheduleAssignments,
     updateCourses,
     updateRooms,
-    setScheduleAssignments,
+    updateScheduleAssignments,
     syncInstructorCourses,
   } = useData();
   const { showNotification } = useNotification();
@@ -92,7 +92,7 @@ export default function ScheduleModal({ onClose }) {
 
     updateCourses(result.courses);
     updateRooms(result.rooms);
-    setScheduleAssignments(result.scheduleAssignments);
+    updateScheduleAssignments(result.scheduleAssignments);
     syncInstructorCourses(result.scheduleAssignments);
     onClose();
     showNotification(result.message);
@@ -186,7 +186,7 @@ export default function ScheduleModal({ onClose }) {
     });
 
     updateCourses(newCourses);
-    setScheduleAssignments(newAssignments);
+    updateScheduleAssignments(newAssignments);
     syncInstructorCourses(newAssignments);
     onClose();
     showNotification(

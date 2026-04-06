@@ -4,9 +4,17 @@ import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
 
 export default function CoursesPage() {
-  const { courses, addCourse } = useData();
+  const { courses, addCourse, updateCourses } = useData();
   const { showNotification } = useNotification();
   const [showModal, setShowModal] = useState(false);
+  const [editCourse, setEditCourse] = useState(null);
+
+  const handleDelete = (code) => {
+    if (!window.confirm(`Delete course ${code}? This cannot be undone.`))
+      return;
+    updateCourses(courses.filter((c) => c.code !== code));
+    showNotification(`Course ${code} deleted.`);
+  };
 
   return (
     <div className="page-container">
@@ -17,7 +25,13 @@ export default function CoursesPage() {
             CS · IT · IS programs · AY 2025–2026
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setEditCourse(null);
+            setShowModal(true);
+          }}
+        >
           + Add Course
         </button>
       </div>
@@ -31,8 +45,9 @@ export default function CoursesPage() {
               <th>Program</th>
               <th>Year</th>
               <th>Enrolled</th>
-              <th>Room Type Required</th>
+              <th>Room Type</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -51,6 +66,27 @@ export default function CoursesPage() {
                     {c.status}
                   </span>
                 </td>
+                <td>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: "3px 10px", fontSize: 11 }}
+                      onClick={() => {
+                        setEditCourse(c);
+                        setShowModal(true);
+                      }}
+                    >
+                      ✏ Edit
+                    </button>
+                    <button
+                      className="btn btn-danger"
+                      style={{ padding: "3px 10px", fontSize: 11 }}
+                      onClick={() => handleDelete(c.code)}
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -58,13 +94,21 @@ export default function CoursesPage() {
       </div>
 
       {showModal && (
-        <AddCourseModal
+        <CourseModal
           courses={courses}
+          existing={editCourse}
           onClose={() => setShowModal(false)}
-          onAdd={(course) => {
-            addCourse(course);
+          onSave={(course) => {
+            if (editCourse) {
+              updateCourses(
+                courses.map((c) => (c.code === editCourse.code ? course : c)),
+              );
+              showNotification(`Course ${course.code} updated!`);
+            } else {
+              addCourse(course);
+              showNotification(`Course ${course.code} added!`);
+            }
             setShowModal(false);
-            showNotification(`Course ${course.code} added successfully!`);
           }}
         />
       )}
@@ -72,13 +116,15 @@ export default function CoursesPage() {
   );
 }
 
-function AddCourseModal({ courses, onClose, onAdd }) {
-  const [code, setCode] = useState("");
-  const [title, setTitle] = useState("");
-  const [program, setProgram] = useState("");
-  const [year, setYear] = useState("1st");
-  const [enrolled, setEnrolled] = useState("");
-  const [roomType, setRoomType] = useState("Lecture");
+function CourseModal({ courses, existing, onClose, onSave }) {
+  const [code, setCode] = useState(existing?.code ?? "");
+  const [title, setTitle] = useState(existing?.title ?? "");
+  const [program, setProgram] = useState(existing?.program ?? "");
+  const [year, setYear] = useState(existing?.year ?? "1st");
+  const [enrolled, setEnrolled] = useState(existing?.enrolled ?? "");
+  const [roomType, setRoomType] = useState(existing?.roomType ?? "Lecture");
+
+  const isEdit = !!existing;
 
   const handleSubmit = () => {
     const c = code.trim().toUpperCase();
@@ -88,23 +134,24 @@ function AddCourseModal({ courses, onClose, onAdd }) {
       alert("Please fill in all required fields correctly.");
       return;
     }
-    if (courses.find((x) => x.code === c)) {
+    if (!isEdit && courses.find((x) => x.code === c)) {
       alert(`Course code "${c}" already exists.`);
       return;
     }
-    onAdd({
+    onSave({
+      ...(existing ?? {}),
       code: c,
       title: t,
       program,
       year,
       enrolled: e,
       roomType,
-      status: "Pending",
-      instructor: "",
-      room: "",
-      time: "",
-      duration: 0,
-      pattern: "",
+      status: existing?.status ?? "Pending",
+      instructor: existing?.instructor ?? "",
+      room: existing?.room ?? "",
+      time: existing?.time ?? "",
+      duration: existing?.duration ?? 0,
+      pattern: existing?.pattern ?? "",
     });
   };
 
@@ -134,7 +181,7 @@ function AddCourseModal({ courses, onClose, onAdd }) {
           }}
         >
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-            + Add New Course
+            {isEdit ? "✏ Edit Course" : "+ Add New Course"}
           </div>
           <button
             onClick={onClose}
@@ -145,7 +192,6 @@ function AddCourseModal({ courses, onClose, onAdd }) {
               color: "var(--text3)",
               cursor: "pointer",
               padding: 0,
-              lineHeight: 1,
             }}
           >
             ✕
@@ -163,6 +209,7 @@ function AddCourseModal({ courses, onClose, onAdd }) {
               style={{ width: "100%", boxSizing: "border-box" }}
               value={code}
               onChange={(e) => setCode(e.target.value)}
+              disabled={isEdit}
             />
           </div>
           <div>
@@ -242,7 +289,7 @@ function AddCourseModal({ courses, onClose, onAdd }) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Course
+            {isEdit ? "✏ Save Changes" : "+ Add Course"}
           </button>
         </div>
       </div>

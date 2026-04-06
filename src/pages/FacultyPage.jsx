@@ -4,9 +4,16 @@ import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
 
 export default function FacultyPage() {
-  const { instructors, addInstructor } = useData();
+  const { instructors, addInstructor, updateInstructors } = useData();
   const { showNotification } = useNotification();
   const [showModal, setShowModal] = useState(false);
+  const [editInstructor, setEditInstructor] = useState(null);
+
+  const handleDelete = (name) => {
+    if (!window.confirm(`Delete instructor ${name}?`)) return;
+    updateInstructors(instructors.filter((i) => i.name !== name));
+    showNotification(`${name} removed.`);
+  };
 
   return (
     <div className="page-container">
@@ -17,7 +24,13 @@ export default function FacultyPage() {
             Teaching load &amp; availability tracking
           </div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setEditInstructor(null);
+            setShowModal(true);
+          }}
+        >
           + Add Instructor
         </button>
       </div>
@@ -31,13 +44,14 @@ export default function FacultyPage() {
               <th>Load</th>
               <th>Availability</th>
               <th>Status</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {instructors.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   style={{
                     textAlign: "center",
                     padding: 40,
@@ -72,6 +86,27 @@ export default function FacultyPage() {
                       {inst.status}
                     </span>
                   </td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: "3px 10px", fontSize: 11 }}
+                        onClick={() => {
+                          setEditInstructor(inst);
+                          setShowModal(true);
+                        }}
+                      >
+                        ✏ Edit
+                      </button>
+                      <button
+                        className="btn btn-danger"
+                        style={{ padding: "3px 10px", fontSize: 11 }}
+                        onClick={() => handleDelete(inst.name)}
+                      >
+                        🗑
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             )}
@@ -80,12 +115,22 @@ export default function FacultyPage() {
       </div>
 
       {showModal && (
-        <AddInstructorModal
+        <InstructorModal
+          existing={editInstructor}
           onClose={() => setShowModal(false)}
-          onAdd={(inst) => {
-            addInstructor(inst);
+          onSave={(inst) => {
+            if (editInstructor) {
+              updateInstructors(
+                instructors.map((i) =>
+                  i.name === editInstructor.name ? inst : i,
+                ),
+              );
+              showNotification(`${inst.name} updated!`);
+            } else {
+              addInstructor(inst);
+              showNotification("Instructor added successfully!");
+            }
             setShowModal(false);
-            showNotification("Instructor added successfully!");
           }}
         />
       )}
@@ -93,22 +138,27 @@ export default function FacultyPage() {
   );
 }
 
-function AddInstructorModal({ onClose, onAdd }) {
-  const [name, setName] = useState("");
-  const [dept, setDept] = useState("");
-  const [availability, setAvailability] = useState("");
+function InstructorModal({ existing, onClose, onSave }) {
+  const [name, setName] = useState(existing?.name ?? "");
+  const [dept, setDept] = useState(existing?.department ?? "");
+  const [availability, setAvailability] = useState(
+    existing?.availability ?? "",
+  );
+  const [status, setStatus] = useState(existing?.status ?? "Active");
+  const isEdit = !!existing;
 
   const handleSubmit = () => {
     if (!name.trim()) {
       alert("Please enter the instructor name.");
       return;
     }
-    onAdd({
+    onSave({
+      ...(existing ?? {}),
       name: name.trim(),
       department: dept || "TBD",
       availability: availability.trim() || "TBD",
-      courses: [],
-      status: "Active",
+      courses: existing?.courses ?? [],
+      status,
     });
   };
 
@@ -138,7 +188,7 @@ function AddInstructorModal({ onClose, onAdd }) {
           }}
         >
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-            + Add New Instructor
+            {isEdit ? "✏ Edit Instructor" : "+ Add New Instructor"}
           </div>
           <button
             onClick={onClose}
@@ -149,7 +199,6 @@ function AddInstructorModal({ onClose, onAdd }) {
               color: "var(--text3)",
               cursor: "pointer",
               padding: 0,
-              lineHeight: 1,
             }}
           >
             ✕
@@ -196,13 +245,25 @@ function AddInstructorModal({ onClose, onAdd }) {
               onChange={(e) => setAvailability(e.target.value)}
             />
           </div>
+          <div>
+            <label style={labelStyle}>Status</label>
+            <select
+              className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
+          </div>
         </div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Instructor
+            {isEdit ? "✏ Save Changes" : "+ Add Instructor"}
           </button>
         </div>
       </div>

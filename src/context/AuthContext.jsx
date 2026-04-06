@@ -1,6 +1,5 @@
 import { createContext, useContext, useState, useCallback } from "react";
-import { USERS } from "../data/users";
-import { DEMO_PASSWORDS } from "../data/constants";
+import { USERS, hashPassword } from "../data/users";
 
 const AuthContext = createContext();
 
@@ -16,10 +15,10 @@ export function AuthProvider({ children }) {
 
   const login = useCallback((username, password) => {
     const user = USERS[username.trim().toLowerCase()];
-    if (!user || user.password !== password) {
+    if (!user || user.passwordHash !== hashPassword(password)) {
       return { success: false };
     }
-    const { password: _, ...safeUser } = user;
+    const { passwordHash: _, ...safeUser } = user;
     sessionStorage.setItem("rss_user", JSON.stringify(safeUser));
     setCurrentUser(safeUser);
     return { success: true };
@@ -35,12 +34,13 @@ export function AuthProvider({ children }) {
   const changePassword = useCallback(
     (currentPw, newPw, confirmPw) => {
       if (!currentUser) return "Not logged in.";
-      const expected = DEMO_PASSWORDS[currentUser.username] || "admin123";
-      if (currentPw !== expected) return "⚠ Current password is incorrect.";
+      const user = USERS[currentUser.username];
+      if (!user || user.passwordHash !== hashPassword(currentPw))
+        return "⚠ Current password is incorrect.";
       if (newPw.length < 6)
         return "⚠ New password must be at least 6 characters.";
       if (newPw !== confirmPw) return "⚠ Passwords do not match.";
-      return null; // success
+      return null;
     },
     [currentUser],
   );

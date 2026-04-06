@@ -2,70 +2,26 @@ import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import ScheduleModal from "../components/schedule/ScheduleModal";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { exportToExcel } from "../utils/exportUtils";
 import { useNotification } from "../context/NotificationContext";
 
-const algoSteps = [
-  {
-    status: "done",
-    icon: "✓",
-    name: "Input Data Collection",
-    desc: "127 courses · 48 rooms · 34 instructors · 30 time slots loaded",
-    time: "0.3s",
-  },
-  {
-    status: "done",
-    icon: "✓",
-    name: "Data Validation & Constraint Check",
-    desc: "Hard constraints verified · Tier-1 rules activated",
-    time: "0.6s",
-  },
-  {
-    status: "done",
-    icon: "✓",
-    name: "Greedy Assignment — Tier 1 (Hard)",
-    desc: "No double-booking · Capacity compliance · Instructor conflicts checked",
-    time: "3.1s",
-  },
-  {
-    status: "done",
-    icon: "✓",
-    name: "Soft Constraint Optimization — Tier 2",
-    desc: "Time pref 30% · Room type 25% · Compactness 25% · Balance 20%",
-    time: "2.1s",
-  },
-  {
-    status: "active",
-    icon: "!",
-    name: "Localized Reallocation",
-    desc: "3 conflicts detected — attempting alternative assignments",
-    time: "1.3s",
-  },
-  {
-    status: "idle",
-    icon: "○",
-    name: "Cloud Synchronization (PostgreSQL)",
-    desc: "Awaiting conflict resolution before push to cloud storage",
-    time: "—",
-  },
-];
-
-const utilRows = [
-  { label: "Labs", pct: 91, color: "var(--purple)" },
-  { label: "Floor 1", pct: 85, color: "var(--green)" },
-  { label: "Floor 2", pct: 78, color: "var(--accent2)" },
-  { label: "Floor 3", pct: 64, color: "var(--orange)" },
-];
-
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { rooms, courses, assignments, conflicts, scheduleAssignments } =
-    useData();
+  const {
+    rooms,
+    courses,
+    assignments,
+    conflicts,
+    scheduleAssignments,
+    resetAllData,
+  } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [yearFilter, setYearFilter] = useState("");
+  const [lastGenTime, setLastGenTime] = useState(null);
+  const genStartRef = useRef(null);
 
   const utilization =
     courses.length > 0
@@ -73,6 +29,100 @@ export default function DashboardPage() {
       : 0;
   const { hard } = detectConflicts();
   const hardCount = hard.length;
+
+  // Dynamic computed values from real data
+  const totalCourses = courses.length;
+  const totalRooms = rooms.length;
+  const totalInstructors = new Set(
+    scheduleAssignments.map((c) => c.instructor).filter(Boolean),
+  ).size;
+  const assignedCount = scheduleAssignments.length;
+  const hasSchedule = assignedCount > 0;
+  const progressPct =
+    totalCourses > 0 ? Math.round((assignedCount / totalCourses) * 100) : 0;
+  const genTimeLabel = lastGenTime !== null ? `${lastGenTime}s` : "—";
+
+  // Dynamic algo steps
+  const algoSteps = [
+    {
+      status: hasSchedule ? "done" : "idle",
+      icon: hasSchedule ? "✓" : "○",
+      name: "Input Data Collection",
+      desc: hasSchedule
+        ? `${totalCourses} courses · ${totalRooms} rooms · ${totalInstructors} instructors loaded`
+        : "Waiting for schedule generation",
+      time: hasSchedule ? "0.3s" : "—",
+    },
+    {
+      status: hasSchedule ? "done" : "idle",
+      icon: hasSchedule ? "✓" : "○",
+      name: "Data Validation & Constraint Check",
+      desc: hasSchedule
+        ? "Hard constraints verified · Tier-1 rules activated"
+        : "—",
+      time: hasSchedule ? "0.6s" : "—",
+    },
+    {
+      status: hasSchedule ? "done" : "idle",
+      icon: hasSchedule ? "✓" : "○",
+      name: "Greedy Assignment — Tier 1 (Hard)",
+      desc: hasSchedule
+        ? "No double-booking · Capacity compliance · Instructor conflicts checked"
+        : "—",
+      time: hasSchedule ? "3.1s" : "—",
+    },
+    {
+      status: hasSchedule ? "done" : "idle",
+      icon: hasSchedule ? "✓" : "○",
+      name: "Soft Constraint Optimization — Tier 2",
+      desc: hasSchedule
+        ? "Time pref 30% · Room type 25% · Compactness 25% · Balance 20%"
+        : "—",
+      time: hasSchedule ? "2.1s" : "—",
+    },
+    {
+      status:
+        hasSchedule && hardCount > 0 ? "active" : hasSchedule ? "done" : "idle",
+      icon: hasSchedule && hardCount > 0 ? "!" : hasSchedule ? "✓" : "○",
+      name: "Localized Reallocation",
+      desc: hasSchedule
+        ? hardCount > 0
+          ? `${hardCount} conflict${hardCount !== 1 ? "s" : ""} detected — attempting alternative assignments`
+          : "No conflicts detected — all constraints satisfied"
+        : "—",
+      time: hasSchedule ? "1.3s" : "—",
+    },
+  ];
+
+  // Dynamic room utilization from real room data
+  const labs = rooms.filter((r) => r.type === "Computer Lab");
+  const lectures = rooms.filter((r) => r.type === "Lecture");
+  const labsOccupied = labs.filter((r) => r.status === "Occupied").length;
+  const lecturesOccupied = lectures.filter(
+    (r) => r.status === "Occupied",
+  ).length;
+  const allOccupied = rooms.filter((r) => r.status === "Occupied").length;
+  const utilRows = [
+    {
+      label: "Labs",
+      pct: labs.length > 0 ? Math.round((labsOccupied / labs.length) * 100) : 0,
+      color: "var(--purple)",
+    },
+    {
+      label: "Lecture Rooms",
+      pct:
+        lectures.length > 0
+          ? Math.round((lecturesOccupied / lectures.length) * 100)
+          : 0,
+      color: "var(--green)",
+    },
+    {
+      label: "All Rooms",
+      pct:
+        rooms.length > 0 ? Math.round((allOccupied / rooms.length) * 100) : 0,
+      color: "var(--accent2)",
+    },
+  ];
 
   return (
     <div className="page-container">
@@ -95,7 +145,10 @@ export default function DashboardPage() {
           </button>
           <button
             className="btn btn-primary"
-            onClick={() => setShowScheduleModal(true)}
+            onClick={() => {
+              genStartRef.current = performance.now();
+              setShowScheduleModal(true);
+            }}
           >
             ▶ Generate Schedule
           </button>
@@ -139,31 +192,13 @@ export default function DashboardPage() {
           <div className="card">
             <div className="card-header">
               <div className="card-title">📋 Recent Assignments</div>
-              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <select
-                  className="search-input"
-                  style={{ width: 120, padding: "4px 8px", fontSize: 11 }}
-                  value={yearFilter || "All Years"}
-                  onChange={(e) =>
-                    setYearFilter(
-                      e.target.value === "All Years" ? "" : e.target.value,
-                    )
-                  }
-                >
-                  <option>All Years</option>
-                  <option value="1st">1st Year</option>
-                  <option value="2nd">2nd Year</option>
-                  <option value="3rd">3rd Year</option>
-                  <option value="4th">4th Year</option>
-                </select>
-                <button
-                  className="btn btn-secondary"
-                  style={{ padding: "4px 10px", fontSize: 11 }}
-                  onClick={() => navigate("/schedule")}
-                >
-                  View All
-                </button>
-              </div>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 11 }}
+                onClick={() => navigate("/schedule")}
+              >
+                View All
+              </button>
             </div>
             <table>
               <thead>
@@ -176,33 +211,28 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments
-                  .filter((c) => (yearFilter ? c.year === yearFilter : true))
-                  .slice(0, 6)
-                  .map((c) => (
-                    <tr key={c.code}>
-                      <td>
-                        <span className="monospace">{c.code}</span>
-                        <br />
-                        <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                          {c.title}
-                        </span>
-                      </td>
-                      <td className="monospace">{c.room}</td>
-                      <td className="monospace">{c.time}</td>
-                      <td>{c.instructor}</td>
-                      <td>
-                        <span
-                          className={`pill pill-${c.status === "Assigned" ? "green" : "red"}`}
-                        >
-                          {c.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                {assignments.filter((c) =>
-                  yearFilter ? c.year === yearFilter : true,
-                ).length === 0 && (
+                {assignments.slice(0, 6).map((c) => (
+                  <tr key={c.code}>
+                    <td>
+                      <span className="monospace">{c.code}</span>
+                      <br />
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                        {c.title}
+                      </span>
+                    </td>
+                    <td className="monospace">{c.room}</td>
+                    <td className="monospace">{c.time}</td>
+                    <td>{c.instructor}</td>
+                    <td>
+                      <span
+                        className={`pill pill-${c.status === "Assigned" ? "green" : "red"}`}
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {assignments.length === 0 && (
                   <tr>
                     <td
                       colSpan={5}
@@ -226,7 +256,9 @@ export default function DashboardPage() {
               <div className="card-title">
                 ⚙ Constraint-Based Greedy Algorithm — Last Run
               </div>
-              <span className="pill pill-green">Completed · 7.4s</span>
+              <span className="pill pill-green">
+                {hasSchedule ? `Completed · ${genTimeLabel}` : "Not run yet"}
+              </span>
             </div>
             <div className="algo-steps">
               {algoSteps.map((step, i) => (
@@ -243,10 +275,15 @@ export default function DashboardPage() {
             <div className="progress-wrap">
               <div className="progress-header">
                 <span>Generation Progress</span>
-                <span>124 / 127 courses assigned</span>
+                <span>
+                  {assignedCount} / {totalCourses} courses assigned
+                </span>
               </div>
               <div className="progress-bar">
-                <div className="progress-fill" style={{ width: "97.6%" }} />
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progressPct}%` }}
+                />
               </div>
             </div>
           </div>
@@ -270,7 +307,10 @@ export default function DashboardPage() {
               <button
                 className="btn btn-primary"
                 style={{ justifyContent: "center" }}
-                onClick={() => setShowScheduleModal(true)}
+                onClick={() => {
+                  genStartRef.current = performance.now();
+                  setShowScheduleModal(true);
+                }}
               >
                 ▶ Re-generate Schedule
               </button>
@@ -294,10 +334,20 @@ export default function DashboardPage() {
                 ↓ Export to Excel
               </button>
               <button
-                className="btn btn-success"
+                className="btn btn-danger"
                 style={{ justifyContent: "center" }}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Reset all data to defaults? This cannot be undone.",
+                    )
+                  ) {
+                    resetAllData();
+                    showNotification("All data reset to defaults ✓");
+                  }
+                }}
               >
-                ☁ Sync to PostgreSQL
+                🗑 Reset All Data
               </button>
             </div>
           </div>
@@ -356,9 +406,9 @@ export default function DashboardPage() {
                 <div>
                   <div className="mini-label">Generation Time</div>
                   <div className="mini-value">
-                    7.4s{" "}
+                    {genTimeLabel}{" "}
                     <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      / 127 courses
+                      / {totalCourses} courses
                     </span>
                   </div>
                 </div>
@@ -400,7 +450,19 @@ export default function DashboardPage() {
       </div>
 
       {showScheduleModal && (
-        <ScheduleModal onClose={() => setShowScheduleModal(false)} />
+        <ScheduleModal
+          onClose={() => {
+            if (genStartRef.current) {
+              const elapsed = (
+                (performance.now() - genStartRef.current) /
+                1000
+              ).toFixed(1);
+              setLastGenTime(elapsed);
+              genStartRef.current = null;
+            }
+            setShowScheduleModal(false);
+          }}
+        />
       )}
     </div>
   );

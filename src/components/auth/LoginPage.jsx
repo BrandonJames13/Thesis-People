@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { USERS, hashPassword } from "../../data/users";
 import styles from "./LoginPage.module.css";
 
 const demoAccounts = [
@@ -101,7 +102,7 @@ export default function LoginPage() {
               >
                 <div className={styles.demoInfo}>
                   <div className={styles.demoUser}>{acc.username}</div>
-                  <div className={styles.demoPass}>{acc.password}</div>
+                  <div className={styles.demoPass}>••••••••</div>
                 </div>
                 <span className={`${styles.demoRole} ${styles[acc.role]}`}>
                   {acc.role.toUpperCase()}

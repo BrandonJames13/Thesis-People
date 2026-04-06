@@ -1,25 +1,58 @@
+import { useData } from "../context/DataContext";
+import { useConflicts } from "../context/ConflictContext";
+
 export default function AnalyticsPage() {
-  const utilData = [
-    { label: "Lab 01", pct: 92, color: "var(--purple)" },
-    { label: "Room 201", pct: 87, color: "var(--green)" },
-    { label: "Room 101", pct: 83, color: "var(--green)" },
-    { label: "Room 103", pct: 78, color: "var(--accent2)" },
-    { label: "Lab 02", pct: 72, color: "var(--accent2)" },
-    { label: "Room 302", pct: 64, color: "var(--orange)" },
-    { label: "Room 102", pct: 57, color: "var(--orange)" },
-  ];
+  const { rooms, courses, scheduleAssignments } = useData();
+  const { detectConflicts } = useConflicts();
+
+  const { hard } = detectConflicts();
+  const hasSchedule = scheduleAssignments.length > 0;
+
+  // Room-by-room utilization: % of time slots occupied per room
+  const utilData = rooms
+    .map((room) => {
+      const assignedToRoom = scheduleAssignments.filter(
+        (c) => c.room === room.number,
+      ).length;
+      const totalSlots = 10; // approx available daily slots
+      const pct = Math.min(
+        100,
+        Math.round((assignedToRoom / totalSlots) * 100),
+      );
+      const color =
+        pct >= 80
+          ? "var(--green)"
+          : pct >= 60
+            ? "var(--accent2)"
+            : "var(--orange)";
+      return { label: room.number, pct: hasSchedule ? pct : 0, color };
+    })
+    .sort((a, b) => b.pct - a.pct);
+
+  // Summary stat cards
+  const occupiedRooms = rooms.filter((r) => r.status === "Occupied").length;
+  const avgUtil =
+    rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
+
+  const totalCourses = courses.length;
+  const assignedCourses = scheduleAssignments.length;
+  const conflictRate =
+    assignedCourses > 0 ? Math.round((hard.length / assignedCourses) * 100) : 0;
+  const conflictFree = 100 - conflictRate;
 
   const qualityData = [
     {
       attr: "Functional Suitability",
       method: "Black Box",
-      result: "97.4%",
-      color: "green",
+      result: hasSchedule
+        ? `${Math.round((assignedCourses / Math.max(totalCourses, 1)) * 100)}%`
+        : "No data yet",
+      color: hasSchedule ? "green" : "orange",
     },
     {
       attr: "Performance Efficiency",
       method: "Benchmark",
-      result: "7.4s gen",
+      result: "< 10s target",
       color: "green",
     },
     {
@@ -69,7 +102,6 @@ export default function AnalyticsPage() {
             ISO/IEC 25010 · Performance Efficiency &amp; Functional Suitability
           </div>
         </div>
-        <button className="btn btn-secondary">↓ Export PDF Report</button>
       </div>
 
       <div
@@ -77,19 +109,33 @@ export default function AnalyticsPage() {
         style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
       >
         <div className="stat-card blue">
-          <div className="stat-label">Avg Utilization</div>
-          <div className="stat-value">78%</div>
-          <div className="stat-delta">↑ +20% vs manual (58%)</div>
+          <div className="stat-label">Avg Room Utilization</div>
+          <div className="stat-value">{avgUtil}%</div>
+          <div className="stat-delta">
+            {occupiedRooms} of {rooms.length} rooms occupied
+          </div>
         </div>
         <div className="stat-card green">
-          <div className="stat-label">Conflict Reduction</div>
-          <div className="stat-value">96%</div>
-          <div className="stat-delta">from 18 → 0.7 conflicts/semester</div>
+          <div className="stat-label">Conflict-Free Rate</div>
+          <div className="stat-value">
+            {hasSchedule ? `${conflictFree}%` : "—"}
+          </div>
+          <div className="stat-delta">
+            {hasSchedule
+              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedCourses} assignments`
+              : "Generate a schedule to see data"}
+          </div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-label">Admin Time Saved</div>
-          <div className="stat-value">29h</div>
-          <div className="stat-delta">30h manual → &lt;1h automated</div>
+          <div className="stat-label">Courses Scheduled</div>
+          <div className="stat-value">
+            {hasSchedule ? assignedCourses : "—"}
+          </div>
+          <div className="stat-delta">
+            {hasSchedule
+              ? `${assignedCourses} of ${totalCourses} total courses`
+              : "No schedule generated yet"}
+          </div>
         </div>
       </div>
 
@@ -99,20 +145,33 @@ export default function AnalyticsPage() {
           <div className="card-header">
             <div className="card-title">📊 Room-by-Room Utilization Rate</div>
           </div>
-          {utilData.map((row) => (
-            <div className="util-row" key={row.label}>
-              <div className="util-label">{row.label}</div>
-              <div className="util-bar-wrap">
-                <div
-                  className="util-fill"
-                  style={{ width: `${row.pct}%`, background: row.color }}
-                />
-              </div>
-              <div className="util-pct" style={{ color: row.color }}>
-                {row.pct}%
-              </div>
+          {!hasSchedule ? (
+            <div
+              style={{
+                padding: "30px 20px",
+                textAlign: "center",
+                color: "var(--text3)",
+                fontSize: 13,
+              }}
+            >
+              Generate a schedule to see room utilization data.
             </div>
-          ))}
+          ) : (
+            utilData.map((row) => (
+              <div className="util-row" key={row.label}>
+                <div className="util-label">{row.label}</div>
+                <div className="util-bar-wrap">
+                  <div
+                    className="util-fill"
+                    style={{ width: `${row.pct}%`, background: row.color }}
+                  />
+                </div>
+                <div className="util-pct" style={{ color: row.color }}>
+                  {row.pct}%
+                </div>
+              </div>
+            ))
+          )}
           <div
             style={{
               padding: "12px 20px",
