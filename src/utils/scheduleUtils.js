@@ -66,9 +66,26 @@ export function runAutoSchedule({
     return { error: "No valid time slots in that range for the selected duration." };
   }
 
-  const newRooms = rooms.map((r) => ({ ...r }));
-  const newCourses = courses.map((c) => ({ ...c }));
-  const newAssignments = [...scheduleAssignments.map((a) => ({ ...a }))];
+  // FIX #1: Reset all previously assigned courses back to Pending so
+  // re-generating produces a fresh schedule instead of doing nothing.
+  const newCourses = courses.map((c) => ({
+    ...c,
+    status: c.status === "Assigned" ? "Pending" : c.status,
+    room: c.status === "Assigned" ? "" : c.room,
+    time: c.status === "Assigned" ? "" : c.time,
+    pattern: c.status === "Assigned" ? "" : c.pattern,
+  }));
+
+  // FIX #2: Reset room statuses so utilization is recalculated from scratch.
+  const newRooms = rooms.map((r) => ({
+    ...r,
+    status: r.status === "Occupied" ? "Available" : r.status,
+  }));
+
+  // Start with only non-pending assignments (e.g. Conflict ones kept as-is)
+  const newAssignments = scheduleAssignments
+    .filter((a) => a.status === "Conflict")
+    .map((a) => ({ ...a }));
 
   // Build a map of which instructor teaches which courses already
   const instructorLoad = {};
@@ -85,7 +102,7 @@ export function runAutoSchedule({
         .filter((c) => c.status === "Assigned" || c.status === "Conflict")
         .map((c) => ({ ...c })),
       assigned: 0,
-      message: "Schedule generated — all assigned courses loaded!",
+      message: "No pending courses to schedule.",
     };
   }
 
@@ -129,7 +146,6 @@ export function runAutoSchedule({
         const candidateTime = `${pattern} ${formatTime(bestSlot)}`;
         const testCourse = { ...course, time: candidateTime, duration, pattern };
         const freeInstructor = instructors.find((inst) => {
-          // Check instructor not already scheduled at this time
           return !newAssignments.some(
             (a) =>
               a.instructor &&
@@ -151,6 +167,9 @@ export function runAutoSchedule({
 
       newAssignments.push({ ...course });
       assigned++;
+
+      // FIX #2: Mark the room as Occupied after assigning a course to it
+      bestRoom.status = "Occupied";
     }
   });
 
