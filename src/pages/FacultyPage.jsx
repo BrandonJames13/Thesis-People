@@ -171,10 +171,9 @@ function InstructorModal({ existing, onClose, onSave }) {
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose}>
       <div
         style={{
-          width: 420,
           display: "flex",
           flexDirection: "column",
           gap: 16,
@@ -190,19 +189,6 @@ function InstructorModal({ existing, onClose, onSave }) {
           <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
             {isEdit ? "✏ Edit Instructor" : "+ Add New Instructor"}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: 20,
-              color: "var(--text3)",
-              cursor: "pointer",
-              padding: 0,
-            }}
-          >
-            ✕
-          </button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div>

@@ -6,7 +6,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow-y: auto;
   padding: 20px;
 }
 
@@ -14,45 +13,10 @@
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0;
+  padding: 24px 28px;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  margin: auto;
   width: 100%;
-  max-width: 700px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text);
-}
-
-.subtitle {
-  font-size: 12px;
-  color: var(--text3);
-  margin-top: 2px;
-}
-
-.closeBtn {
-  background: none;
-  border: none;
-  font-size: 20px;
-  color: var(--text3);
-  cursor: pointer;
-  padding: 0;
-  line-height: 1;
-}
-
-.closeBtn:hover {
-  color: var(--text);
+  max-width: 560px;
 }

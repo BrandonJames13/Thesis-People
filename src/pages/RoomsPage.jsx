@@ -192,10 +192,10 @@ function AddRoomModal({ onClose, onAdd }) {
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose}>
       <div
         style={{
-          width: 360,
+          // width handled by modal
           display: "flex",
           flexDirection: "column",
           gap: 16,
