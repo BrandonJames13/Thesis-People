@@ -195,7 +195,7 @@ export default function ScheduleModal({ onClose }) {
   };
 
   return (
-    <Modal onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose}>
       <div style={{ width: 660 }}>
         {/* Header */}
         <div

@@ -76,16 +76,30 @@ export function runAutoSchedule({
     instructorLoad[inst.name.trim().toLowerCase()] = inst;
   });
 
+  // Reset all courses to Pending so re-generation works correctly
+  newCourses.forEach((c) => {
+    c.status = "Pending";
+    c.room = "";
+    c.time = "";
+    c.pattern = "";
+    c.instructor = c.instructor || "";
+  });
+  // Clear existing assignments so we rebuild from scratch
+  newAssignments.length = 0;
+  // Reset room statuses
+  newRooms.forEach((r) => {
+    if (r.status !== "Maintenance") r.status = "Available";
+  });
+
   const pending = newCourses.filter((c) => c.status === "Pending");
+
   if (pending.length === 0) {
     return {
       courses: newCourses,
       rooms: newRooms,
-      scheduleAssignments: newCourses
-        .filter((c) => c.status === "Assigned" || c.status === "Conflict")
-        .map((c) => ({ ...c })),
+      scheduleAssignments: [],
       assigned: 0,
-      message: "Schedule generated — all assigned courses loaded!",
+      message: "No courses to schedule. Please add courses first.",
     };
   }
 
@@ -106,10 +120,22 @@ export function runAutoSchedule({
         if (room.capacity < (course.enrolled || 0)) continue;
 
         // Hard constraint: no double booking in this room at this slot
-        const hasConflict = newAssignments.some(
+        const hasRoomConflict = newAssignments.some(
           (a) => a.room === room.number && coursesOverlap(a, testCourse)
         );
-        if (hasConflict) continue;
+        if (hasRoomConflict) continue;
+
+        // Hard constraint: instructor cannot teach two courses at the same time
+        const instructorName = course.instructor;
+        if (instructorName) {
+          const hasInstructorConflict = newAssignments.some(
+            (a) =>
+              a.instructor &&
+              a.instructor.trim().toLowerCase() === instructorName.trim().toLowerCase() &&
+              coursesOverlap(a, testCourse)
+          );
+          if (hasInstructorConflict) continue;
+        }
 
         // Score using soft constraints
         const score = scoreSoftConstraints(course, room, slot, newAssignments, weights);
@@ -148,6 +174,9 @@ export function runAutoSchedule({
         instructor: assignedInstructor,
         status: "Assigned",
       });
+
+      // Mark room as Occupied
+      bestRoom.status = "Occupied";
 
       newAssignments.push({ ...course });
       assigned++;
