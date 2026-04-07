@@ -1,27 +1,33 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext"; // !! Make sure this path is correct based on your project structure
+import { useAuth } from "../../context/AuthContext";
 import styles from "./LoginPage.module.css";
 
-export default function LoginPage() {
-  const { currentUser, login } = useAuth();
+export default function SignUpPage() {
+  const { currentUser, signUp } = useAuth();
+
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   if (currentUser) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     setLoading(true);
     setError(false);
 
-    const result = await login(email, password);
+    const result = await signUp(email, password, name);
 
     if (!result.success) {
       setError(true);
-      setPassword("");
+    } else {
+      setSuccess(true);
     }
 
     setLoading(false);
@@ -38,19 +44,28 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <h1 className={styles.heading}>Welcome back</h1>
+        <h1 className={styles.heading}>Create Account</h1>
         <p className={styles.subtitle}>
-          Sign in to access the scheduling dashboard
+          Sign up to access the scheduling dashboard
         </p>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="login-email">Email</label>
+            <label>Name</label>
             <input
-              id="login-email"
+              type="text"
+              placeholder="Enter your name"
+              value={name}
+              required
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+
+          <div className={styles.field}>
+            <label>Email</label>
+            <input
               type="email"
               placeholder="Enter your email"
-              autoComplete="email"
               value={email}
               required
               onChange={(e) => {
@@ -59,13 +74,12 @@ export default function LoginPage() {
               }}
             />
           </div>
+
           <div className={styles.field}>
-            <label htmlFor="login-password">Password</label>
+            <label>Password</label>
             <input
-              id="login-password"
               type="password"
-              placeholder="Enter your password"
-              autoComplete="current-password"
+              placeholder="Create a password"
               value={password}
               required
               onChange={(e) => {
@@ -77,17 +91,23 @@ export default function LoginPage() {
 
           {error && (
             <div className={styles.errorMsg}>
-              ⚠ Incorrect email or password.
+              ⚠ Failed to create account.
+            </div>
+          )}
+
+          {success && (
+            <div className={styles.successMsg}>
+              ✓ Account created. You may now log in.
             </div>
           )}
 
           <button type="submit" className={styles.btnLogin} disabled={loading}>
-            {loading ? "Signing in…" : "Sign In →"}
+            {loading ? "Creating account…" : "Sign Up →"}
           </button>
 
-           <p style={{ textAlign: 'center' }}>
-            Don't have an account? <a href="/signup">Sign up</a>
-          </p>
+            <p style={{ textAlign: 'center' }}>
+                Already have an account? <a href="/login">Log in</a>
+            </p>
         </form>
 
         <p className={styles.footerNote}>
