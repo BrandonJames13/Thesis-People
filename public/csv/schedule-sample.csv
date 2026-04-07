@@ -1,0 +1,5 @@
+"Course Code","Course Title","Program","Year","Enrolled","Room","Type Required","Pattern","Time","Duration (hrs)","Instructor","Status"
+"CS101","Intro to Computer Science","CS","1st","42","Room 101","Lecture","MWF","08:00 - 09:30","1.5","Dela Cruz, J.","Assigned"
+"CS202","Object-Oriented Programming","CS","2nd","38","Lab 01","Lab","TTH","10:00 - 11:30","1.5","Lim, K.","Assigned"
+"IT301","Computer Networks","IT","3rd","30","Lab 02","Lab","MWF","13:00 - 14:30","1.5","Cruz, P.","Pending"
+"IS301","Systems Analysis & Design","IS","3rd","32","Room 201","Lecture","TTH","14:30 - 16:00","1.5","Garcia, L.","Assigned"

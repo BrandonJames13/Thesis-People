@@ -1,0 +1,7 @@
+"Number","Type","Capacity","Status"
+"Room 101","Lecture","40","Available"
+"Room 102","Lecture","35","Occupied"
+"Room 201","Lecture","50","Available"
+"Lab 01","Computer Lab","45","Occupied"
+"Lab 02","Computer Lab","30","Available"
+"Lab 03","Computer Lab","30","Maintenance"

@@ -1,0 +1,24 @@
+{
+  "files": [
+    {
+      "label": "Schedule Sample",
+      "path": "/csv/schedule-sample.csv",
+      "description": "Round-trip schedule format compatible with Export."
+    },
+    {
+      "label": "Faculty List",
+      "path": "/csv/faculty-list.csv",
+      "description": "Faculty records for instructor listing."
+    },
+    {
+      "label": "Rooms List",
+      "path": "/csv/rooms-list.csv",
+      "description": "Room inventory records."
+    },
+    {
+      "label": "Subjects List",
+      "path": "/csv/subjects-list.csv",
+      "description": "Subject/course records for catalog import."
+    }
+  ]
+}

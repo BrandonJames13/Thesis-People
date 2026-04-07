@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import ScheduleModal from "../components/schedule/ScheduleModal";
+import ImportModal from "../components/common/ImportModal";
 import { useState, useRef } from "react";
 import { exportToExcel } from "../utils/exportUtils";
 import { useNotification } from "../context/NotificationContext";
@@ -19,6 +20,7 @@ export default function DashboardPage() {
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [yearFilter, setYearFilter] = useState("");
   const [lastGenTime, setLastGenTime] = useState(null);
   const genStartRef = useRef(null);
@@ -134,6 +136,12 @@ export default function DashboardPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setShowImportModal(true)}
+          >
+            ↑ Import
+          </button>
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -464,6 +472,11 @@ export default function DashboardPage() {
           }}
         />
       )}
+
+      <ImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+      />
     </div>
   );
 }
