@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 import { AddRoomModal } from "../components/modals/addRoomModal";
 
 export default function RoomsPage() {
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
 
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -34,6 +36,11 @@ export default function RoomsPage() {
   }
 
   async function addRoom(room) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("rooms")
       .insert([room])
@@ -48,12 +55,14 @@ export default function RoomsPage() {
   }
 
   async function handleDelete(id, number) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     if (!window.confirm(`Delete ${number}? This cannot be undone.`)) return;
 
-    const { error } = await supabase
-      .from("rooms")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("rooms").delete().eq("id", id);
 
     if (error) {
       alert(error.message);
@@ -65,7 +74,9 @@ export default function RoomsPage() {
   }
 
   const filtered = rooms.filter((room) => {
-    const matchSearch = room.number.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = room.number
+      .toLowerCase()
+      .includes(search.toLowerCase());
     const matchType = !typeFilter || room.type === typeFilter;
     const matchStatus = !statusFilter || room.status === statusFilter;
     return matchSearch && matchType && matchStatus;
@@ -80,7 +91,9 @@ export default function RoomsPage() {
       <div className="section-header">
         <div>
           <div className="section-title">Room Inventory</div>
-          <div className="section-subtitle">Manage lecture rooms and computer labs</div>
+          <div className="section-subtitle">
+            Manage lecture rooms and computer labs
+          </div>
         </div>
         <div className="filter-row">
           <input
@@ -95,7 +108,9 @@ export default function RoomsPage() {
             style={{ width: 140 }}
             value={typeFilter || "All Types"}
             onChange={(e) =>
-              setTypeFilter(e.target.value === "All Types" ? "" : e.target.value)
+              setTypeFilter(
+                e.target.value === "All Types" ? "" : e.target.value,
+              )
             }
           >
             <option>All Types</option>
@@ -107,7 +122,9 @@ export default function RoomsPage() {
             style={{ width: 140 }}
             value={statusFilter || "All Status"}
             onChange={(e) =>
-              setStatusFilter(e.target.value === "All Status" ? "" : e.target.value)
+              setStatusFilter(
+                e.target.value === "All Status" ? "" : e.target.value,
+              )
             }
           >
             <option>All Status</option>
@@ -115,9 +132,14 @@ export default function RoomsPage() {
             <option>Occupied</option>
             <option>Maintenance</option>
           </select>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            + Add Room
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowModal(true)}
+            >
+              + Add Room
+            </button>
+          )}
         </div>
       </div>
 
@@ -141,38 +163,52 @@ export default function RoomsPage() {
                 room.status === "Available"
                   ? "green"
                   : room.status === "Maintenance"
-                  ? "orange"
-                  : "blue";
+                    ? "orange"
+                    : "blue";
               return (
                 <div className="room-card" key={room.id}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                    }}
+                  >
                     <div className="room-number">{room.number}</div>
-                    <button
-                      onClick={() => handleDelete(room.id, room.number)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text3)",
-                        cursor: "pointer",
-                        fontSize: 16,
-                        lineHeight: 1,
-                        padding: 0,
-                      }}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleDelete(room.id, room.number)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--text3)",
+                          cursor: "pointer",
+                          fontSize: 16,
+                          lineHeight: 1,
+                          padding: 0,
+                        }}
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                   <div className="room-type">{room.type}</div>
                   <div style={{ marginBottom: 10 }}>
-                    <span className={`pill pill-${statusColor}`}>{room.status}</span>
+                    <span className={`pill pill-${statusColor}`}>
+                      {room.status}
+                    </span>
                   </div>
                   <div className="room-capacity">
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cap:</span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      Cap:
+                    </span>
                     <div className="cap-bar">
                       <div
                         className="cap-fill"
-                        style={{ width: `${Math.round((room.capacity / 50) * 100)}%` }}
+                        style={{
+                          width: `${Math.round((room.capacity / 50) * 100)}%`,
+                        }}
                       />
                     </div>
                     <span className="monospace">{room.capacity}</span>
@@ -184,7 +220,7 @@ export default function RoomsPage() {
         </div>
       </div>
 
-      {showModal && (
+      {showModal && isAdmin && (
         <AddRoomModal
           onClose={() => setShowModal(false)}
           onAdd={async (room) => {

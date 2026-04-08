@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 import { CourseModal } from "../components/modals/courseModal";
 
 export default function CoursesPage() {
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +34,11 @@ export default function CoursesPage() {
   }
 
   async function addCourse(course) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("courses")
       .insert([course])
@@ -46,6 +53,11 @@ export default function CoursesPage() {
   }
 
   async function updateCourse(id, course) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("courses")
       .update(course)
@@ -57,20 +69,18 @@ export default function CoursesPage() {
       return;
     }
 
-    setCourses(
-      courses.map((c) =>
-        c.id === id ? data[0] : c
-      )
-    );
+    setCourses(courses.map((c) => (c.id === id ? data[0] : c)));
   }
 
- async function handleDelete(id) {
+  async function handleDelete(id) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     if (!window.confirm(`Delete course?`)) return;
 
-    const { error } = await supabase
-      .from("courses")
-      .delete()
-      .eq("id", id);
+    const { error } = await supabase.from("courses").delete().eq("id", id);
 
     if (error) {
       alert(error.message);
@@ -79,7 +89,7 @@ export default function CoursesPage() {
 
     setCourses(courses.filter((c) => c.id !== id));
     showNotification(`Course deleted`);
-}
+  }
 
   console.log("Courses:", courses);
 
@@ -95,15 +105,17 @@ export default function CoursesPage() {
           <div className="section-subtitle">AY 2025–2026</div>
         </div>
 
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditCourse(null);
-            setShowModal(true);
-          }}
-        >
-          + Add Course
-        </button>
+        {isAdmin && (
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setEditCourse(null);
+              setShowModal(true);
+            }}
+          >
+            + Add Course
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -126,7 +138,8 @@ export default function CoursesPage() {
             {courses.length === 0 ? (
               <tr>
                 <td colSpan="9" className="empty-table">
-                  There are no courses yet. Click <strong>"Add Course"</strong> to add one.
+                  There are no courses yet. Click <strong>"Add Course"</strong>{" "}
+                  to add one.
                 </td>
               </tr>
             ) : (
@@ -151,22 +164,26 @@ export default function CoursesPage() {
                   </td>
 
                   <td className="actions">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        setEditCourse(c);
-                        setShowModal(true);
-                      }}
-                    >
-                      Edit
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setEditCourse(c);
+                            setShowModal(true);
+                          }}
+                        >
+                          Edit
+                        </button>
 
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => handleDelete(c.id)}
-                    >
-                      Delete
-                    </button>
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDelete(c.id)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))
@@ -175,7 +192,7 @@ export default function CoursesPage() {
         </table>
       </div>
 
-      {showModal && (
+      {showModal && isAdmin && (
         <CourseModal
           courses={courses}
           existing={editCourse}

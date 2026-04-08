@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function ConflictsPage() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function ConflictsPage() {
     reallocationLog,
   } = useConflicts();
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
 
   const { hard, soft } = detectConflicts();
   const totalHard = hard.length;
@@ -32,6 +34,11 @@ export default function ConflictsPage() {
   }
 
   const handleAutoResolve = () => {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     if (scheduleAssignments.length === 0) {
       alert("No schedule generated yet. Please generate a schedule first.");
       return;
@@ -46,7 +53,11 @@ export default function ConflictsPage() {
           <div className="section-title">Conflict Detection</div>
           <div className="section-subtitle">{subtitleText}</div>
         </div>
-        <button className="btn btn-primary" onClick={handleAutoResolve}>
+        <button
+          className="btn btn-primary"
+          onClick={handleAutoResolve}
+          disabled={!isAdmin}
+        >
           ⚙ Auto-Resolve All
         </button>
       </div>
@@ -89,7 +100,16 @@ export default function ConflictsPage() {
                 <div className="conflict-actions">
                   <button
                     className="btn btn-danger"
-                    onClick={() => resolveConflict(cf.id)}
+                    onClick={() => {
+                      if (!isAdmin) {
+                        showNotification(
+                          "Admin access required for this action.",
+                        );
+                        return;
+                      }
+                      resolveConflict(cf.id);
+                    }}
+                    disabled={!isAdmin}
                   >
                     ⚙ Localized Reallocation
                   </button>
@@ -134,14 +154,32 @@ export default function ConflictsPage() {
                   {cf.betterRoom && (
                     <button
                       className="btn btn-secondary"
-                      onClick={() => suggestBetterRoom(cf.id)}
+                      onClick={() => {
+                        if (!isAdmin) {
+                          showNotification(
+                            "Admin access required for this action.",
+                          );
+                          return;
+                        }
+                        suggestBetterRoom(cf.id);
+                      }}
+                      disabled={!isAdmin}
                     >
                       💡 Suggest Alternative
                     </button>
                   )}
                   <button
                     className="btn btn-secondary"
-                    onClick={() => dismissSoftConflict(cf.id)}
+                    onClick={() => {
+                      if (!isAdmin) {
+                        showNotification(
+                          "Admin access required for this action.",
+                        );
+                        return;
+                      }
+                      dismissSoftConflict(cf.id);
+                    }}
+                    disabled={!isAdmin}
                   >
                     ↷ Dismiss Warning
                   </button>

@@ -1,5 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useConflicts } from "../../context/ConflictContext";
+import { useAuth } from "../../context/AuthContext";
 import styles from "./Sidebar.module.css";
 
 const navItems = [
@@ -14,28 +15,36 @@ const navItems = [
   {
     section: "Management",
     items: [
-      { to: "/rooms", icon: "🏫", label: "Rooms" },
-      { to: "/faculty", icon: "👤", label: "Faculty" },
-      { to: "/courses", icon: "📚", label: "Courses" },
+      { to: "/rooms", icon: "🏫", label: "Rooms", adminOnly: true },
+      { to: "/faculty", icon: "👤", label: "Faculty", adminOnly: true },
+      { to: "/courses", icon: "📚", label: "Courses", adminOnly: true },
     ],
   },
   {
     section: "System",
     items: [
-      { to: "/algorithm", icon: "⚙", label: "Algorithm" },
-      { to: "/analytics", icon: "📊", label: "Analytics" },
+      { to: "/algorithm", icon: "⚙", label: "Algorithm", adminOnly: true },
+      { to: "/analytics", icon: "📊", label: "Analytics", adminOnly: true },
     ],
   },
 ];
 
 export default function Sidebar() {
+  const { isAdmin } = useAuth();
   const { detectConflicts } = useConflicts();
   const { hard } = detectConflicts();
   const hardCount = hard.length;
 
+  const visibleNavItems = navItems
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.adminOnly || isAdmin),
+    }))
+    .filter((group) => group.items.length > 0);
+
   return (
     <nav className={styles.nav}>
-      {navItems.map((group) => (
+      {visibleNavItems.map((group) => (
         <div key={group.section}>
           <div className={styles.section}>{group.section}</div>
           {group.items.map((item) => (
