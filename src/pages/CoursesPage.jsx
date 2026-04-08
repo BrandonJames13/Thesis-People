@@ -45,12 +45,11 @@ export default function CoursesPage() {
     setCourses([...courses, data[0]]);
   }
 
-  async function updateCourse(course) {
+  async function updateCourse(id, course) {
     const { data, error } = await supabase
       .from("courses")
       .update(course)
-      .eq("code", course.code)
-      .eq("section", course.section)
+      .eq("id", id)
       .select();
 
     if (error) {
@@ -60,31 +59,29 @@ export default function CoursesPage() {
 
     setCourses(
       courses.map((c) =>
-        c.code === course.code && c.section === course.section ? data[0] : c
+        c.id === id ? data[0] : c
       )
     );
   }
 
-  async function handleDelete(code, section) {
-    if (!window.confirm(`Delete course ${code} (${section})?`)) return;
+ async function handleDelete(id) {
+    if (!window.confirm(`Delete course?`)) return;
 
     const { error } = await supabase
       .from("courses")
       .delete()
-      .eq("code", code)
-      .eq("section", section);
+      .eq("id", id);
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    setCourses(
-      courses.filter((c) => !(c.code === code && c.section === section))
-    );
+    setCourses(courses.filter((c) => c.id !== id));
+    showNotification(`Course deleted`);
+}
 
-    showNotification(`Course ${code} deleted`);
-  }
+  console.log("Courses:", courses);
 
   if (loading) {
     return <div className="page-container">Loading courses...</div>;
@@ -166,7 +163,7 @@ export default function CoursesPage() {
 
                     <button
                       className="btn btn-danger"
-                      onClick={() => handleDelete(c.code, c.section)}
+                      onClick={() => handleDelete(c.id)}
                     >
                       Delete
                     </button>
@@ -185,7 +182,7 @@ export default function CoursesPage() {
           onClose={() => setShowModal(false)}
           onSave={async (course) => {
             if (editCourse) {
-              await updateCourse(course);
+              await updateCourse(editCourse.id, course);
               showNotification("Course updated");
             } else {
               await addCourse(course);
