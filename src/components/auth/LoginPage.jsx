@@ -84,10 +84,10 @@ export default function LoginPage() {
           <button type="submit" className={styles.btnLogin} disabled={loading}>
             {loading ? "Signing in…" : "Sign In →"}
           </button>
-
+{/*
            <p style={{ textAlign: 'center' }}>
             Don't have an account? <a href="/signup">Sign up</a>
-          </p>
+          </p> */}
         </form>
 
         <p className={styles.footerNote}>

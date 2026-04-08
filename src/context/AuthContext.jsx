@@ -6,17 +6,40 @@ const AuthContext = createContext();
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
 
+  // * CHECK FOR EXISTING SESSION ON MOUNT
+
+  function shapeUser(user) {
+    if (!user) return null;
+    const name = user.user_metadata?.name || user.email;
+    const initials = name
+      .split(" ")
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+    return {
+      id: user.id,
+      email: user.email,
+      name,
+      initials,
+      role: user.user_metadata?.user_role || user.user_metadata?.role || "faculty",
+      raw: user, //* keep raw in case you need it later
+    };
+  }
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setCurrentUser(session?.user ?? null);
-    });
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+  });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-      setCurrentUser(session?.user ?? null);
-    });
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
+    setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+  });
 
-    return () => subscription.unsubscribe();
-  }, []);
+  return () => subscription.unsubscribe();
+}, []);
+
+     console.log("AuthContext: currentUser", currentUser);
 
   // * LOGIN FUNCTION
   const login = useCallback(async (email, password) => {
