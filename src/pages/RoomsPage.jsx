@@ -205,7 +205,6 @@ export default function RoomsPage() {
                   : room.status === "Maintenance"
                     ? "orange"
                     : "blue";
-
               return (
                 <div className="room-card" key={room.id}>
                   <div
