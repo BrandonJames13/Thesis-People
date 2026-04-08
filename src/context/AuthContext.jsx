@@ -1,7 +1,22 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const AuthContext = createContext();
+
+function normalizeRole(role) {
+  const normalized = String(role || "")
+    .toLowerCase()
+    .trim();
+  if (normalized === "admin") return "admin";
+  return "faculty";
+}
 
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -22,28 +37,35 @@ export function AuthProvider({ children }) {
       email: user.email,
       name,
       initials,
-      role: user.user_metadata?.user_role || user.user_metadata?.role || "faculty",
+      role: normalizeRole(
+        user.user_metadata?.user_role || user.user_metadata?.role || "faculty",
+      ),
       raw: user, //* keep raw in case you need it later
     };
   }
 
   useEffect(() => {
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
-  });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+    });
 
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
-    setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
-  });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_, session) => {
+      setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+    });
 
-  return () => subscription.unsubscribe();
-}, []);
+    return () => subscription.unsubscribe();
+  }, []);
 
-     console.log("AuthContext: currentUser", currentUser);
+  console.log("AuthContext: currentUser", currentUser);
 
   // * LOGIN FUNCTION
   const login = useCallback(async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) return { success: false, message: error.message };
 
@@ -51,13 +73,20 @@ export function AuthProvider({ children }) {
   }, []);
 
   // * SIGN UP FUNCTION - CALLS THE CUSTOM AUTH SERVER ENDPOINT
- const signUp = useCallback(async (email, password, name) => {
-  const { error } = await supabase.auth.signUp({ email, password, options: { data: { name: name, role: "professor" } } });
-  if (error) { console.error(error.message);
-    return { success: false, message: error.message }; }
-  return { success: true }; }, []);
+  const signUp = useCallback(async (email, password, name) => {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name: name, role: "professor" } },
+    });
+    if (error) {
+      console.error(error.message);
+      return { success: false, message: error.message };
+    }
+    return { success: true };
+  }, []);
 
-// * LOGOUT FUNCTION
+  // * LOGOUT FUNCTION
 
   const logout = useCallback(async () => {
     await supabase.auth.signOut();
@@ -70,11 +99,19 @@ export function AuthProvider({ children }) {
     return null;
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ currentUser, login, signUp, logout, changePassword }}>
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      currentUser,
+      isAdmin: currentUser?.role === "admin",
+      login,
+      signUp,
+      logout,
+      changePassword,
+    }),
+    [currentUser, login, signUp, logout, changePassword],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

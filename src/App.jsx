@@ -33,12 +33,14 @@ export default function App() {
                       <Route path="/" element={<DashboardPage />} />
                       <Route path="/schedule" element={<SchedulePage />} />
                       <Route path="/conflicts" element={<ConflictsPage />} />
-                      <Route path="/rooms" element={<RoomsPage />} />
-                      <Route path="/courses" element={<CoursesPage />} />
-                      <Route path="/faculty" element={<FacultyPage />} />
-                      <Route path="/algorithm" element={<AlgorithmPage />} />
-                      <Route path="/analytics" element={<AnalyticsPage />} />
-                      <Route path="/users" element={<UserManagementPage />} />
+                      <Route element={<ProtectedRoute adminOnly />}>
+                        <Route path="/rooms" element={<RoomsPage />} />
+                        <Route path="/courses" element={<CoursesPage />} />
+                        <Route path="/faculty" element={<FacultyPage />} />
+                        <Route path="/algorithm" element={<AlgorithmPage />} />
+                        <Route path="/analytics" element={<AnalyticsPage />} />
+                        <Route path="/users" element={<UserManagementPage />} />
+                      </Route>
                     </Route>
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

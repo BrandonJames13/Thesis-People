@@ -7,6 +7,7 @@ import ImportModal from "../components/common/ImportModal";
 import { useState, useRef } from "react";
 import { exportToExcel } from "../utils/exportUtils";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function DashboardPage() {
   } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -45,6 +47,12 @@ export default function DashboardPage() {
   const progressPct =
     totalCourses > 0 ? Math.round((assignedCount / totalCourses) * 100) : 0;
   const genTimeLabel = lastGenTime !== null ? `${lastGenTime}s` : "—";
+
+  const requireAdmin = () => {
+    if (isAdmin) return true;
+    showNotification("Admin access required for this action.");
+    return false;
+  };
 
   // Dynamic algo steps
   const algoSteps = [
@@ -138,12 +146,14 @@ export default function DashboardPage() {
           </div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setShowImportModal(true)}
-          >
-            ↑ Import
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowImportModal(true)}
+            >
+              ↑ Import
+            </button>
+          )}
           <button
             className="btn btn-secondary"
             onClick={() => {
@@ -153,15 +163,18 @@ export default function DashboardPage() {
           >
             ↓ Export
           </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              genStartRef.current = performance.now();
-              setShowScheduleModal(true);
-            }}
-          >
-            ▶ Generate Schedule
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                if (!requireAdmin()) return;
+                genStartRef.current = performance.now();
+                setShowScheduleModal(true);
+              }}
+            >
+              ▶ Generate Schedule
+            </button>
+          )}
         </div>
       </div>
 
@@ -318,9 +331,11 @@ export default function DashboardPage() {
                 className="btn btn-primary"
                 style={{ justifyContent: "center" }}
                 onClick={() => {
+                  if (!requireAdmin()) return;
                   genStartRef.current = performance.now();
                   setShowScheduleModal(true);
                 }}
+                disabled={!isAdmin}
               >
                 ▶ Re-generate Schedule
               </button>
@@ -346,7 +361,11 @@ export default function DashboardPage() {
               <button
                 className="btn btn-danger"
                 style={{ justifyContent: "center" }}
-                onClick={() => setShowResetConfirm(true)}
+                onClick={() => {
+                  if (!requireAdmin()) return;
+                  setShowResetConfirm(true);
+                }}
+                disabled={!isAdmin}
               >
                 🗑 Reset All Data
               </button>
@@ -450,7 +469,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {showScheduleModal && (
+      {showScheduleModal && isAdmin && (
         <ScheduleModal
           onClose={() => {
             if (genStartRef.current) {
@@ -466,10 +485,12 @@ export default function DashboardPage() {
         />
       )}
 
-      <ImportModal
-        isOpen={showImportModal}
-        onClose={() => setShowImportModal(false)}
-      />
+      {isAdmin && (
+        <ImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
 
       <ConfirmModal
         isOpen={showResetConfirm}

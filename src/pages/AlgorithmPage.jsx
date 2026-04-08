@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 
 const WEIGHTS_KEY = "rss_soft_weights";
 
@@ -17,6 +18,7 @@ export default function AlgorithmPage() {
   const { courses, scheduleAssignments } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
 
   const [weights, setWeights] = useState(loadWeights);
 
@@ -45,6 +47,11 @@ export default function AlgorithmPage() {
   };
 
   const handleSaveConfig = () => {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     if (totalWeight !== 100) {
       showNotification(`⚠ Weights must total 100%. Currently: ${totalWeight}%`);
       return;
@@ -86,7 +93,11 @@ export default function AlgorithmPage() {
             Transparent &amp; customizable
           </div>
         </div>
-        <button className="btn btn-primary" onClick={handleSaveConfig}>
+        <button
+          className="btn btn-primary"
+          onClick={handleSaveConfig}
+          disabled={!isAdmin}
+        >
           💾 Save Config
         </button>
       </div>
