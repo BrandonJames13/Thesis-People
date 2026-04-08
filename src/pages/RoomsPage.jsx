@@ -1,45 +1,86 @@
-import { useState } from "react";
-import { useData } from "../context/DataContext";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
-import Modal from "../components/common/Modal";
+import { AddRoomModal } from "../components/modals/addRoomModal";
 
 export default function RoomsPage() {
-  const { rooms, addRoom, deleteRoom } = useData();
   const { showNotification } = useNotification();
+
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
 
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  async function fetchRooms() {
+    const { data, error } = await supabase
+      .from("rooms")
+      .select("*")
+      .order("number");
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setRooms(data);
+    setLoading(false);
+  }
+
+  async function addRoom(room) {
+    const { data, error } = await supabase
+      .from("rooms")
+      .insert([room])
+      .select();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setRooms([...rooms, data[0]]);
+  }
+
+  async function handleDelete(id, number) {
+    if (!window.confirm(`Delete ${number}? This cannot be undone.`)) return;
+
+    const { error } = await supabase
+      .from("rooms")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setRooms(rooms.filter((r) => r.id !== id));
+    showNotification(`${number} deleted.`);
+  }
+
   const filtered = rooms.filter((room) => {
-    const matchSearch = room.number
-      .toLowerCase()
-      .includes(search.toLowerCase());
+    const matchSearch = room.number.toLowerCase().includes(search.toLowerCase());
     const matchType = !typeFilter || room.type === typeFilter;
     const matchStatus = !statusFilter || room.status === statusFilter;
     return matchSearch && matchType && matchStatus;
   });
 
-  const handleDelete = (index) => {
-    const realIndex = rooms.indexOf(filtered[index]);
-    if (
-      window.confirm(
-        `Delete ${rooms[realIndex].number}? This cannot be undone.`,
-      )
-    ) {
-      deleteRoom(realIndex);
-    }
-  };
+  if (loading) {
+    return <div className="page-container">Loading rooms...</div>;
+  }
 
   return (
     <div className="page-container">
       <div className="section-header">
         <div>
           <div className="section-title">Room Inventory</div>
-          <div className="section-subtitle">
-            Manage lecture rooms and computer labs
-          </div>
+          <div className="section-subtitle">Manage lecture rooms and computer labs</div>
         </div>
         <div className="filter-row">
           <input
@@ -54,9 +95,7 @@ export default function RoomsPage() {
             style={{ width: 140 }}
             value={typeFilter || "All Types"}
             onChange={(e) =>
-              setTypeFilter(
-                e.target.value === "All Types" ? "" : e.target.value,
-              )
+              setTypeFilter(e.target.value === "All Types" ? "" : e.target.value)
             }
           >
             <option>All Types</option>
@@ -68,9 +107,7 @@ export default function RoomsPage() {
             style={{ width: 140 }}
             value={statusFilter || "All Status"}
             onChange={(e) =>
-              setStatusFilter(
-                e.target.value === "All Status" ? "" : e.target.value,
-              )
+              setStatusFilter(e.target.value === "All Status" ? "" : e.target.value)
             }
           >
             <option>All Status</option>
@@ -78,10 +115,7 @@ export default function RoomsPage() {
             <option>Occupied</option>
             <option>Maintenance</option>
           </select>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowModal(true)}
-          >
+          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             + Add Room
           </button>
         </div>
@@ -102,25 +136,19 @@ export default function RoomsPage() {
               No rooms match your search.
             </div>
           ) : (
-            filtered.map((room, i) => {
+            filtered.map((room) => {
               const statusColor =
                 room.status === "Available"
                   ? "green"
                   : room.status === "Maintenance"
-                    ? "orange"
-                    : "blue";
+                  ? "orange"
+                  : "blue";
               return (
-                <div className="room-card" key={room.number}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
+                <div className="room-card" key={room.id}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div className="room-number">{room.number}</div>
                     <button
-                      onClick={() => handleDelete(i)}
+                      onClick={() => handleDelete(room.id, room.number)}
                       style={{
                         background: "none",
                         border: "none",
@@ -137,20 +165,14 @@ export default function RoomsPage() {
                   </div>
                   <div className="room-type">{room.type}</div>
                   <div style={{ marginBottom: 10 }}>
-                    <span className={`pill pill-${statusColor}`}>
-                      {room.status}
-                    </span>
+                    <span className={`pill pill-${statusColor}`}>{room.status}</span>
                   </div>
                   <div className="room-capacity">
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      Cap:
-                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cap:</span>
                     <div className="cap-bar">
                       <div
                         className="cap-fill"
-                        style={{
-                          width: `${Math.round((room.capacity / 50) * 100)}%`,
-                        }}
+                        style={{ width: `${Math.round((room.capacity / 50) * 100)}%` }}
                       />
                     </div>
                     <span className="monospace">{room.capacity}</span>
@@ -165,93 +187,13 @@ export default function RoomsPage() {
       {showModal && (
         <AddRoomModal
           onClose={() => setShowModal(false)}
-          onAdd={(room) => {
-            addRoom(room);
+          onAdd={async (room) => {
+            await addRoom(room);
             setShowModal(false);
             showNotification("Room added successfully!");
           }}
         />
       )}
     </div>
-  );
-}
-
-function AddRoomModal({ onClose, onAdd }) {
-  const [number, setNumber] = useState("");
-  const [type, setType] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [status, setStatus] = useState("Available");
-
-  const handleSubmit = () => {
-    const cap = parseInt(capacity);
-    if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
-      alert("Please fill in all fields correctly.");
-      return;
-    }
-    onAdd({ number: number.trim(), type, capacity: cap, status });
-  };
-
-  return (
-    <Modal isOpen={true} onClose={onClose}>
-      <div
-        style={{
-          // width handled by modal
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-          + Add New Room
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Room Number (e.g. Room 104)"
-            style={{ width: "100%" }}
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-          />
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          >
-            <option value="">-- Select Type --</option>
-            <option value="Lecture">Lecture</option>
-            <option value="Computer Lab">Computer Lab</option>
-          </select>
-          <input
-            className="search-input"
-            type="number"
-            placeholder="Capacity"
-            min={1}
-            style={{ width: "100%" }}
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
-          />
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="Available">Available</option>
-            <option value="Occupied">Occupied</option>
-            <option value="Maintenance">Maintenance</option>
-          </select>
-        </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Room
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }
