@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
       name,
       initials,
       role: user.user_metadata?.user_role || user.user_metadata?.role || "faculty",
-      raw: user, // keep raw in case you need it later
+      raw: user, //* keep raw in case you need it later
     };
   }
 

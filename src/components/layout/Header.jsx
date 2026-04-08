@@ -78,9 +78,11 @@ export default function Header() {
               ▾
             </span>
           </div>
+          {/* //* User Menu Dropdown */}
           {menuOpen && (
             <div className={styles.dropdown}>
               <div className={styles.menuName}>{currentUser?.name || "—"}</div>
+              <div className={styles.menuName}>{currentUser?.email || "—"}</div>
               <div className={styles.menuRole}>
                 {currentUser?.role === "admin" ? "Administrator" : "Faculty"}
               </div>
@@ -99,7 +101,7 @@ export default function Header() {
 
 
       </div>
-
+{/* //! change password modal */}
       <Modal
         isOpen={pwModalOpen}
         onClose={() => setPwModalOpen(false)}
