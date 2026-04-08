@@ -8,7 +8,6 @@ import { NotificationProvider } from "./context/NotificationContext";
 import Layout from "./components/layout/Layout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import LoginPage from "./components/auth/LoginPage";
-import SignUpPage from "./components/auth/SignUpPage";
 import DashboardPage from "./pages/DashboardPage";
 import SchedulePage from "./pages/SchedulePage";
 import ConflictsPage from "./pages/ConflictsPage";
@@ -28,7 +27,6 @@ export default function App() {
               <NotificationProvider>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
-                  <Route path="/signup" element={<SignUpPage />} />
                   <Route element={<ProtectedRoute />}>
                     <Route element={<Layout />}>
                       <Route path="/" element={<DashboardPage />} />
