@@ -1,30 +1,103 @@
-import { useState } from "react";
-import { useData } from "../context/DataContext";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
-import Modal from "../components/common/Modal";
+import { CourseModal } from "../components/modals/courseModal";
 
 export default function CoursesPage() {
-  const { courses, addCourse, updateCourses } = useData();
   const { showNotification } = useNotification();
+
+  const [courses, setCourses] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [showModal, setShowModal] = useState(false);
   const [editCourse, setEditCourse] = useState(null);
 
-  const handleDelete = (code) => {
-    if (!window.confirm(`Delete course ${code}? This cannot be undone.`))
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  async function fetchCourses() {
+    const { data, error } = await supabase
+      .from("courses")
+      .select("*")
+      .order("code");
+
+    if (error) {
+      console.error(error);
       return;
-    updateCourses(courses.filter((c) => c.code !== code));
-    showNotification(`Course ${code} deleted.`);
-  };
+    }
+
+    setCourses(data);
+    setLoading(false);
+  }
+
+  async function addCourse(course) {
+    const { data, error } = await supabase
+      .from("courses")
+      .insert([course])
+      .select();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setCourses([...courses, data[0]]);
+  }
+
+  async function updateCourse(course) {
+    const { data, error } = await supabase
+      .from("courses")
+      .update(course)
+      .eq("code", course.code)
+      .eq("section", course.section)
+      .select();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setCourses(
+      courses.map((c) =>
+        c.code === course.code && c.section === course.section ? data[0] : c
+      )
+    );
+  }
+
+  async function handleDelete(code, section) {
+    if (!window.confirm(`Delete course ${code} (${section})?`)) return;
+
+    const { error } = await supabase
+      .from("courses")
+      .delete()
+      .eq("code", code)
+      .eq("section", section);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setCourses(
+      courses.filter((c) => !(c.code === code && c.section === section))
+    );
+
+    showNotification(`Course ${code} deleted`);
+  }
+
+  if (loading) {
+    return <div className="page-container">Loading courses...</div>;
+  }
 
   return (
     <div className="page-container">
       <div className="section-header">
         <div>
           <div className="section-title">Course Catalog</div>
-          <div className="section-subtitle">
-            CS · IT · IS programs · AY 2025–2026
-          </div>
+          <div className="section-subtitle">AY 2025–2026</div>
         </div>
+
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -37,10 +110,11 @@ export default function CoursesPage() {
       </div>
 
       <div className="card">
-        <table>
+        <table className="course-table">
           <thead>
             <tr>
               <th>Code</th>
+              <th>Section</th>
               <th>Title</th>
               <th>Program</th>
               <th>Year</th>
@@ -50,45 +124,56 @@ export default function CoursesPage() {
               <th>Actions</th>
             </tr>
           </thead>
+
           <tbody>
-            {courses.map((c) => (
-              <tr key={c.code}>
-                <td className="monospace">{c.code}</td>
-                <td>{c.title}</td>
-                <td>{c.program}</td>
-                <td>{c.year}</td>
-                <td>{c.enrolled}</td>
-                <td>{c.roomType}</td>
-                <td>
-                  <span
-                    className={`pill pill-${c.status === "Assigned" ? "green" : c.status === "Conflict" ? "red" : "orange"}`}
-                  >
-                    {c.status}
-                  </span>
+            {courses.length === 0 ? (
+              <tr>
+                <td colSpan="9" className="empty-table">
+                  There are no courses yet. Click <strong>"Add Course"</strong> to add one.
                 </td>
-                <td>
-                  <div style={{ display: "flex", gap: 6 }}>
+              </tr>
+            ) : (
+              courses.map((c) => (
+                <tr key={`${c.code}-${c.section}`}>
+                  <td>{c.code}</td>
+                  <td>{c.section}</td>
+                  <td>{c.title}</td>
+                  <td>{c.program}</td>
+                  <td>{c.year}</td>
+                  <td>{c.enrolled}</td>
+                  <td>{c.room_type}</td>
+
+                  <td>
+                    <span
+                      className={`pill ${
+                        c.status === "Assigned" ? "pill-green" : "pill-orange"
+                      }`}
+                    >
+                      {c.status}
+                    </span>
+                  </td>
+
+                  <td className="actions">
                     <button
                       className="btn btn-secondary"
-                      style={{ padding: "3px 10px", fontSize: 11 }}
                       onClick={() => {
                         setEditCourse(c);
                         setShowModal(true);
                       }}
                     >
-                      ✏ Edit
+                      Edit
                     </button>
+
                     <button
                       className="btn btn-danger"
-                      style={{ padding: "3px 10px", fontSize: 11 }}
-                      onClick={() => handleDelete(c.code)}
+                      onClick={() => handleDelete(c.code, c.section)}
                     >
-                      🗑
+                      Delete
                     </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -98,187 +183,19 @@ export default function CoursesPage() {
           courses={courses}
           existing={editCourse}
           onClose={() => setShowModal(false)}
-          onSave={(course) => {
+          onSave={async (course) => {
             if (editCourse) {
-              updateCourses(
-                courses.map((c) => (c.code === editCourse.code ? course : c)),
-              );
-              showNotification(`Course ${course.code} updated!`);
+              await updateCourse(course);
+              showNotification("Course updated");
             } else {
-              addCourse(course);
-              showNotification(`Course ${course.code} added!`);
+              await addCourse(course);
+              showNotification("Course added");
             }
+
             setShowModal(false);
           }}
         />
       )}
     </div>
-  );
-}
-
-function CourseModal({ courses, existing, onClose, onSave }) {
-  const [code, setCode] = useState(existing?.code ?? "");
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [program, setProgram] = useState(existing?.program ?? "");
-  const [year, setYear] = useState(existing?.year ?? "1st");
-  const [enrolled, setEnrolled] = useState(existing?.enrolled ?? "");
-  const [roomType, setRoomType] = useState(existing?.roomType ?? "Lecture");
-
-  const isEdit = !!existing;
-
-  const handleSubmit = () => {
-    const c = code.trim().toUpperCase();
-    const t = title.trim();
-    const e = parseInt(enrolled);
-    if (!c || !t || !program || isNaN(e) || e <= 0) {
-      alert("Please fill in all required fields correctly.");
-      return;
-    }
-    if (!isEdit && courses.find((x) => x.code === c)) {
-      alert(`Course code "${c}" already exists.`);
-      return;
-    }
-    onSave({
-      ...(existing ?? {}),
-      code: c,
-      title: t,
-      program,
-      year,
-      enrolled: e,
-      roomType,
-      status: existing?.status ?? "Pending",
-      instructor: existing?.instructor ?? "",
-      room: existing?.room ?? "",
-      time: existing?.time ?? "",
-      duration: existing?.duration ?? 0,
-      pattern: existing?.pattern ?? "",
-    });
-  };
-
-  const labelStyle = {
-    fontSize: 12,
-    fontWeight: 600,
-    color: "var(--text2)",
-    marginBottom: 4,
-    display: "block",
-  };
-
-  return (
-    <Modal isOpen={true} onClose={onClose}>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-            {isEdit ? "✏ Edit Course" : "+ Add New Course"}
-          </div>
-        </div>
-        <div
-          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
-        >
-          <div>
-            <label style={labelStyle}>Course Code *</label>
-            <input
-              className="search-input"
-              type="text"
-              placeholder="e.g. CS401"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={isEdit}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Title *</label>
-            <input
-              className="search-input"
-              type="text"
-              placeholder="e.g. Algorithms"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Program *</label>
-            <select
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={program}
-              onChange={(e) => setProgram(e.target.value)}
-            >
-              <option value="">-- Select --</option>
-              <option value="CS">CS</option>
-              <option value="IT">IT</option>
-              <option value="IS">IS</option>
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Year Level *</label>
-            <select
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-            >
-              <option value="1st">1st Year</option>
-              <option value="2nd">2nd Year</option>
-              <option value="3rd">3rd Year</option>
-              <option value="4th">4th Year</option>
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Enrolled Students *</label>
-            <input
-              className="search-input"
-              type="number"
-              min={1}
-              placeholder="e.g. 35"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={enrolled}
-              onChange={(e) => setEnrolled(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Room Type Required *</label>
-            <select
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={roomType}
-              onChange={(e) => setRoomType(e.target.value)}
-            >
-              <option value="Lecture">Lecture</option>
-              <option value="Lab">Lab</option>
-            </select>
-          </div>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            gap: 10,
-            justifyContent: "flex-end",
-            paddingTop: 4,
-            borderTop: "1px solid var(--border)",
-          }}
-        >
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            {isEdit ? "✏ Save Changes" : "+ Add Course"}
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }
