@@ -2,15 +2,16 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { CourseModal } from "../components/modals/courseModal";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function CoursesPage() {
   const { showNotification } = useNotification();
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
-
   const [showModal, setShowModal] = useState(false);
   const [editCourse, setEditCourse] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     fetchCourses();
@@ -38,7 +39,7 @@ export default function CoursesPage() {
       .select();
 
     if (error) {
-      alert(error.message);
+      showNotification(`⚠ ${error.message}`);
       return;
     }
 
@@ -54,20 +55,19 @@ export default function CoursesPage() {
       .select();
 
     if (error) {
-      alert(error.message);
+      showNotification(`⚠ ${error.message}`);
       return;
     }
 
     setCourses(
       courses.map((c) =>
-        c.code === course.code && c.section === course.section ? data[0] : c
-      )
+        c.code === course.code && c.section === course.section ? data[0] : c,
+      ),
     );
   }
 
-  async function handleDelete(code, section) {
-    if (!window.confirm(`Delete course ${code} (${section})?`)) return;
-
+  async function handleDeleteConfirm() {
+    const { code, section } = deleteTarget;
     const { error } = await supabase
       .from("courses")
       .delete()
@@ -75,15 +75,16 @@ export default function CoursesPage() {
       .eq("section", section);
 
     if (error) {
-      alert(error.message);
+      showNotification(`⚠ ${error.message}`);
+      setDeleteTarget(null);
       return;
     }
 
     setCourses(
-      courses.filter((c) => !(c.code === code && c.section === section))
+      courses.filter((c) => !(c.code === code && c.section === section)),
     );
-
-    showNotification(`Course ${code} deleted`);
+    showNotification(`Course ${code} (${section}) deleted.`);
+    setDeleteTarget(null);
   }
 
   if (loading) {
@@ -97,7 +98,6 @@ export default function CoursesPage() {
           <div className="section-title">Course Catalog</div>
           <div className="section-subtitle">AY 2025–2026</div>
         </div>
-
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -124,12 +124,12 @@ export default function CoursesPage() {
               <th>Actions</th>
             </tr>
           </thead>
-
           <tbody>
             {courses.length === 0 ? (
               <tr>
                 <td colSpan="9" className="empty-table">
-                  There are no courses yet. Click <strong>"Add Course"</strong> to add one.
+                  There are no courses yet. Click <strong>"Add Course"</strong>{" "}
+                  to add one.
                 </td>
               </tr>
             ) : (
@@ -142,17 +142,13 @@ export default function CoursesPage() {
                   <td>{c.year}</td>
                   <td>{c.enrolled}</td>
                   <td>{c.room_type}</td>
-
                   <td>
                     <span
-                      className={`pill ${
-                        c.status === "Assigned" ? "pill-green" : "pill-orange"
-                      }`}
+                      className={`pill ${c.status === "Assigned" ? "pill-green" : "pill-orange"}`}
                     >
                       {c.status}
                     </span>
                   </td>
-
                   <td className="actions">
                     <button
                       className="btn btn-secondary"
@@ -163,10 +159,9 @@ export default function CoursesPage() {
                     >
                       Edit
                     </button>
-
                     <button
                       className="btn btn-danger"
-                      onClick={() => handleDelete(c.code, c.section)}
+                      onClick={() => setDeleteTarget(c)}
                     >
                       Delete
                     </button>
@@ -191,11 +186,20 @@ export default function CoursesPage() {
               await addCourse(course);
               showNotification("Course added");
             }
-
             setShowModal(false);
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="🗑 Delete Course"
+        message={`Are you sure you want to delete ${deleteTarget?.code} (${deleteTarget?.section})? This cannot be undone.`}
+        confirmLabel="🗑 Yes, Delete"
+        danger
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

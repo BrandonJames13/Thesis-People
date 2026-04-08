@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function RoomsPage() {
   const { rooms, addRoom, deleteRoom } = useData();
@@ -11,6 +12,7 @@ export default function RoomsPage() {
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const filtered = rooms.filter((room) => {
     const matchSearch = room.number
@@ -21,15 +23,11 @@ export default function RoomsPage() {
     return matchSearch && matchType && matchStatus;
   });
 
-  const handleDelete = (index) => {
-    const realIndex = rooms.indexOf(filtered[index]);
-    if (
-      window.confirm(
-        `Delete ${rooms[realIndex].number}? This cannot be undone.`,
-      )
-    ) {
-      deleteRoom(realIndex);
-    }
+  const handleDeleteConfirm = () => {
+    const realIndex = rooms.indexOf(deleteTarget);
+    deleteRoom(realIndex);
+    showNotification(`${deleteTarget.number} deleted.`);
+    setDeleteTarget(null);
   };
 
   return (
@@ -102,7 +100,7 @@ export default function RoomsPage() {
               No rooms match your search.
             </div>
           ) : (
-            filtered.map((room, i) => {
+            filtered.map((room) => {
               const statusColor =
                 room.status === "Available"
                   ? "green"
@@ -120,7 +118,7 @@ export default function RoomsPage() {
                   >
                     <div className="room-number">{room.number}</div>
                     <button
-                      onClick={() => handleDelete(i)}
+                      onClick={() => setDeleteTarget(room)}
                       style={{
                         background: "none",
                         border: "none",
@@ -170,37 +168,43 @@ export default function RoomsPage() {
             setShowModal(false);
             showNotification("Room added successfully!");
           }}
+          showNotification={showNotification}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="🗑 Delete Room"
+        message={`Are you sure you want to delete ${deleteTarget?.number}? This cannot be undone.`}
+        confirmLabel="🗑 Yes, Delete"
+        danger
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
 
-function AddRoomModal({ onClose, onAdd }) {
+function AddRoomModal({ onClose, onAdd, showNotification }) {
   const [number, setNumber] = useState("");
   const [type, setType] = useState("");
   const [capacity, setCapacity] = useState("");
   const [status, setStatus] = useState("Available");
+  const [error, setError] = useState("");
 
   const handleSubmit = () => {
     const cap = parseInt(capacity);
     if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
-      alert("Please fill in all fields correctly.");
+      setError("Please fill in all fields correctly.");
       return;
     }
+    setError("");
     onAdd({ number: number.trim(), type, capacity: cap, status });
   };
 
   return (
     <Modal isOpen={true} onClose={onClose}>
-      <div
-        style={{
-          // width handled by modal
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
           + Add New Room
         </div>
@@ -242,6 +246,9 @@ function AddRoomModal({ onClose, onAdd }) {
             <option value="Occupied">Occupied</option>
             <option value="Maintenance">Maintenance</option>
           </select>
+          {error && (
+            <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
+          )}
         </div>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
           <button className="btn btn-secondary" onClick={onClose}>

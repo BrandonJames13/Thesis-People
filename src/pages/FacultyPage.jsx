@@ -2,17 +2,19 @@ import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
+import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function FacultyPage() {
   const { instructors, addInstructor, updateInstructors } = useData();
   const { showNotification } = useNotification();
   const [showModal, setShowModal] = useState(false);
   const [editInstructor, setEditInstructor] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const handleDelete = (name) => {
-    if (!window.confirm(`Delete instructor ${name}?`)) return;
-    updateInstructors(instructors.filter((i) => i.name !== name));
-    showNotification(`${name} removed.`);
+  const handleDeleteConfirm = () => {
+    updateInstructors(instructors.filter((i) => i.name !== deleteTarget));
+    showNotification(`${deleteTarget} removed.`);
+    setDeleteTarget(null);
   };
 
   return (
@@ -101,7 +103,7 @@ export default function FacultyPage() {
                       <button
                         className="btn btn-danger"
                         style={{ padding: "3px 10px", fontSize: 11 }}
-                        onClick={() => handleDelete(inst.name)}
+                        onClick={() => setDeleteTarget(inst.name)}
                       >
                         🗑
                       </button>
@@ -134,6 +136,16 @@ export default function FacultyPage() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title="🗑 Delete Instructor"
+        message={`Are you sure you want to delete ${deleteTarget}? This cannot be undone.`}
+        confirmLabel="🗑 Yes, Delete"
+        danger
+        onConfirm={handleDeleteConfirm}
+        onClose={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
@@ -146,10 +158,11 @@ function InstructorModal({ existing, onClose, onSave }) {
   );
   const [status, setStatus] = useState(existing?.status ?? "Active");
   const isEdit = !!existing;
+  const [formError, setFormError] = useState("");
 
   const handleSubmit = () => {
     if (!name.trim()) {
-      alert("Please enter the instructor name.");
+      setFormError("Please enter the instructor name.");
       return;
     }
     onSave({

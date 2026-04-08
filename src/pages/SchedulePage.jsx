@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useData } from "../context/DataContext";
 import { useNotification } from "../context/NotificationContext";
@@ -151,7 +150,9 @@ export default function SchedulePage() {
             style={{ width: 150 }}
             value={yearFilter || "All Years"}
             onChange={(e) =>
-              setYearFilter(e.target.value === "All Years" ? "" : e.target.value)
+              setYearFilter(
+                e.target.value === "All Years" ? "" : e.target.value,
+              )
             }
           >
             <option>All Years</option>

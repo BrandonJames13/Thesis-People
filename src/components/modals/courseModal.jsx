@@ -11,6 +11,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
   const [roomType, setRoomType] = useState(existing?.room_type ?? "Lecture");
 
   const isEdit = !!existing;
+  const [formError, setFormError] = useState("");
 
   const handleSubmit = () => {
     const c = code.trim().toUpperCase();
@@ -19,12 +20,12 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
     const e = parseInt(enrolled);
 
     if (!c || !s || !t || !program || isNaN(e) || e <= 0) {
-      alert("Please fill all fields correctly.");
+      setFormError("Please fill all fields correctly.");
       return;
     }
 
     if (!isEdit && courses.find((x) => x.code === c && x.section === s)) {
-      alert(`Course ${c} (${s}) already exists.`);
+      setFormError(`Course ${c} (${s}) already exists.`);
       return;
     }
 
@@ -55,7 +56,9 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
           {isEdit ? "✏ Edit Course" : "+ Add Course"}
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+        >
           <div>
             <label style={labelStyle}>Course Code</label>
             <input
@@ -136,6 +139,11 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
           </div>
         </div>
 
+        {formError && (
+          <div style={{ color: "var(--red)", fontSize: 12, marginBottom: 4 }}>
+            ⚠ {formError}
+          </div>
+        )}
         <div
           style={{
             display: "flex",

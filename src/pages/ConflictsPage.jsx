@@ -33,7 +33,9 @@ export default function ConflictsPage() {
 
   const handleAutoResolve = () => {
     if (scheduleAssignments.length === 0) {
-      alert("No schedule generated yet. Please generate a schedule first.");
+      showNotification(
+        "⚠ No schedule generated yet. Please generate a schedule first.",
+      );
       return;
     }
     autoResolveAll();

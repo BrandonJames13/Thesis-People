@@ -46,16 +46,14 @@ export default function AlgorithmPage() {
 
   const handleSaveConfig = () => {
     if (totalWeight !== 100) {
-      alert(
-        `Soft constraint weights must total 100%. Currently: ${totalWeight}%`,
-      );
+      showNotification(`⚠ Weights must total 100%. Currently: ${totalWeight}%`);
       return;
     }
     try {
       localStorage.setItem(WEIGHTS_KEY, JSON.stringify(weights));
       showNotification("Algorithm configuration saved ✓");
     } catch {
-      alert("Failed to save configuration.");
+      showNotification("⚠ Failed to save configuration.");
     }
   };
 

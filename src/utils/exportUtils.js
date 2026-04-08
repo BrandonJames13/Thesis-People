@@ -294,8 +294,7 @@ export function mergeUniqueInstructors(
 
 export function exportToExcel(scheduleAssignments) {
   if (scheduleAssignments.length === 0) {
-    alert("No schedule to export. Please generate a schedule first.");
-    return;
+    return false;
   }
 
   const headers = SCHEDULE_HEADERS;

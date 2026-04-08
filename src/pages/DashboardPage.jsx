@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import ScheduleModal from "../components/schedule/ScheduleModal";
+import ConfirmModal from "../components/common/ConfirmModal";
 import ImportModal from "../components/common/ImportModal";
 import { useState, useRef } from "react";
 import { exportToExcel } from "../utils/exportUtils";
@@ -21,6 +22,7 @@ export default function DashboardPage() {
   const { showNotification } = useNotification();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [yearFilter, setYearFilter] = useState("");
   const [lastGenTime, setLastGenTime] = useState(null);
   const genStartRef = useRef(null);
@@ -344,16 +346,7 @@ export default function DashboardPage() {
               <button
                 className="btn btn-danger"
                 style={{ justifyContent: "center" }}
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      "Reset all data to defaults? This cannot be undone.",
-                    )
-                  ) {
-                    resetAllData();
-                    showNotification("All data reset to defaults ✓");
-                  }
-                }}
+                onClick={() => setShowResetConfirm(true)}
               >
                 🗑 Reset All Data
               </button>
@@ -476,6 +469,19 @@ export default function DashboardPage() {
       <ImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
+      />
+
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        title="🗑 Reset All Data"
+        message="Are you sure you want to reset all data to defaults? This cannot be undone."
+        confirmLabel="🗑 Yes, Reset"
+        danger
+        onConfirm={() => {
+          resetAllData();
+          showNotification("All data reset to defaults ✓");
+        }}
+        onClose={() => setShowResetConfirm(false)}
       />
     </div>
   );
