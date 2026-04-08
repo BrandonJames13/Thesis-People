@@ -57,6 +57,8 @@ export default function Header() {
         >
           {theme === "dark" ? "🌙" : "🌞"}
         </button>
+
+        {/* //! User Menu */}
         <div className={styles.userWrap} ref={menuRef}>
           <div
             className={styles.userTrigger}
@@ -94,6 +96,8 @@ export default function Header() {
             </div>
           )}
         </div>
+
+
       </div>
 
       <Modal
