@@ -54,7 +54,7 @@ export default function CoursesPage() {
       return;
     }
 
-    setCourses([...courses, data[0]]);
+    setCourses((current) => [...current, data[0]]);
   }
 
   async function updateCourse(id, course) {
@@ -74,7 +74,7 @@ export default function CoursesPage() {
       return;
     }
 
-    setCourses(courses.map((c) => (c.id === id ? data[0] : c)));
+    setCourses((current) => current.map((c) => (c.id === id ? data[0] : c)));
   }
 
   async function handleDeleteConfirm() {
@@ -101,6 +101,7 @@ export default function CoursesPage() {
     );
     setDeleteTarget(null);
   }
+
   if (loading) {
     return <div className="page-container">Loading courses...</div>;
   }
@@ -110,7 +111,7 @@ export default function CoursesPage() {
       <div className="section-header">
         <div>
           <div className="section-title">Course Catalog</div>
-          <div className="section-subtitle">AY 2025–2026</div>
+          <div className="section-subtitle">AY 2025-2026</div>
         </div>
 
         {isAdmin && (
@@ -151,7 +152,7 @@ export default function CoursesPage() {
               </tr>
             ) : (
               courses.map((c) => (
-                <tr key={`${c.code}-${c.section}`}>
+                <tr key={c.id}>
                   <td>{c.code}</td>
                   <td>{c.section}</td>
                   <td>{c.title}</td>
@@ -178,7 +179,6 @@ export default function CoursesPage() {
                         >
                           Edit
                         </button>
-
                         <button
                           className="btn btn-danger"
                           onClick={() => setDeleteTarget(c)}

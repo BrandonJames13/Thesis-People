@@ -503,6 +503,19 @@ export default function DashboardPage() {
         }}
         onClose={() => setShowResetConfirm(false)}
       />
+
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        title="🗑 Reset All Data"
+        message="Are you sure you want to reset all data to defaults? This cannot be undone."
+        confirmLabel="🗑 Yes, Reset"
+        danger
+        onConfirm={() => {
+          resetAllData();
+          showNotification("All data reset to defaults ✓");
+        }}
+        onClose={() => setShowResetConfirm(false)}
+      />
     </div>
   );
 }
