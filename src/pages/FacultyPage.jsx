@@ -1,28 +1,94 @@
-import { useState } from "react";
-import { useData } from "../context/DataContext";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
-import Modal from "../components/common/Modal";
+import { InstructorModal } from "../components/modals/InstructorModal";
 
 export default function FacultyPage() {
-  const { instructors, addInstructor, updateInstructors } = useData();
   const { showNotification } = useNotification();
+
+  const [instructors, setInstructors] = useState([]);
+  const [loading, setLoading] = useState(true);
+
   const [showModal, setShowModal] = useState(false);
   const [editInstructor, setEditInstructor] = useState(null);
 
-  const handleDelete = (name) => {
+  useEffect(() => {
+    fetchInstructors();
+  }, []);
+
+  async function fetchInstructors() {
+    const { data, error } = await supabase
+      .from("instructors")
+      .select("*")
+      .order("name");
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    setInstructors(data);
+    setLoading(false);
+  }
+
+  async function addInstructor(instructor) {
+    const { data, error } = await supabase
+      .from("instructors")
+      .insert([instructor])
+      .select();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setInstructors([...instructors, data[0]]);
+  }
+
+  async function updateInstructor(id, instructor) {
+    const { data, error } = await supabase
+      .from("instructors")
+      .update(instructor)
+      .eq("id", id)
+      .select();
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setInstructors(
+      instructors.map((i) => (i.id === id ? data[0] : i))
+    );
+  }
+
+  async function handleDelete(id, name) {
     if (!window.confirm(`Delete instructor ${name}?`)) return;
-    updateInstructors(instructors.filter((i) => i.name !== name));
+
+    const { error } = await supabase
+      .from("instructors")
+      .delete()
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setInstructors(instructors.filter((i) => i.id !== id));
     showNotification(`${name} removed.`);
-  };
+  }
+
+  if (loading) {
+    return <div className="page-container">Loading instructors...</div>;
+  }
 
   return (
     <div className="page-container">
       <div className="section-header">
         <div>
           <div className="section-title">Faculty Management</div>
-          <div className="section-subtitle">
-            Teaching load &amp; availability tracking
-          </div>
+          <div className="section-subtitle">Teaching load & availability tracking</div>
         </div>
         <button
           className="btn btn-primary"
@@ -40,8 +106,7 @@ export default function FacultyPage() {
           <thead>
             <tr>
               <th>Instructor</th>
-              <th>Assigned Courses</th>
-              <th>Load</th>
+              <th>Department</th>
               <th>Availability</th>
               <th>Status</th>
               <th>Actions</th>
@@ -50,39 +115,18 @@ export default function FacultyPage() {
           <tbody>
             {instructors.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  style={{
-                    textAlign: "center",
-                    padding: 40,
-                    color: "var(--text3)",
-                  }}
-                >
-                  No instructors added yet. Click "+ Add Instructor" to add one.
+                <td colSpan={5} className="empty-table">
+                  No instructors yet. Click <strong>"Add Instructor"</strong> to add one.
                 </td>
               </tr>
             ) : (
-              instructors.map((inst, i) => (
-                <tr key={i}>
-                  <td>
-                    <strong>{inst.name}</strong>
-                  </td>
-                  <td className="monospace" style={{ fontSize: 12 }}>
-                    {inst.courses.length > 0 ? (
-                      inst.courses.join(", ")
-                    ) : (
-                      <span style={{ color: "var(--text3)" }}>None</span>
-                    )}
-                  </td>
-                  <td>
-                    {inst.courses.length} course
-                    {inst.courses.length !== 1 ? "s" : ""}
-                  </td>
+              instructors.map((inst) => (
+                <tr key={inst.id}>
+                  <td><strong>{inst.name}</strong></td>
+                  <td>{inst.department}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability}</td>
                   <td>
-                    <span
-                      className={`pill pill-${inst.status === "Active" ? "green" : "red"}`}
-                    >
+                    <span className={`pill pill-${inst.status === "Active" ? "green" : "red"}`}>
                       {inst.status}
                     </span>
                   </td>
@@ -90,20 +134,18 @@ export default function FacultyPage() {
                     <div style={{ display: "flex", gap: 6 }}>
                       <button
                         className="btn btn-secondary"
-                        style={{ padding: "3px 10px", fontSize: 11 }}
                         onClick={() => {
                           setEditInstructor(inst);
                           setShowModal(true);
                         }}
                       >
-                        ✏ Edit
+                        Edit
                       </button>
                       <button
                         className="btn btn-danger"
-                        style={{ padding: "3px 10px", fontSize: 11 }}
-                        onClick={() => handleDelete(inst.name)}
+                        onClick={() => handleDelete(inst.id, inst.name)}
                       >
-                        🗑
+                        Delete
                       </button>
                     </div>
                   </td>
@@ -118,16 +160,12 @@ export default function FacultyPage() {
         <InstructorModal
           existing={editInstructor}
           onClose={() => setShowModal(false)}
-          onSave={(inst) => {
+          onSave={async (instructor) => {
             if (editInstructor) {
-              updateInstructors(
-                instructors.map((i) =>
-                  i.name === editInstructor.name ? inst : i,
-                ),
-              );
-              showNotification(`${inst.name} updated!`);
+              await updateInstructor(editInstructor.id, instructor);
+              showNotification(`${instructor.name} updated!`);
             } else {
-              addInstructor(inst);
+              await addInstructor(instructor);
               showNotification("Instructor added successfully!");
             }
             setShowModal(false);
@@ -135,124 +173,5 @@ export default function FacultyPage() {
         />
       )}
     </div>
-  );
-}
-
-function InstructorModal({ existing, onClose, onSave }) {
-  const [name, setName] = useState(existing?.name ?? "");
-  const [dept, setDept] = useState(existing?.department ?? "");
-  const [availability, setAvailability] = useState(
-    existing?.availability ?? "",
-  );
-  const [status, setStatus] = useState(existing?.status ?? "Active");
-  const isEdit = !!existing;
-
-  const handleSubmit = () => {
-    if (!name.trim()) {
-      alert("Please enter the instructor name.");
-      return;
-    }
-    onSave({
-      ...(existing ?? {}),
-      name: name.trim(),
-      department: dept || "TBD",
-      availability: availability.trim() || "TBD",
-      courses: existing?.courses ?? [],
-      status,
-    });
-  };
-
-  const labelStyle = {
-    fontSize: 12,
-    fontWeight: 600,
-    color: "var(--text2)",
-    marginBottom: 4,
-    display: "block",
-  };
-
-  return (
-    <Modal isOpen={true} onClose={onClose}>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 16,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}
-        >
-          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
-            {isEdit ? "✏ Edit Instructor" : "+ Add New Instructor"}
-          </div>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div>
-            <label style={labelStyle}>Full Name *</label>
-            <input
-              className="search-input"
-              type="text"
-              placeholder="e.g. Reyes, A."
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Department</label>
-            <select
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={dept}
-              onChange={(e) => setDept(e.target.value)}
-            >
-              <option value="">-- Select Department --</option>
-              <option value="CS">Computer Science (CS)</option>
-              <option value="IT">Information Technology (IT)</option>
-              <option value="IS">Information Systems (IS)</option>
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>Availability</label>
-            <textarea
-              className="search-input"
-              placeholder="e.g. MWF All Day, TTH Morning"
-              style={{
-                width: "100%",
-                height: 70,
-                resize: "none",
-                boxSizing: "border-box",
-              }}
-              value={availability}
-              onChange={(e) => setAvailability(e.target.value)}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Status</label>
-            <select
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            {isEdit ? "✏ Save Changes" : "+ Add Instructor"}
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }
