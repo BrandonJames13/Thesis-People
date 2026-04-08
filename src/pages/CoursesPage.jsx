@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
+import { useAuth } from "../context/AuthContext";
 import { CourseModal } from "../components/modals/courseModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
 export default function CoursesPage() {
   const { showNotification } = useNotification();
+  const { isAdmin } = useAuth();
 
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -33,6 +35,11 @@ export default function CoursesPage() {
   }
 
   async function addCourse(course) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("courses")
       .insert([course])
@@ -46,7 +53,12 @@ export default function CoursesPage() {
     setCourses([...courses, data[0]]);
   }
 
-  async function updateCourse(course) {
+  async function updateCourse(id, course) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
     const { data, error } = await supabase
       .from("courses")
       .update(course)
@@ -59,20 +71,18 @@ export default function CoursesPage() {
       return;
     }
 
-    setCourses(
-      courses.map((c) =>
-        c.code === course.code && c.section === course.section ? data[0] : c,
-      ),
-    );
+    setCourses(courses.map((c) => (c.id === id ? data[0] : c)));
   }
 
-  async function handleDeleteConfirm() {
-    const { code, section } = deleteTarget;
-    const { error } = await supabase
-      .from("courses")
-      .delete()
-      .eq("code", code)
-      .eq("section", section);
+  async function handleDelete(id) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
+    if (!window.confirm(`Delete course?`)) return;
+
+    const { error } = await supabase.from("courses").delete().eq("id", id);
 
     if (error) {
       showNotification(`⚠ ${error.message}`);
@@ -98,15 +108,18 @@ export default function CoursesPage() {
           <div className="section-title">Course Catalog</div>
           <div className="section-subtitle">AY 2025–2026</div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setEditCourse(null);
-            setShowModal(true);
-          }}
-        >
-          + Add Course
-        </button>
+
+        {isAdmin && (
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setEditCourse(null);
+              setShowModal(true);
+            }}
+          >
+            + Add Course
+          </button>
+        )}
       </div>
 
       <div className="card">
@@ -150,21 +163,26 @@ export default function CoursesPage() {
                     </span>
                   </td>
                   <td className="actions">
-                    <button
-                      className="btn btn-secondary"
-                      onClick={() => {
-                        setEditCourse(c);
-                        setShowModal(true);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="btn btn-danger"
-                      onClick={() => setDeleteTarget(c)}
-                    >
-                      Delete
-                    </button>
+                    {isAdmin && (
+                      <>
+                        <button
+                          className="btn btn-secondary"
+                          onClick={() => {
+                            setEditCourse(c);
+                            setShowModal(true);
+                          }}
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="btn btn-danger"
+                          onClick={() => handleDelete(c.id)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))
@@ -173,7 +191,7 @@ export default function CoursesPage() {
         </table>
       </div>
 
-      {showModal && (
+      {showModal && isAdmin && (
         <CourseModal
           courses={courses}
           existing={editCourse}

@@ -1,18 +1,89 @@
-import { useState } from "react";
-import { useData } from "../context/DataContext";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
-import Modal from "../components/common/Modal";
 import ConfirmModal from "../components/common/ConfirmModal";
+import { AddRoomModal } from "../components/modals/addRoomModal";
 
 export default function RoomsPage() {
-  const { rooms, addRoom, deleteRoom } = useData();
+  const { isAdmin } = useAuth();
   const { showNotification } = useNotification();
 
+  const [rooms, setRooms] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  async function fetchRooms() {
+    try {
+      const { data, error } = await supabase
+        .from("rooms")
+        .select("*")
+        .order("number");
+
+      if (error) {
+        console.error(error);
+        showNotification(`⚠ ${error.message}`);
+        return;
+      }
+
+      setRooms(data ?? []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function addRoom(room) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from("rooms")
+      .insert([room])
+      .select();
+
+    if (error) {
+      showNotification(`⚠ ${error.message}`);
+      return false;
+    }
+
+    setRooms((current) => [...current, ...(data ?? [])]);
+    return true;
+  }
+
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("rooms")
+      .delete()
+      .eq("id", deleteTarget.id);
+
+    if (error) {
+      showNotification(`⚠ ${error.message}`);
+      return;
+    }
+
+    setRooms((current) =>
+      current.filter((room) => room.id !== deleteTarget.id),
+    );
+    showNotification(`${deleteTarget.number} deleted.`);
+    setDeleteTarget(null);
+  }
 
   const filtered = rooms.filter((room) => {
     const matchSearch = room.number
@@ -23,12 +94,9 @@ export default function RoomsPage() {
     return matchSearch && matchType && matchStatus;
   });
 
-  const handleDeleteConfirm = () => {
-    const realIndex = rooms.indexOf(deleteTarget);
-    deleteRoom(realIndex);
-    showNotification(`${deleteTarget.number} deleted.`);
-    setDeleteTarget(null);
-  };
+  if (loading) {
+    return <div className="page-container">Loading rooms...</div>;
+  }
 
   return (
     <div className="page-container">
@@ -76,12 +144,14 @@ export default function RoomsPage() {
             <option>Occupied</option>
             <option>Maintenance</option>
           </select>
-          <button
-            className="btn btn-primary"
-            onClick={() => setShowModal(true)}
-          >
-            + Add Room
-          </button>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setShowModal(true)}
+            >
+              + Add Room
+            </button>
+          )}
         </div>
       </div>
 
@@ -107,8 +177,9 @@ export default function RoomsPage() {
                   : room.status === "Maintenance"
                     ? "orange"
                     : "blue";
+
               return (
-                <div className="room-card" key={room.number}>
+                <div className="room-card" key={room.id}>
                   <div
                     style={{
                       display: "flex",
@@ -117,21 +188,23 @@ export default function RoomsPage() {
                     }}
                   >
                     <div className="room-number">{room.number}</div>
-                    <button
-                      onClick={() => setDeleteTarget(room)}
-                      style={{
-                        background: "none",
-                        border: "none",
-                        color: "var(--text3)",
-                        cursor: "pointer",
-                        fontSize: 16,
-                        lineHeight: 1,
-                        padding: 0,
-                      }}
-                      title="Delete"
-                    >
-                      ✕
-                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setDeleteTarget(room)}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--text3)",
+                          cursor: "pointer",
+                          fontSize: 16,
+                          lineHeight: 1,
+                          padding: 0,
+                        }}
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
+                    )}
                   </div>
                   <div className="room-type">{room.type}</div>
                   <div style={{ marginBottom: 10 }}>
@@ -160,15 +233,17 @@ export default function RoomsPage() {
         </div>
       </div>
 
-      {showModal && (
+      {showModal && isAdmin && (
         <AddRoomModal
           onClose={() => setShowModal(false)}
-          onAdd={(room) => {
-            addRoom(room);
+          onAdd={async (room) => {
+            const saved = await addRoom(room);
+
+            if (!saved) return;
+
             setShowModal(false);
             showNotification("Room added successfully!");
           }}
-          showNotification={showNotification}
         />
       )}
 
@@ -182,108 +257,5 @@ export default function RoomsPage() {
         onClose={() => setDeleteTarget(null)}
       />
     </div>
-  );
-}
-
-function AddRoomModal({ onClose, onAdd, showNotification }) {
-  const [number, setNumber] = useState("");
-  const [type, setType] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [status, setStatus] = useState("Available");
-  const [error, setError] = useState("");
-
-  const handleSubmit = () => {
-    const cap = parseInt(capacity);
-    if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
-      setError("Please fill in all fields correctly.");
-      return;
-    }
-
-    // Capacity limits based on room type
-    if (type === "Computer Lab" && (cap < 30 || cap > 35)) {
-      setError("Computer Lab capacity must be between 30 and 35.");
-      return;
-    }
-    if (type === "Lecture" && (cap < 40 || cap > 45)) {
-      setError("Lecture room capacity must be between 40 and 45.");
-      return;
-    }
-
-    setError("");
-    onAdd({ number: number.trim(), type, capacity: cap, status });
-  };
-
-  return (
-    <Modal isOpen={true} onClose={onClose}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-          + Add New Room
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Room Number (e.g. Room 104)"
-            style={{ width: "100%" }}
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-          />
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
-          >
-            <option value="">-- Select Type --</option>
-            <option value="Lecture">Lecture</option>
-            <option value="Computer Lab">Computer Lab</option>
-          </select>
-          <input
-            className="search-input"
-            type="number"
-            placeholder={
-              type === "Computer Lab"
-                ? "Capacity (30–35)"
-                : type === "Lecture"
-                  ? "Capacity (40–45)"
-                  : "Capacity"
-            }
-            min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
-            max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
-            style={{ width: "100%" }}
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
-          />
-          {type && (
-            <div style={{ fontSize: 11, color: "var(--text3)" }}>
-              {type === "Computer Lab"
-                ? "⚠ Lab capacity: min 30, max 35"
-                : "⚠ Lecture capacity: min 40, max 45"}
-            </div>
-          )}
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="Available">Available</option>
-            <option value="Occupied">Occupied</option>
-            <option value="Maintenance">Maintenance</option>
-          </select>
-          {error && (
-            <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
-          )}
-        </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button className="btn btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Room
-          </button>
-        </div>
-      </div>
-    </Modal>
   );
 }
