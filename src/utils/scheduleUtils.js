@@ -1,17 +1,32 @@
-import { coursesOverlap, formatTime, parseCourseTime } from "./timeUtils";
-import { patternDaysMap } from "../data/constants";
+import { coursesOverlap, formatTime } from "./timeUtils";
 
 // Load saved soft constraint weights from localStorage
 function getSoftWeights() {
+  const defaults = {
+    timePreference: 30,
+    roomType: 25,
+    compactness: 25,
+    balance: 20,
+  };
+
   try {
     const raw = localStorage.getItem("rss_soft_weights");
     if (raw) return JSON.parse(raw);
-  } catch { }
-  return { timePreference: 30, roomType: 25, compactness: 25, balance: 20 };
+  } catch {
+    return defaults;
+  }
+
+  return defaults;
 }
 
 // Score a candidate assignment using soft constraint weights
-function scoreSoftConstraints(course, room, slotTime, existingAssignments, weights) {
+function scoreSoftConstraints(
+  course,
+  room,
+  slotTime,
+  existingAssignments,
+  weights,
+) {
   let score = 0;
 
   // Room type matching (weight: roomType)
@@ -46,7 +61,8 @@ export function runAutoSchedule({
   activeDays,
 }) {
   if (duration <= 0) return { error: "Please enter a valid duration." };
-  if (activeDays.length === 0) return { error: "Please select at least one active day." };
+  if (activeDays.length === 0)
+    return { error: "Please select at least one active day." };
 
   const weights = getSoftWeights();
   const stepMins = Math.round(duration * 60);
@@ -63,7 +79,9 @@ export function runAutoSchedule({
     sm = next % 60;
   }
   if (slots.length === 0) {
-    return { error: "No valid time slots in that range for the selected duration." };
+    return {
+      error: "No valid time slots in that range for the selected duration.",
+    };
   }
 
   const newRooms = rooms.map((r) => ({ ...r }));
@@ -121,7 +139,7 @@ export function runAutoSchedule({
 
         // Hard constraint: no double booking in this room at this slot
         const hasRoomConflict = newAssignments.some(
-          (a) => a.room === room.number && coursesOverlap(a, testCourse)
+          (a) => a.room === room.number && coursesOverlap(a, testCourse),
         );
         if (hasRoomConflict) continue;
 
@@ -131,14 +149,21 @@ export function runAutoSchedule({
           const hasInstructorConflict = newAssignments.some(
             (a) =>
               a.instructor &&
-              a.instructor.trim().toLowerCase() === instructorName.trim().toLowerCase() &&
-              coursesOverlap(a, testCourse)
+              a.instructor.trim().toLowerCase() ===
+                instructorName.trim().toLowerCase() &&
+              coursesOverlap(a, testCourse),
           );
           if (hasInstructorConflict) continue;
         }
 
         // Score using soft constraints
-        const score = scoreSoftConstraints(course, room, slot, newAssignments, weights);
+        const score = scoreSoftConstraints(
+          course,
+          room,
+          slot,
+          newAssignments,
+          weights,
+        );
         if (score > bestScore) {
           bestScore = score;
           bestRoom = room;
@@ -153,14 +178,20 @@ export function runAutoSchedule({
       let assignedInstructor = course.instructor || "";
       if (!assignedInstructor && instructors.length > 0) {
         const candidateTime = `${pattern} ${formatTime(bestSlot)}`;
-        const testCourse = { ...course, time: candidateTime, duration, pattern };
+        const testCourse = {
+          ...course,
+          time: candidateTime,
+          duration,
+          pattern,
+        };
         const freeInstructor = instructors.find((inst) => {
           // Check instructor not already scheduled at this time
           return !newAssignments.some(
             (a) =>
               a.instructor &&
-              a.instructor.trim().toLowerCase() === inst.name.trim().toLowerCase() &&
-              coursesOverlap(a, testCourse)
+              a.instructor.trim().toLowerCase() ===
+                inst.name.trim().toLowerCase() &&
+              coursesOverlap(a, testCourse),
           );
         });
         if (freeInstructor) assignedInstructor = freeInstructor.name;
@@ -205,7 +236,11 @@ export function checkManualConflict({
   scheduleAssignments,
 }) {
   if (!courseCode || !roomName || !startTime) {
-    return { ok: false, type: "error", text: "⚠ Please fill in Course, Room, and Start Time first." };
+    return {
+      ok: false,
+      type: "error",
+      text: "⚠ Please fill in Course, Room, and Start Time first.",
+    };
   }
   const testCourse = {
     time: `${pattern} ${formatTime(startTime)}`,
@@ -214,13 +249,14 @@ export function checkManualConflict({
     room: roomName,
   };
   const conflicting = scheduleAssignments.filter(
-    (a) => a.room === roomName && coursesOverlap(a, testCourse)
+    (a) => a.room === roomName && coursesOverlap(a, testCourse),
   );
   if (conflicting.length > 0) {
     return {
       ok: false,
       type: "error",
-      text: "⚠ Room conflict with: " + conflicting.map((a) => a.code).join(", "),
+      text:
+        "⚠ Room conflict with: " + conflicting.map((a) => a.code).join(", "),
     };
   }
   const [h, m] = startTime.split(":").map(Number);

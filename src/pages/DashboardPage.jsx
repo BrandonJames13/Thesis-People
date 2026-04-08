@@ -11,21 +11,14 @@ import { useAuth } from "../context/AuthContext";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const {
-    rooms,
-    courses,
-    assignments,
-    conflicts,
-    scheduleAssignments,
-    resetAllData,
-  } = useData();
+  const { rooms, courses, assignments, scheduleAssignments, resetAllData } =
+    useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [yearFilter, setYearFilter] = useState("");
   const [lastGenTime, setLastGenTime] = useState(null);
   const genStartRef = useRef(null);
 

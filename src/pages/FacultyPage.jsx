@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
@@ -15,11 +15,7 @@ export default function FacultyPage() {
   const [editInstructor, setEditInstructor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    fetchInstructors();
-  }, []);
-
-  async function fetchInstructors() {
+  const fetchInstructors = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("instructors")
@@ -36,7 +32,11 @@ export default function FacultyPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [showNotification]);
+
+  useEffect(() => {
+    fetchInstructors();
+  }, [fetchInstructors]);
 
   async function addInstructor(instructor) {
     if (!isAdmin) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
@@ -15,11 +15,7 @@ export default function CoursesPage() {
   const [editCourse, setEditCourse] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    fetchCourses();
-  }, []);
-
-  async function fetchCourses() {
+  const fetchCourses = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("courses")
@@ -36,7 +32,11 @@ export default function CoursesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [showNotification]);
+
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
 
   async function addCourse(course) {
     if (!isAdmin) {
@@ -179,7 +179,6 @@ export default function CoursesPage() {
                         >
                           Edit
                         </button>
-
                         <button
                           className="btn btn-danger"
                           onClick={() => setDeleteTarget(c)}

@@ -15,7 +15,9 @@ export function ThemeProvider({ children }) {
     document.body.classList.toggle("light", theme === "light");
     try {
       localStorage.setItem("theme", theme);
-    } catch {}
+    } catch {
+      return;
+    }
   }, [theme]);
 
   const toggleTheme = () => {

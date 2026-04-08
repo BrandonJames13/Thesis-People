@@ -7,11 +7,21 @@ import { useAuth } from "../context/AuthContext";
 const WEIGHTS_KEY = "rss_soft_weights";
 
 function loadWeights() {
+  const defaults = {
+    timePreference: 30,
+    roomType: 25,
+    compactness: 25,
+    balance: 20,
+  };
+
   try {
     const raw = localStorage.getItem(WEIGHTS_KEY);
     if (raw) return JSON.parse(raw);
-  } catch {}
-  return { timePreference: 30, roomType: 25, compactness: 25, balance: 20 };
+  } catch {
+    return defaults;
+  }
+
+  return defaults;
 }
 
 export default function AlgorithmPage() {

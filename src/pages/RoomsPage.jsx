@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
@@ -24,11 +24,7 @@ export default function RoomsPage() {
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  useEffect(() => {
-    fetchRooms();
-  }, []);
-
-  async function fetchRooms() {
+  const fetchRooms = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from("rooms")
@@ -45,7 +41,11 @@ export default function RoomsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [showNotification]);
+
+  useEffect(() => {
+    fetchRooms();
+  }, [fetchRooms]);
 
   async function addRoom(room) {
     if (!isAdmin) {
