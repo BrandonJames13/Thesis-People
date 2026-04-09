@@ -24,7 +24,9 @@ function loadFromStorage() {
 function saveToStorage(data) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {}
+  } catch {
+    return;
+  }
 }
 
 const DataContext = createContext();
@@ -112,7 +114,9 @@ export function DataProvider({ children }) {
   const resetAllData = useCallback(() => {
     try {
       localStorage.removeItem(STORAGE_KEY);
-    } catch {}
+    } catch {
+      return;
+    }
     setCourses(initialCourses.map((c) => ({ ...c })));
     setRooms(initialRooms.map((r) => ({ ...r })));
     setInstructors([]);

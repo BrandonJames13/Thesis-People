@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
@@ -13,6 +13,7 @@ const adminSupabase = createClient(
 export default function UserManagementPage() {
   const { currentUser } = useAuth();
   const { showNotification } = useNotification();
+  const isAdmin = currentUser?.role === "admin";
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,7 +21,41 @@ export default function UserManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
 
-  if (currentUser?.role !== "admin") {
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    const { data, error } = await adminSupabase.auth.admin.listUsers();
+    if (error) {
+      showNotification(`⚠ ${error.message}`);
+      setLoading(false);
+      return;
+    }
+    setUsers(data.users || []);
+    setLoading(false);
+  }, [showNotification]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+
+    let isMounted = true;
+    adminSupabase.auth.admin.listUsers().then(({ data, error }) => {
+      if (!isMounted) return;
+
+      if (error) {
+        showNotification(`⚠ ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      setUsers(data.users || []);
+      setLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAdmin, showNotification]);
+
+  if (!isAdmin) {
     return (
       <div className="page-container">
         <div className="card" style={{ textAlign: "center", padding: 60 }}>
@@ -34,22 +69,6 @@ export default function UserManagementPage() {
         </div>
       </div>
     );
-  }
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  async function fetchUsers() {
-    setLoading(true);
-    const { data, error } = await adminSupabase.auth.admin.listUsers();
-    if (error) {
-      showNotification(`⚠ ${error.message}`);
-      setLoading(false);
-      return;
-    }
-    setUsers(data.users || []);
-    setLoading(false);
   }
 
   async function handleDeleteUser() {
