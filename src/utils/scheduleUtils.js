@@ -1,5 +1,61 @@
 import { coursesOverlap, formatTime } from "./timeUtils";
 
+const DEFAULT_SECTION = "A";
+
+function normalizeIdentityPart(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+export function getAssignmentSubjectCode(row) {
+  return String(row?.code ?? row?.subjectCode ?? row?.subject_code ?? "")
+    .trim()
+    .toUpperCase();
+}
+
+export function getAssignmentSection(row) {
+  const section = String(row?.section ?? "").trim();
+  return section || DEFAULT_SECTION;
+}
+
+export function getAssignmentSectionId(row) {
+  const explicit = String(row?.sectionId ?? row?.section_id ?? "").trim();
+  if (explicit) return explicit;
+
+  const code = getAssignmentSubjectCode(row);
+  const section = getAssignmentSection(row);
+  if (!code) return "";
+  return `${code}::${section}`;
+}
+
+export function getAssignmentIdentityKey(row) {
+  const assignmentId = String(
+    row?.assignmentId ?? row?.assignment_id ?? "",
+  ).trim();
+  if (assignmentId) return `ASSIGNMENT:${normalizeIdentityPart(assignmentId)}`;
+
+  const sectionId = getAssignmentSectionId(row);
+  if (sectionId) return `SECTION:${normalizeIdentityPart(sectionId)}`;
+
+  const code = normalizeIdentityPart(
+    row?.code ?? row?.subjectCode ?? row?.subject_code,
+  );
+  const section = normalizeIdentityPart(row?.section ?? DEFAULT_SECTION);
+  const academicYear = normalizeIdentityPart(
+    row?.academicYear ?? row?.academic_year,
+  );
+  const semester = normalizeIdentityPart(row?.semester);
+
+  return `COMPOUND:${code}|${section}|${academicYear}|${semester}`;
+}
+
+export function formatAssignmentLabel(row) {
+  const code = getAssignmentSubjectCode(row) || "UNKNOWN";
+  const section = getAssignmentSection(row);
+  return `${code}-${section}`;
+}
+
 // Load saved soft constraint weights from localStorage
 function getSoftWeights() {
   const defaults = {
@@ -85,8 +141,8 @@ export function runAutoSchedule({
   }
 
   const newRooms = rooms.map((r) => ({ ...r }));
-  const newCourses = courses.map((c) => ({ ...c }));
-  const newAssignments = [...scheduleAssignments.map((a) => ({ ...a }))];
+  const baseCourses = courses.map((c) => ({ ...c }));
+  const newAssignments = [];
 
   // Build a map of which instructor teaches which courses already
   const instructorLoad = {};
@@ -94,26 +150,24 @@ export function runAutoSchedule({
     instructorLoad[inst.name.trim().toLowerCase()] = inst;
   });
 
-  // Reset all courses to Pending so re-generation works correctly
-  newCourses.forEach((c) => {
-    c.status = "Pending";
-    c.room = "";
-    c.time = "";
-    c.pattern = "";
-    c.instructor = c.instructor || "";
-  });
-  // Clear existing assignments so we rebuild from scratch
-  newAssignments.length = 0;
+  // Work from clean assignment rows instead of mutating source course rows in-place.
+  const pending = baseCourses.map((c) => ({
+    ...c,
+    status: "Pending",
+    room: "",
+    time: "",
+    pattern: "",
+    instructor: c.instructor || "",
+  }));
+
   // Reset room statuses
   newRooms.forEach((r) => {
     if (r.status !== "Maintenance") r.status = "Available";
   });
 
-  const pending = newCourses.filter((c) => c.status === "Pending");
-
   if (pending.length === 0) {
     return {
-      courses: newCourses,
+      courses: baseCourses,
       rooms: newRooms,
       scheduleAssignments: [],
       assigned: 0,
@@ -197,26 +251,47 @@ export function runAutoSchedule({
         if (freeInstructor) assignedInstructor = freeInstructor.name;
       }
 
-      Object.assign(course, {
+      const assignment = {
+        ...course,
         room: bestRoom.number,
         time: `${pattern} ${formatTime(bestSlot)}`,
         duration,
         pattern,
         instructor: assignedInstructor,
         status: "Assigned",
-      });
+      };
 
       // Mark room as Occupied
       bestRoom.status = "Occupied";
 
-      newAssignments.push({ ...course });
+      newAssignments.push(assignment);
       assigned++;
     }
   });
 
-  const finalAssignments = newCourses
-    .filter((c) => c.status === "Assigned" || c.status === "Conflict")
-    .map((c) => ({ ...c }));
+  const assignmentByIdentity = new Map(
+    newAssignments.map((assignment) => [
+      getAssignmentIdentityKey(assignment),
+      assignment,
+    ]),
+  );
+  const newCourses = pending.map((course) => {
+    const assignedCourse = assignmentByIdentity.get(
+      getAssignmentIdentityKey(course),
+    );
+    if (!assignedCourse) return { ...course };
+    return {
+      ...course,
+      room: assignedCourse.room,
+      time: assignedCourse.time,
+      duration: assignedCourse.duration,
+      pattern: assignedCourse.pattern,
+      instructor: assignedCourse.instructor,
+      status: assignedCourse.status,
+    };
+  });
+
+  const finalAssignments = newAssignments.map((a) => ({ ...a }));
 
   return {
     courses: newCourses,
@@ -228,35 +303,43 @@ export function runAutoSchedule({
 }
 
 export function checkManualConflict({
-  courseCode,
+  assignmentTarget,
   roomName,
   startTime,
   duration,
   pattern,
   scheduleAssignments,
 }) {
-  if (!courseCode || !roomName || !startTime) {
+  if (!assignmentTarget || !roomName || !startTime) {
     return {
       ok: false,
       type: "error",
       text: "⚠ Please fill in Course, Room, and Start Time first.",
     };
   }
+
+  const assignmentKey = getAssignmentIdentityKey(assignmentTarget);
+  const assignmentLabel = formatAssignmentLabel(assignmentTarget);
   const testCourse = {
+    ...assignmentTarget,
     time: `${pattern} ${formatTime(startTime)}`,
     duration,
     pattern,
     room: roomName,
   };
   const conflicting = scheduleAssignments.filter(
-    (a) => a.room === roomName && coursesOverlap(a, testCourse),
+    (a) =>
+      a.room === roomName &&
+      getAssignmentIdentityKey(a) !== assignmentKey &&
+      coursesOverlap(a, testCourse),
   );
   if (conflicting.length > 0) {
     return {
       ok: false,
       type: "error",
       text:
-        "⚠ Room conflict with: " + conflicting.map((a) => a.code).join(", "),
+        "⚠ Room conflict with: " +
+        conflicting.map((a) => formatAssignmentLabel(a)).join(", "),
     };
   }
   const [h, m] = startTime.split(":").map(Number);
@@ -267,6 +350,6 @@ export function checkManualConflict({
   return {
     ok: true,
     type: "success",
-    text: `✓ No conflicts · ${pattern} ${formatTime(startTime)}–${endLabel} in ${roomName}`,
+    text: `✓ No conflicts for ${assignmentLabel} · ${pattern} ${formatTime(startTime)}–${endLabel} in ${roomName}`,
   };
 }
