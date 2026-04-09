@@ -1,4 +1,5 @@
 import { coursesOverlap, formatTime } from "./timeUtils";
+import { normalizeRoomType } from "../data/constants";
 
 const DEFAULT_SECTION = "A";
 
@@ -95,8 +96,8 @@ function scoreSoftConstraints(
   let score = 0;
 
   // Room type matching (weight: roomType)
-  const wantLab = course.roomType === "Lab";
-  const isLab = room.type === "Computer Lab";
+  const wantLab = normalizeRoomType(course.roomType) === "Computer Lab";
+  const isLab = normalizeRoomType(room.type) === "Computer Lab";
   if (wantLab === isLab) score += weights.roomType;
 
   // Capacity balance — prefer rooms closest to enrollment (weight: balance)

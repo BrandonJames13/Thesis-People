@@ -11,13 +11,10 @@ import {
   initialSubjectSections,
 } from "../data/initialSubjects";
 import { initialRooms } from "../data/initialRooms";
+import { normalizeRoomType } from "../data/constants";
 
 const STORAGE_KEY = "rss_data_v1";
 const DEFAULT_SECTION = "A";
-
-function buildSectionId(subjectCode, section) {
-  return `${subjectCode}::${section}`;
-}
 
 function buildSectionIdentity(subjectCode, section, academicYear, semester) {
   return [subjectCode, section, academicYear, semester]
@@ -350,10 +347,10 @@ export function DataProvider({ children }) {
       }
 
       const duration = Number(assignment.duration ?? 0) || 0;
-      const roomType = String(
-        assignment.roomType ?? assignment.room_type ?? "",
-      ).trim();
-      const isLab = roomType === "Lab" || roomType === "Computer Lab";
+      const roomType = normalizeRoomType(
+        assignment.roomType ?? assignment.room_type,
+      );
+      const isLab = roomType === "Computer Lab";
       if (isLab) current.labHours += duration;
       else current.lectureHours += duration;
 

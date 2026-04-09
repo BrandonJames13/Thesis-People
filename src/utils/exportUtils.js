@@ -1,4 +1,5 @@
 import { getWingFromRoomInput } from "./roomUtils";
+import { normalizeRoomType, sanitizeRoomCapacity } from "../data/constants";
 
 export const CSV_TYPES = {
   FULL_LIST: "full-list",
@@ -223,6 +224,8 @@ function getTypeConfig(type) {
 
 function parseFullListRows(rows) {
   return rows.map((r) => {
+    const roomType = normalizeRoomType(r[9]);
+
     return {
       section_id: String(r[0] ?? "").trim(),
       code: String(r[1] ?? "")
@@ -237,7 +240,7 @@ function parseFullListRows(rows) {
         .toUpperCase(),
       year: String(r[7] ?? "").trim(),
       enrolled: toNumber(r[8], 0),
-      roomType: String(r[9] ?? "").trim(),
+      roomType,
       room: String(r[10] ?? "").trim(),
       pattern: String(r[11] ?? "").trim(),
       time: String(r[12] ?? "").trim(),
@@ -266,12 +269,13 @@ function parseRoomRows(rows) {
   return rows
     .map((r) => {
       const number = String(r[0] ?? "").trim();
+      const type = normalizeRoomType(r[1]);
       const wingData = getWingFromRoomInput(number, r[4]);
 
       return {
         number,
-        type: String(r[1] ?? "").trim(),
-        capacity: toNumber(r[2], 0),
+        type,
+        capacity: sanitizeRoomCapacity(type, r[2]),
         status: String(r[3] ?? "").trim() || "Available",
         wing: wingData.resolvedWing,
       };
@@ -281,27 +285,31 @@ function parseRoomRows(rows) {
 
 function parseSubjectRows(rows) {
   return rows
-    .map((r) => ({
-      code: String(r[0] ?? "")
-        .trim()
-        .toUpperCase(),
-      title: String(r[1] ?? "").trim(),
-      section: String(r[2] ?? "").trim(),
-      academicYear: String(r[3] ?? "").trim(),
-      semester: String(r[4] ?? "").trim(),
-      program: String(r[5] ?? "")
-        .trim()
-        .toUpperCase(),
-      year: String(r[6] ?? "").trim(),
-      enrolled: toNumber(r[7], 0),
-      roomType: String(r[8] ?? "").trim(),
-      duration: toNumber(r[9], 1.5),
-      instructor: String(r[10] ?? "").trim(),
-      status: String(r[11] ?? "").trim() || "Pending",
-      room: "",
-      time: "",
-      pattern: "",
-    }))
+    .map((r) => {
+      const roomType = normalizeRoomType(r[8]);
+
+      return {
+        code: String(r[0] ?? "")
+          .trim()
+          .toUpperCase(),
+        title: String(r[1] ?? "").trim(),
+        section: String(r[2] ?? "").trim(),
+        academicYear: String(r[3] ?? "").trim(),
+        semester: String(r[4] ?? "").trim(),
+        program: String(r[5] ?? "")
+          .trim()
+          .toUpperCase(),
+        year: String(r[6] ?? "").trim(),
+        enrolled: toNumber(r[7], 0),
+        roomType,
+        duration: toNumber(r[9], 1.5),
+        instructor: String(r[10] ?? "").trim(),
+        status: String(r[11] ?? "").trim() || "Pending",
+        room: "",
+        time: "",
+        pattern: "",
+      };
+    })
     .filter((course) => course.code);
 }
 

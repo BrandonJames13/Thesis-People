@@ -18,6 +18,7 @@ import {
   getAssignmentIdentityKey,
   getAssignmentSectionId,
 } from "../utils/scheduleUtils";
+import { normalizeRoomType } from "../data/constants";
 
 const ConflictContext = createContext();
 
@@ -137,8 +138,7 @@ export function ConflictProvider({ children }) {
 
       const courseToMove = cf.courses[1];
       const courseToMoveKey = getAssignmentIdentityKey(courseToMove);
-      const neededType =
-        courseToMove.roomType === "Lab" ? "Computer Lab" : "Lecture";
+      const neededType = normalizeRoomType(courseToMove.roomType);
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
       const target = newAssignments.find(
         (s) => getAssignmentIdentityKey(s) === courseToMoveKey,

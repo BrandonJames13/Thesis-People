@@ -1,6 +1,13 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
 import { getWingFromRoomInput } from "../../utils/roomUtils";
+import {
+  getDefaultRoomCapacity,
+  getRoomCapacityLimit,
+  isRoomCapacityValid,
+  normalizeRoomType,
+  ROOM_TYPE_LABELS,
+} from "../../data/constants";
 
 const WING_OPTIONS = [
   { value: "", label: "Auto (infer from room number)" },
@@ -15,30 +22,37 @@ export function AddRoomModal({
   initialRoom = null,
   mode = "add",
 }) {
+  const initialType = normalizeRoomType(initialRoom?.type ?? "", "");
   const [number, setNumber] = useState(initialRoom?.number ?? "");
-  const [type, setType] = useState(initialRoom?.type ?? "");
+  const [type, setType] = useState(initialType);
   const [capacity, setCapacity] = useState(
-    initialRoom?.capacity != null ? String(initialRoom.capacity) : "",
+    initialRoom?.capacity != null
+      ? String(initialRoom.capacity)
+      : initialType
+        ? String(getDefaultRoomCapacity(initialType))
+        : "",
   );
   const [status, setStatus] = useState(initialRoom?.status ?? "Available");
   const [wing, setWing] = useState(initialRoom?.wing ?? "");
   const [error, setError] = useState("");
 
+  const selectedRoomType = normalizeRoomType(type, "");
+  const capacityLimit = selectedRoomType
+    ? getRoomCapacityLimit(selectedRoomType)
+    : null;
+
   const handleSubmit = () => {
     const trimmedNumber = number.trim();
+    const normalizedType = normalizeRoomType(type, "");
     const cap = parseInt(capacity, 10);
-    if (!trimmedNumber || !type || isNaN(cap) || cap <= 0) {
+    if (!trimmedNumber || !normalizedType || isNaN(cap) || cap <= 0) {
       setError("Please fill in all fields correctly.");
       return;
     }
 
-    if (type === "Computer Lab" && (cap < 30 || cap > 35)) {
-      setError("Computer Lab capacity must be between 30 and 35.");
-      return;
-    }
-
-    if (type === "Lecture" && (cap < 40 || cap > 45)) {
-      setError("Lecture room capacity must be between 40 and 45.");
+    const { max } = getRoomCapacityLimit(normalizedType);
+    if (!isRoomCapacityValid(normalizedType, cap)) {
+      setError(`${normalizedType} capacity must be between 1 and ${max}.`);
       return;
     }
 
@@ -57,7 +71,7 @@ export function AddRoomModal({
     setError("");
     onSubmit({
       number: trimmedNumber,
-      type,
+      type: normalizedType,
       capacity: cap,
       status,
       wing: resolvedWing,
@@ -86,33 +100,39 @@ export function AddRoomModal({
             className="search-input"
             style={{ width: "100%" }}
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) => {
+              const nextType = normalizeRoomType(e.target.value, "");
+              setType(nextType);
+              if (!nextType) return;
+              setCapacity((current) => {
+                const parsed = Number(current);
+                if (Number.isFinite(parsed) && parsed > 0) return current;
+                return String(getDefaultRoomCapacity(nextType));
+              });
+            }}
           >
             <option value="">-- Select Type --</option>
-            <option value="Lecture">Lecture</option>
-            <option value="Computer Lab">Computer Lab</option>
+            {ROOM_TYPE_LABELS.map((roomType) => (
+              <option key={roomType} value={roomType}>
+                {roomType}
+              </option>
+            ))}
           </select>
           <input
             className="search-input"
             type="number"
             placeholder={
-              type === "Computer Lab"
-                ? "Capacity (30-35)"
-                : type === "Lecture"
-                  ? "Capacity (40-45)"
-                  : "Capacity"
+              capacityLimit ? `Capacity (1-${capacityLimit.max})` : "Capacity"
             }
-            min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
-            max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
+            min={1}
+            max={capacityLimit?.max ?? 999}
             style={{ width: "100%" }}
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />
-          {type && (
+          {selectedRoomType && capacityLimit && (
             <div style={{ fontSize: 11, color: "var(--text3)" }}>
-              {type === "Computer Lab"
-                ? "Lab capacity: min 30, max 35"
-                : "Lecture capacity: min 40, max 45"}
+              {`${selectedRoomType} capacity: max ${capacityLimit.max}`}
             </div>
           )}
           <select
