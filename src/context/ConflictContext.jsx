@@ -22,7 +22,7 @@ export function ConflictProvider({ children }) {
     updateScheduleAssignments,
     rooms,
     courses,
-    updateCourses,
+    updateSubjectSectionsFromCourseRows,
   } = useData();
   const [reallocationLog, setReallocationLog] = useState([]);
   const [dismissedSoftConflicts, setDismissedSoftConflicts] = useState(
@@ -219,7 +219,7 @@ export function ConflictProvider({ children }) {
       });
 
       updateScheduleAssignments(newAssignments);
-      updateCourses(newCourses);
+      updateSubjectSectionsFromCourseRows(newCourses);
       return message;
     },
     [
@@ -228,7 +228,7 @@ export function ConflictProvider({ children }) {
       rooms,
       courses,
       updateScheduleAssignments,
-      updateCourses,
+      updateSubjectSectionsFromCourseRows,
     ],
   );
 
@@ -278,7 +278,7 @@ export function ConflictProvider({ children }) {
       ]);
 
       updateScheduleAssignments(newAssignments);
-      updateCourses(newCourses);
+      updateSubjectSectionsFromCourseRows(newCourses);
       return `${target.code} moved to ${cf.betterRoom.number} ✓`;
     },
     [
@@ -286,7 +286,7 @@ export function ConflictProvider({ children }) {
       scheduleAssignments,
       courses,
       updateScheduleAssignments,
-      updateCourses,
+      updateSubjectSectionsFromCourseRows,
     ],
   );
 

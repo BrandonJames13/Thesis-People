@@ -14,10 +14,9 @@ export default function ScheduleModal({ onClose }) {
     rooms,
     instructors,
     scheduleAssignments,
-    updateCourses,
+    updateSubjectSectionsFromCourseRows,
     updateRooms,
     updateScheduleAssignments,
-    syncInstructorCourses,
   } = useData();
   const { showNotification } = useNotification();
 
@@ -90,10 +89,9 @@ export default function ScheduleModal({ onClose }) {
       activeDays,
     });
 
-    updateCourses(result.courses);
+    updateSubjectSectionsFromCourseRows(result.courses);
     updateRooms(result.rooms);
     updateScheduleAssignments(result.scheduleAssignments);
-    syncInstructorCourses(result.scheduleAssignments);
     onClose();
     showNotification(result.message);
   };
@@ -192,9 +190,8 @@ export default function ScheduleModal({ onClose }) {
       else newAssignments.push({ ...course });
     });
 
-    updateCourses(newCourses);
+    updateSubjectSectionsFromCourseRows(newCourses);
     updateScheduleAssignments(newAssignments);
-    syncInstructorCourses(newAssignments);
     onClose();
     showNotification(
       `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved!`,

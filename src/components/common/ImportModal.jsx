@@ -18,7 +18,7 @@ async function readFileText(file) {
 
 export default function ImportModal({ isOpen, onClose }) {
   const {
-    updateCourses,
+    updateSubjectSectionsFromCourseRows,
     updateInstructors,
     updateRooms,
     updateScheduleAssignments,
@@ -143,7 +143,7 @@ export default function ImportModal({ isOpen, onClose }) {
 
     if (parsed.type === CSV_TYPES.SUBJECTS) {
       const rows = dedupeImportedRecords(parsed.type, parsed.subjects);
-      updateCourses(rows);
+      updateSubjectSectionsFromCourseRows(rows);
       showNotification(`Imported ${rows.length} subject row(s).`);
       onClose();
       return;
