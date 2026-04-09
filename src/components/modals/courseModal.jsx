@@ -1,37 +1,35 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
-import { useData } from "../../context/DataContext";
 
-export function CourseModal({ courses, existing, onClose, onSave }) {
-  const { instructors } = useData();
-
+export function CourseModal({ subjects, existing, onClose, onSave }) {
   const [code, setCode] = useState(existing?.code ?? "");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [program, setProgram] = useState(existing?.program ?? "");
   const [year, setYear] = useState(existing?.year ?? "1st");
-  const [section, setSection] = useState(existing?.section ?? "");
-  const [enrolled, setEnrolled] = useState(existing?.enrolled ?? "");
   const [roomType, setRoomType] = useState(existing?.room_type ?? "Lecture");
-  const [assignedInstructor, setAssignedInstructor] = useState(
-    existing?.instructor ?? "",
-  );
 
   const isEdit = !!existing;
   const [formError, setFormError] = useState("");
 
   const handleSubmit = () => {
     const c = code.trim().toUpperCase();
-    const s = section.trim().toUpperCase();
     const t = title.trim();
-    const e = parseInt(enrolled);
 
-    if (!c || !s || !t || !program || isNaN(e) || e <= 0) {
+    if (!c || !t || !program || !year || !roomType) {
       setFormError("Please fill all fields correctly.");
       return;
     }
 
-    if (!isEdit && courses.find((x) => x.code === c && x.section === s)) {
-      setFormError(`Course ${c} (${s}) already exists.`);
+    const duplicateSubject = subjects.find(
+      (x) =>
+        x.code === c &&
+        x.program === program &&
+        x.year === year &&
+        x.id !== existing?.id,
+    );
+
+    if (duplicateSubject) {
+      setFormError(`Subject ${c} (${program} ${year}) already exists.`);
       return;
     }
 
@@ -40,12 +38,8 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
       title: t,
       program,
       year,
-      section: s,
-      enrolled: e,
       room_type: roomType,
-      status: existing?.status ?? "Not Assigned",
       duration: existing?.duration ?? 1.5,
-      instructor: assignedInstructor || null,
     });
   };
 
@@ -60,30 +54,20 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
     <Modal isOpen={true} onClose={onClose} size="lg">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>
-          {isEdit ? "✏ Edit Course" : "+ Add Course"}
+          {isEdit ? "✏ Edit Subject" : "+ Add Subject"}
         </div>
 
         <div
           style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
         >
           <div>
-            <label style={labelStyle}>Course Code</label>
+            <label style={labelStyle}>Subject Code</label>
             <input
               className="search-input"
               style={{ width: "100%", boxSizing: "border-box" }}
               value={code}
               disabled={isEdit}
               onChange={(e) => setCode(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label style={labelStyle}>Section</label>
-            <input
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={section}
-              onChange={(e) => setSection(e.target.value)}
             />
           </div>
 
@@ -129,17 +113,6 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
           </div>
 
           <div>
-            <label style={labelStyle}>Enrolled</label>
-            <input
-              type="number"
-              className="search-input"
-              style={{ width: "100%", boxSizing: "border-box" }}
-              value={enrolled}
-              onChange={(e) => setEnrolled(e.target.value)}
-            />
-          </div>
-
-          <div>
             <label style={labelStyle}>Room Type</label>
             <select
               className="search-input"
@@ -151,36 +124,6 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
               <option value="Computer Lab">Computer Lab</option>
             </select>
           </div>
-
-          {isEdit && (
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>👤 Assigned Instructor</label>
-              <select
-                className="search-input"
-                style={{ width: "100%", boxSizing: "border-box" }}
-                value={assignedInstructor}
-                onChange={(e) => setAssignedInstructor(e.target.value)}
-              >
-                <option value="">— Not Assigned —</option>
-                {instructors.map((inst) => (
-                  <option key={inst.name} value={inst.name}>
-                    {inst.name}
-                    {inst.department ? ` (${inst.department})` : ""}
-                  </option>
-                ))}
-              </select>
-              {assignedInstructor && (
-                <div
-                  style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}
-                >
-                  Currently assigned:{" "}
-                  <strong style={{ color: "var(--text2)" }}>
-                    {assignedInstructor}
-                  </strong>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {formError && (
@@ -201,7 +144,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSubmit}>
-            {isEdit ? "Save Changes" : "Add Course"}
+            {isEdit ? "Save Changes" : "Add Subject"}
           </button>
         </div>
       </div>
