@@ -9,7 +9,13 @@ const navGroups = [
     items: [
       { to: "/", icon: "⊞", label: "Dashboard" },
       { to: "/schedule", icon: "📆", label: "Schedule" },
-      { to: "/conflicts", icon: "⚠", label: "Conflicts", hasBadge: true },
+      {
+        to: "/conflicts",
+        icon: "⚠",
+        label: "Conflicts",
+        hasBadge: true,
+        adminOnly: true,
+      },
     ],
   },
   {
