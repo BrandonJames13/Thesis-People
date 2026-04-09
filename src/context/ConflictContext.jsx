@@ -22,13 +22,7 @@ import {
 const ConflictContext = createContext();
 
 export function ConflictProvider({ children }) {
-  const {
-    scheduleAssignments,
-    updateScheduleAssignments,
-    rooms,
-    courses,
-    updateSubjectSectionsFromCourseRows,
-  } = useData();
+  const { scheduleAssignments, updateScheduleAssignments, rooms } = useData();
   const [reallocationLog, setReallocationLog] = useState([]);
   const [dismissedSoftConflicts, setDismissedSoftConflicts] = useState(
     new Set(),
@@ -233,27 +227,10 @@ export function ConflictProvider({ children }) {
         if (!moved) message = "Could not auto-resolve — try Manual Override.";
       }
 
-      // Update courses to reflect room/time changes
-      const assignmentByKey = new Map(
-        newAssignments.map((s) => [getAssignmentIdentityKey(s), s]),
-      );
-      const newCourses = courses.map((c) => {
-        const updated = assignmentByKey.get(getAssignmentIdentityKey(c));
-        return updated ? { ...c, room: updated.room, time: updated.time } : c;
-      });
-
       updateScheduleAssignments(newAssignments);
-      updateSubjectSectionsFromCourseRows(newCourses);
       return message;
     },
-    [
-      detectConflicts,
-      scheduleAssignments,
-      rooms,
-      courses,
-      updateScheduleAssignments,
-      updateSubjectSectionsFromCourseRows,
-    ],
+    [detectConflicts, scheduleAssignments, rooms, updateScheduleAssignments],
   );
 
   const autoResolveAll = useCallback(() => {
@@ -289,10 +266,6 @@ export function ConflictProvider({ children }) {
 
       const oldRoom = target.room;
       target.room = cf.betterRoom.number;
-      const newCourses = courses.map((c) => {
-        if (getAssignmentIdentityKey(c) !== targetKey) return c;
-        return { ...c, room: cf.betterRoom.number };
-      });
 
       const targetLabel = formatAssignmentLabel(target);
 
@@ -310,16 +283,9 @@ export function ConflictProvider({ children }) {
       ]);
 
       updateScheduleAssignments(newAssignments);
-      updateSubjectSectionsFromCourseRows(newCourses);
       return `${targetLabel} moved to ${cf.betterRoom.number} ✓`;
     },
-    [
-      detectConflicts,
-      scheduleAssignments,
-      courses,
-      updateScheduleAssignments,
-      updateSubjectSectionsFromCourseRows,
-    ],
+    [detectConflicts, scheduleAssignments, updateScheduleAssignments],
   );
 
   const dismissSoftConflict = useCallback((conflictId) => {

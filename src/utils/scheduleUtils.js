@@ -106,10 +106,9 @@ function scoreSoftConstraints(
 }
 
 export function runAutoSchedule({
-  courses,
+  sectionRows,
   rooms,
   instructors,
-  scheduleAssignments,
   duration,
   startTime,
   endTime,
@@ -141,17 +140,11 @@ export function runAutoSchedule({
   }
 
   const newRooms = rooms.map((r) => ({ ...r }));
-  const baseCourses = courses.map((c) => ({ ...c }));
+  const baseSections = sectionRows.map((row) => ({ ...row }));
   const newAssignments = [];
 
-  // Build a map of which instructor teaches which courses already
-  const instructorLoad = {};
-  instructors.forEach((inst) => {
-    instructorLoad[inst.name.trim().toLowerCase()] = inst;
-  });
-
   // Work from clean assignment rows instead of mutating source course rows in-place.
-  const pending = baseCourses.map((c) => ({
+  const pending = baseSections.map((c) => ({
     ...c,
     status: "Pending",
     room: "",
@@ -167,11 +160,10 @@ export function runAutoSchedule({
 
   if (pending.length === 0) {
     return {
-      courses: baseCourses,
       rooms: newRooms,
       scheduleAssignments: [],
       assigned: 0,
-      message: "No courses to schedule. Please add courses first.",
+      message: "No subject sections to schedule. Please add sections first.",
     };
   }
 
@@ -269,32 +261,9 @@ export function runAutoSchedule({
     }
   });
 
-  const assignmentByIdentity = new Map(
-    newAssignments.map((assignment) => [
-      getAssignmentIdentityKey(assignment),
-      assignment,
-    ]),
-  );
-  const newCourses = pending.map((course) => {
-    const assignedCourse = assignmentByIdentity.get(
-      getAssignmentIdentityKey(course),
-    );
-    if (!assignedCourse) return { ...course };
-    return {
-      ...course,
-      room: assignedCourse.room,
-      time: assignedCourse.time,
-      duration: assignedCourse.duration,
-      pattern: assignedCourse.pattern,
-      instructor: assignedCourse.instructor,
-      status: assignedCourse.status,
-    };
-  });
-
   const finalAssignments = newAssignments.map((a) => ({ ...a }));
 
   return {
-    courses: newCourses,
     rooms: newRooms,
     scheduleAssignments: finalAssignments,
     assigned,
@@ -314,7 +283,7 @@ export function checkManualConflict({
     return {
       ok: false,
       type: "error",
-      text: "⚠ Please fill in Course, Room, and Start Time first.",
+      text: "⚠ Please fill in Subject/Section, Room, and Start Time first.",
     };
   }
 

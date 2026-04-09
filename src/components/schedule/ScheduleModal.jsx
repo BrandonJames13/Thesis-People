@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { formatTime, getEndTime } from "../../utils/timeUtils";
@@ -7,16 +7,17 @@ import {
   checkManualConflict,
   formatAssignmentLabel,
   getAssignmentIdentityKey,
+  getAssignmentSectionId,
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
 export default function ScheduleModal({ onClose }) {
   const {
-    courses,
+    subjects,
+    subjectSections,
     rooms,
     instructors,
     scheduleAssignments,
-    updateSubjectSectionsFromCourseRows,
     updateRooms,
     updateScheduleAssignments,
   } = useData();
@@ -39,7 +40,7 @@ export default function ScheduleModal({ onClose }) {
   ]);
 
   // Manual mode state
-  const [manualCourseKey, setManualCourseKey] = useState("");
+  const [manualSectionKey, setManualSectionKey] = useState("");
   const [manualRoom, setManualRoom] = useState("");
   const [manualInstructor, setManualInstructor] = useState("");
   const [manualDurationH, setManualDurationH] = useState(1);
@@ -49,9 +50,34 @@ export default function ScheduleModal({ onClose }) {
   const [manualEntries, setManualEntries] = useState([]);
   const [conflictMsg, setConflictMsg] = useState(null);
 
-  const selectedManualCourse =
-    courses.find((c) => getAssignmentIdentityKey(c) === manualCourseKey) ||
-    null;
+  const sectionRows = useMemo(() => {
+    const subjectByCode = new Map(
+      subjects.map((subject) => [subject.code, subject]),
+    );
+
+    return subjectSections.map((section) => {
+      const subject = subjectByCode.get(section.subjectCode) ?? {};
+      return {
+        ...section,
+        code: section.subjectCode,
+        section: section.section,
+        sectionId: section.sectionId,
+        title: subject.title ?? "",
+        program: subject.program ?? "",
+        year: subject.year ?? "",
+        roomType: section.roomType ?? subject.roomType ?? "Lecture",
+      };
+    });
+  }, [subjects, subjectSections]);
+
+  const sectionRowsByIdentity = useMemo(
+    () =>
+      new Map(sectionRows.map((row) => [getAssignmentIdentityKey(row), row])),
+    [sectionRows],
+  );
+
+  const selectedManualSection =
+    sectionRowsByIdentity.get(manualSectionKey) || null;
 
   const toggleDay = (day) => {
     setActiveDays((prev) =>
@@ -84,7 +110,7 @@ export default function ScheduleModal({ onClose }) {
     }
 
     const result = runAutoSchedule({
-      courses: [...courses],
+      sectionRows: [...sectionRows],
       rooms: [...rooms],
       instructors: [...instructors],
       scheduleAssignments: [...scheduleAssignments],
@@ -95,7 +121,6 @@ export default function ScheduleModal({ onClose }) {
       activeDays,
     });
 
-    updateSubjectSectionsFromCourseRows(result.courses);
     updateRooms(result.rooms);
     updateScheduleAssignments(result.scheduleAssignments);
     onClose();
@@ -104,13 +129,13 @@ export default function ScheduleModal({ onClose }) {
 
   // Auto-check conflicts whenever relevant fields change
   useEffect(() => {
-    if (!selectedManualCourse || !manualRoom || !manualTime) {
+    if (!selectedManualSection || !manualRoom || !manualTime) {
       setConflictMsg(null);
       return;
     }
     const duration = manualDurationH + manualDurationM / 60;
     const result = checkManualConflict({
-      assignmentTarget: selectedManualCourse,
+      assignmentTarget: selectedManualSection,
       roomName: manualRoom,
       startTime: manualTime,
       duration,
@@ -119,30 +144,30 @@ export default function ScheduleModal({ onClose }) {
     });
     setConflictMsg(result);
   }, [
-    manualCourseKey,
+    manualSectionKey,
     manualRoom,
     manualTime,
     manualDurationH,
     manualDurationM,
     manualPattern,
     scheduleAssignments,
-    selectedManualCourse,
+    selectedManualSection,
   ]);
 
   const hasConflict = conflictMsg?.type === "error";
 
   const handleAddEntry = () => {
-    if (!selectedManualCourse || !manualRoom || !manualTime) {
-      alert("Please fill in Course, Room, and Start Time.");
+    if (!selectedManualSection || !manualRoom || !manualTime) {
+      alert("Please fill in Subject/Section, Room, and Start Time.");
       return;
     }
     const duration = manualDurationH + manualDurationM / 60;
-    const assignmentKey = getAssignmentIdentityKey(selectedManualCourse);
+    const assignmentKey = getAssignmentIdentityKey(selectedManualSection);
     setManualEntries((prev) => [
       ...prev,
       {
         assignmentKey,
-        courseLabel: formatAssignmentLabel(selectedManualCourse),
+        subjectSectionLabel: formatAssignmentLabel(selectedManualSection),
         roomName: manualRoom,
         instructor: manualInstructor,
         startTime: manualTime,
@@ -151,7 +176,7 @@ export default function ScheduleModal({ onClose }) {
         pattern: manualPattern,
       },
     ]);
-    setManualCourseKey("");
+    setManualSectionKey("");
     setManualRoom("");
     setManualInstructor("");
     setConflictMsg(null);
@@ -163,11 +188,11 @@ export default function ScheduleModal({ onClose }) {
 
   const handleSubmitManual = () => {
     const toSave = [...manualEntries];
-    if (selectedManualCourse && manualRoom && manualTime) {
+    if (selectedManualSection && manualRoom && manualTime) {
       const duration = manualDurationH + manualDurationM / 60;
       toSave.push({
-        assignmentKey: getAssignmentIdentityKey(selectedManualCourse),
-        courseLabel: formatAssignmentLabel(selectedManualCourse),
+        assignmentKey: getAssignmentIdentityKey(selectedManualSection),
+        subjectSectionLabel: formatAssignmentLabel(selectedManualSection),
         roomName: manualRoom,
         instructor: manualInstructor,
         startTime: manualTime,
@@ -181,35 +206,33 @@ export default function ScheduleModal({ onClose }) {
       return;
     }
 
-    const newCourses = [...courses];
     const newAssignments = [...scheduleAssignments];
 
     toSave.forEach((entry) => {
-      const courseIndex = newCourses.findIndex(
-        (c) => getAssignmentIdentityKey(c) === entry.assignmentKey,
-      );
-      if (courseIndex < 0) return;
+      const sectionRow = sectionRowsByIdentity.get(entry.assignmentKey);
+      if (!sectionRow) return;
 
-      const course = newCourses[courseIndex];
-      const updatedCourse = {
-        ...course,
+      const updatedAssignment = {
+        ...sectionRow,
+        sectionId: getAssignmentSectionId(sectionRow),
         room: entry.roomName,
         time: `${entry.pattern} ${formatTime(entry.startTime)}`,
-        instructor: entry.instructor || course.instructor,
+        instructor: entry.instructor || sectionRow.instructor || "",
         duration: entry.duration,
         pattern: entry.pattern,
         status: "Assigned",
       };
-      newCourses[courseIndex] = updatedCourse;
 
+      const targetSectionId = getAssignmentSectionId(updatedAssignment);
       const idx = newAssignments.findIndex(
-        (s) => getAssignmentIdentityKey(s) === entry.assignmentKey,
+        (s) =>
+          (targetSectionId && getAssignmentSectionId(s) === targetSectionId) ||
+          getAssignmentIdentityKey(s) === entry.assignmentKey,
       );
-      if (idx >= 0) newAssignments[idx] = { ...updatedCourse };
-      else newAssignments.push({ ...updatedCourse });
+      if (idx >= 0) newAssignments[idx] = { ...updatedAssignment };
+      else newAssignments.push({ ...updatedAssignment });
     });
 
-    updateSubjectSectionsFromCourseRows(newCourses);
     updateScheduleAssignments(newAssignments);
     onClose();
     showNotification(
@@ -300,7 +323,7 @@ export default function ScheduleModal({ onClose }) {
               }}
             >
               ⚙ The algorithm will assign rooms and time slots to all{" "}
-              <strong>Pending</strong> courses automatically using the
+              <strong>Pending</strong> subject/sections automatically using the
               Constraint-Based Greedy method.
             </div>
             <div
@@ -513,20 +536,20 @@ export default function ScheduleModal({ onClose }) {
                     display: "block",
                   }}
                 >
-                  Course *
+                  Subject / Section *
                 </label>
                 <select
-                  value={manualCourseKey}
-                  onChange={(e) => setManualCourseKey(e.target.value)}
+                  value={manualSectionKey}
+                  onChange={(e) => setManualSectionKey(e.target.value)}
                   className="search-input"
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
-                  <option value="">-- Select Course --</option>
-                  {courses.map((c) => {
-                    const identityKey = getAssignmentIdentityKey(c);
+                  <option value="">-- Select Subject / Section --</option>
+                  {sectionRows.map((sectionRow) => {
+                    const identityKey = getAssignmentIdentityKey(sectionRow);
                     return (
                       <option key={identityKey} value={identityKey}>
-                        {formatAssignmentLabel(c)} — {c.title}
+                        {formatAssignmentLabel(sectionRow)} — {sectionRow.title}
                       </option>
                     );
                   })}
@@ -738,9 +761,9 @@ export default function ScheduleModal({ onClose }) {
                         }}
                       >
                         <span>
-                          <strong>{e.courseLabel}</strong> · {e.roomName} ·{" "}
-                          {e.pattern} · {formatTime(e.startTime)}–
-                          {formatTime(e.endTime)} (
+                          <strong>{e.subjectSectionLabel}</strong> ·{" "}
+                          {e.roomName} · {e.pattern} · {formatTime(e.startTime)}
+                          –{formatTime(e.endTime)} (
                           {dm > 0 ? `${dh}h ${dm}m` : `${dh}h`})
                           {e.instructor ? ` · ${e.instructor}` : ""}
                         </span>
