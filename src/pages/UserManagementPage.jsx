@@ -5,7 +5,6 @@ import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
-// Admin client — uses service role key for user management
 const adminSupabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
@@ -66,35 +65,43 @@ export default function UserManagementPage() {
     setDeleteTarget(null);
   }
 
-  async function handleUpdateRole(userId, newRole) {
-    const { error } = await adminSupabase.auth.admin.updateUserById(userId, {
-      user_metadata: { role: newRole, user_role: newRole },
-    });
+  async function handleUpdateUser({ name, email, password, role }) {
+    const updates = {
+      user_metadata: { name, role, user_role: role },
+    };
+    if (email && email !== editTarget.email) updates.email = email;
+    if (password) updates.password = password;
+
+    const { error } = await adminSupabase.auth.admin.updateUserById(
+      editTarget.id,
+      updates,
+    );
     if (error) {
       showNotification(`⚠ ${error.message}`);
     } else {
       setUsers(
         users.map((u) =>
-          u.id === userId
+          u.id === editTarget.id
             ? {
                 ...u,
+                email: email || u.email,
                 user_metadata: {
                   ...u.user_metadata,
-                  role: newRole,
-                  user_role: newRole,
+                  name,
+                  role,
+                  user_role: role,
                 },
               }
             : u,
         ),
       );
-      showNotification("Role updated successfully!");
+      showNotification(`${name} updated successfully!`);
     }
     setEditTarget(null);
   }
 
   const getRole = (user) =>
     user.user_metadata?.user_role || user.user_metadata?.role || "faculty";
-
   const getName = (user) =>
     user.user_metadata?.name || user.email?.split("@")[0] || "—";
 
@@ -204,12 +211,10 @@ export default function UserManagementPage() {
                           onClick={() => setEditTarget(user)}
                           disabled={isCurrentUser}
                           title={
-                            isCurrentUser
-                              ? "Cannot edit your own role"
-                              : "Edit role"
+                            isCurrentUser ? "Cannot edit yourself" : "Edit user"
                           }
                         >
-                          ✏ Edit Role
+                          ✏ Edit User
                         </button>
                         <button
                           className="btn btn-danger"
@@ -234,7 +239,6 @@ export default function UserManagementPage() {
         </table>
       </div>
 
-      {/* Add User Modal */}
       {showAddModal && (
         <AddUserModal
           onClose={() => setShowAddModal(false)}
@@ -246,17 +250,16 @@ export default function UserManagementPage() {
         />
       )}
 
-      {/* Edit Role Modal */}
       {editTarget && (
-        <EditRoleModal
+        <EditUserModal
           user={editTarget}
           currentRole={getRole(editTarget)}
+          currentName={getName(editTarget)}
           onClose={() => setEditTarget(null)}
-          onSave={(newRole) => handleUpdateRole(editTarget.id, newRole)}
+          onSave={handleUpdateUser}
         />
       )}
 
-      {/* Delete Confirm */}
       <ConfirmModal
         isOpen={!!deleteTarget}
         title="🗑 Delete User"
@@ -270,7 +273,6 @@ export default function UserManagementPage() {
   );
 }
 
-// ─── Add User Modal ───────────────────────────────────────────────────────────
 function AddUserModal({ onClose, onSuccess }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -313,8 +315,32 @@ function AddUserModal({ onClose, onSuccess }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="+ Add New User" width={400}>
+    <Modal isOpen={true} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+            + Add New User
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 20,
+              color: "var(--text3)",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
         <div>
           <label style={labelStyle}>Full Name *</label>
           <input
@@ -365,7 +391,6 @@ function AddUserModal({ onClose, onSuccess }) {
                 color: "var(--text3)",
                 padding: 0,
               }}
-              title={showPassword ? "Hide password" : "Show password"}
             >
               {showPassword ? "🙈" : "👁"}
             </button>
@@ -411,10 +436,30 @@ function AddUserModal({ onClose, onSuccess }) {
   );
 }
 
-// ─── Edit Role Modal ──────────────────────────────────────────────────────────
-function EditRoleModal({ user, currentRole, onClose, onSave }) {
+function EditUserModal({ user, currentRole, currentName, onClose, onSave }) {
+  const [name, setName] = useState(currentName);
+  const [email, setEmail] = useState(user.email || "");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState(currentRole);
-  const name = user.user_metadata?.name || user.email;
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = () => {
+    if (!name.trim()) {
+      setError("Name is required.");
+      return;
+    }
+    if (password && password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    onSave({
+      name: name.trim(),
+      email: email.trim(),
+      password: password || null,
+      role,
+    });
+  };
 
   const labelStyle = {
     fontSize: 12,
@@ -425,16 +470,98 @@ function EditRoleModal({ user, currentRole, onClose, onSave }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="✏ Edit User Role" width={360}>
+    <Modal isOpen={true} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <div style={{ fontSize: 13, color: "var(--text2)" }}>
-          Editing role for <strong>{name}</strong>
-          <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>
-            {user.email}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
+            ✏ Edit User
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 20,
+              color: "var(--text3)",
+              cursor: "pointer",
+              padding: 0,
+            }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text3)" }}>
+          Editing account for{" "}
+          <strong style={{ color: "var(--text)" }}>{user.email}</strong>
+        </div>
+        <div>
+          <label style={labelStyle}>Full Name *</label>
+          <input
+            className="search-input"
+            style={{ width: "100%", boxSizing: "border-box" }}
+            placeholder="Full name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>Email</label>
+          <input
+            className="search-input"
+            style={{ width: "100%", boxSizing: "border-box" }}
+            type="email"
+            placeholder="Email address"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <div>
+          <label style={labelStyle}>
+            New Password{" "}
+            <span style={{ fontWeight: 400, color: "var(--text3)" }}>
+              (leave blank to keep current)
+            </span>
+          </label>
+          <div style={{ position: "relative" }}>
+            <input
+              className="search-input"
+              style={{
+                width: "100%",
+                boxSizing: "border-box",
+                paddingRight: 40,
+              }}
+              type={showPassword ? "text" : "password"}
+              placeholder="New password (optional)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <button
+              onClick={() => setShowPassword(!showPassword)}
+              style={{
+                position: "absolute",
+                right: 10,
+                top: "50%",
+                transform: "translateY(-50%)",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontSize: 16,
+                color: "var(--text3)",
+                padding: 0,
+              }}
+            >
+              {showPassword ? "🙈" : "👁"}
+            </button>
           </div>
         </div>
         <div>
-          <label style={labelStyle}>Role</label>
+          <label style={labelStyle}>Role *</label>
           <select
             className="search-input"
             style={{ width: "100%", boxSizing: "border-box" }}
@@ -445,6 +572,9 @@ function EditRoleModal({ user, currentRole, onClose, onSave }) {
             <option value="admin">👑 Admin</option>
           </select>
         </div>
+        {error && (
+          <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
+        )}
         <div
           style={{
             display: "flex",
@@ -457,8 +587,8 @@ function EditRoleModal({ user, currentRole, onClose, onSave }) {
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn btn-primary" onClick={() => onSave(role)}>
-            Save Changes
+          <button className="btn btn-primary" onClick={handleSubmit}>
+            ✏ Save Changes
           </button>
         </div>
       </div>
