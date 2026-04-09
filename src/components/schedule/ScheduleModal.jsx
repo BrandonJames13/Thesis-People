@@ -13,10 +13,11 @@ import Modal from "../common/Modal";
 
 export default function ScheduleModal({ onClose }) {
   const {
-    subjects,
-    subjectSections,
     rooms,
-    instructors,
+    availableSubjects,
+    availableSections,
+    availableRooms,
+    availableInstructors,
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
@@ -52,10 +53,10 @@ export default function ScheduleModal({ onClose }) {
 
   const sectionRows = useMemo(() => {
     const subjectByCode = new Map(
-      subjects.map((subject) => [subject.code, subject]),
+      availableSubjects.map((subject) => [subject.code, subject]),
     );
 
-    return subjectSections.map((section) => {
+    return availableSections.map((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
       return {
         ...section,
@@ -68,7 +69,7 @@ export default function ScheduleModal({ onClose }) {
         roomType: section.roomType ?? subject.roomType ?? "Lecture",
       };
     });
-  }, [subjects, subjectSections]);
+  }, [availableSubjects, availableSections]);
 
   const sectionRowsByIdentity = useMemo(
     () =>
@@ -111,8 +112,8 @@ export default function ScheduleModal({ onClose }) {
 
     const result = runAutoSchedule({
       sectionRows: [...sectionRows],
-      rooms: [...rooms],
-      instructors: [...instructors],
+      rooms: [...availableRooms],
+      instructors: [...availableInstructors],
       scheduleAssignments: [...scheduleAssignments],
       duration,
       startTime: autoStart,
@@ -121,7 +122,15 @@ export default function ScheduleModal({ onClose }) {
       activeDays,
     });
 
-    updateRooms(result.rooms);
+    const roomUpdatesByNumber = new Map(
+      result.rooms.map((room) => [room.number, room]),
+    );
+    const mergedRooms = rooms.map((room) => {
+      const next = roomUpdatesByNumber.get(room.number);
+      return next ? { ...room, ...next } : { ...room };
+    });
+
+    updateRooms(mergedRooms);
     updateScheduleAssignments(result.scheduleAssignments);
     onClose();
     showNotification(result.message);
@@ -574,7 +583,7 @@ export default function ScheduleModal({ onClose }) {
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
                   <option value="">-- Select Room --</option>
-                  {rooms.map((r) => (
+                  {availableRooms.map((r) => (
                     <option key={r.number} value={r.number}>
                       {r.number} ({r.type} · Cap: {r.capacity})
                       {r.status === "Maintenance" ? " ⚠ Maintenance" : ""}
