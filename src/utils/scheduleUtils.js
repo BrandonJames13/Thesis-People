@@ -20,13 +20,22 @@ export function getAssignmentSection(row) {
 }
 
 export function getAssignmentSectionId(row) {
-  const explicit = String(row?.sectionId ?? row?.section_id ?? "").trim();
+  const explicitIdentity = String(
+    row?.sectionIdentity ?? row?.section_identity ?? "",
+  ).trim();
+  if (explicitIdentity) return explicitIdentity;
+
+  const explicit = String(row?.section_id ?? row?.sectionId ?? "").trim();
   if (explicit) return explicit;
 
   const code = getAssignmentSubjectCode(row);
   const section = getAssignmentSection(row);
-  if (!code) return "";
-  return `${code}::${section}`;
+  const academicYear = String(
+    row?.academicYear ?? row?.academic_year ?? "",
+  ).trim();
+  const semester = String(row?.semester ?? "").trim();
+  if (!code && !section && !academicYear && !semester) return "";
+  return `${code}::${section}::${academicYear}::${semester}`;
 }
 
 export function getAssignmentIdentityKey(row) {

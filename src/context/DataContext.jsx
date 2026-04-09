@@ -19,6 +19,26 @@ function buildSectionId(subjectCode, section) {
   return `${subjectCode}::${section}`;
 }
 
+function buildSectionIdentity(subjectCode, section, academicYear, semester) {
+  return [subjectCode, section, academicYear, semester]
+    .map((value) => String(value ?? "").trim())
+    .join("::");
+}
+
+function getInstructorLoadKey(record) {
+  const instructorId = String(
+    record?.instructor_id ?? record?.instructorId ?? record?.id ?? "",
+  ).trim();
+  if (instructorId) return `id:${instructorId.toLowerCase()}`;
+
+  const instructorName = String(
+    record?.instructor ?? record?.instructor_name ?? record?.name ?? "",
+  )
+    .trim()
+    .toLowerCase();
+  return instructorName ? `name:${instructorName}` : "";
+}
+
 function cloneSubjects(subjects) {
   return subjects.map((s) => ({ ...s }));
 }
@@ -41,14 +61,21 @@ function normalizeSectionFromRow(row) {
   const subjectCode = row.subjectCode ?? row.code ?? "";
   const section =
     (row.section ?? DEFAULT_SECTION).toString().trim() || DEFAULT_SECTION;
-  const sectionId = row.sectionId ?? buildSectionId(subjectCode, section);
+  const academicYear = row.academicYear ?? row.academic_year ?? "";
+  const semester = row.semester ?? "";
+  const sectionIdentity =
+    row.sectionIdentity ??
+    row.section_identity ??
+    buildSectionIdentity(subjectCode, section, academicYear, semester);
+  const sectionId = String(row.section_id ?? "").trim() || sectionIdentity;
 
   return {
     sectionId,
+    sectionIdentity,
     subjectCode,
     section,
-    academicYear: row.academicYear ?? row.academic_year ?? "",
-    semester: row.semester ?? "",
+    academicYear,
+    semester,
     enrolled: Number(row.enrolled ?? 0),
     status: row.status ?? "Pending",
     instructor: row.instructor ?? "",
@@ -58,6 +85,59 @@ function normalizeSectionFromRow(row) {
     pattern: row.pattern ?? "",
     roomType: row.roomType ?? row.room_type,
   };
+}
+
+function normalizeScheduleAssignment(row) {
+  const subjectCode = row.subjectCode ?? row.code ?? "";
+  const section =
+    (row.section ?? DEFAULT_SECTION).toString().trim() || DEFAULT_SECTION;
+  const academicYear = row.academicYear ?? row.academic_year ?? "";
+  const semester = row.semester ?? "";
+  const sectionIdentity =
+    row.sectionIdentity ??
+    row.section_identity ??
+    buildSectionIdentity(subjectCode, section, academicYear, semester);
+  const sectionId = String(row.section_id ?? "").trim() || sectionIdentity;
+
+  return {
+    ...row,
+    code: subjectCode,
+    subjectCode,
+    section,
+    sectionId,
+    sectionIdentity,
+    academicYear,
+    semester,
+    enrolled: Number(row.enrolled ?? 0),
+    status: row.status ?? "Pending",
+    instructor: row.instructor ?? "",
+    room: row.room ?? "",
+    time: row.time ?? "",
+    duration: Number(row.duration ?? 1.5),
+    pattern: row.pattern ?? "",
+    roomType: row.roomType ?? row.room_type,
+    assignmentId: String(row.assignmentId ?? row.assignment_id ?? "").trim(),
+    assignment_id: String(row.assignment_id ?? "").trim(),
+    section_id: String(row.section_id ?? "").trim(),
+  };
+}
+
+function normalizeScheduleAssignments(rows) {
+  const uniqueRows = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const normalized = normalizeScheduleAssignment(row);
+    const key =
+      String(
+        normalized.assignment_id ?? normalized.assignmentId ?? "",
+      ).trim() ||
+      String(normalized.section_id ?? "").trim() ||
+      normalized.sectionIdentity;
+    if (!key) return;
+    uniqueRows.set(key, normalized);
+  });
+
+  return Array.from(uniqueRows.values());
 }
 
 function buildNormalizedFromCourseRows(rows) {
@@ -94,7 +174,20 @@ function denormalizeSectionRow(section, subjectByCode) {
     section: section.section ?? DEFAULT_SECTION,
     sectionId:
       section.sectionId ??
-      buildSectionId(section.subjectCode, section.section ?? DEFAULT_SECTION),
+      buildSectionIdentity(
+        section.subjectCode,
+        section.section ?? DEFAULT_SECTION,
+        section.academicYear ?? "",
+        section.semester ?? "",
+      ),
+    sectionIdentity:
+      section.sectionIdentity ??
+      buildSectionIdentity(
+        section.subjectCode,
+        section.section ?? DEFAULT_SECTION,
+        section.academicYear ?? "",
+        section.semester ?? "",
+      ),
     title: subject?.title ?? "",
     program: subject?.program ?? "",
     year: subject?.year ?? "",
@@ -117,7 +210,9 @@ function migrateStoredData(data) {
   if (Array.isArray(data.subjects) && Array.isArray(data.subjectSections)) {
     return {
       subjects: cloneSubjects(data.subjects),
-      subjectSections: cloneSubjectSections(data.subjectSections),
+      subjectSections: data.subjectSections.map((section) =>
+        normalizeSectionFromRow(section),
+      ),
       rooms: Array.isArray(data.rooms)
         ? data.rooms.map((r) => ({ ...r }))
         : null,
@@ -125,7 +220,7 @@ function migrateStoredData(data) {
         ? data.instructors.map((i) => ({ ...i }))
         : null,
       scheduleAssignments: Array.isArray(data.scheduleAssignments)
-        ? data.scheduleAssignments.map((s) => ({ ...s }))
+        ? normalizeScheduleAssignments(data.scheduleAssignments)
         : null,
     };
   }
@@ -142,7 +237,7 @@ function migrateStoredData(data) {
         ? data.instructors.map((i) => ({ ...i }))
         : null,
       scheduleAssignments: Array.isArray(data.scheduleAssignments)
-        ? data.scheduleAssignments.map((s) => ({ ...s }))
+        ? normalizeScheduleAssignments(data.scheduleAssignments)
         : null,
     };
   }
@@ -152,7 +247,9 @@ function migrateStoredData(data) {
 
 const DEFAULT_NORMALIZED = {
   subjects: cloneSubjects(initialSubjects),
-  subjectSections: cloneSubjectSections(initialSubjectSections),
+  subjectSections: initialSubjectSections.map((section) =>
+    normalizeSectionFromRow(section),
+  ),
 };
 
 function loadFromStorage() {
@@ -212,6 +309,87 @@ export function DataProvider({ children }) {
         denormalizeSectionRow(section, subjectByCode),
       ),
     [subjectSections, subjectByCode],
+  );
+
+  const instructorLoads = useMemo(() => {
+    const loadMap = new Map();
+
+    scheduleAssignments.forEach((assignment) => {
+      if (assignment.status !== "Assigned") return;
+
+      const instructorKey = getInstructorLoadKey(assignment);
+      if (!instructorKey) return;
+
+      const sectionKey =
+        String(assignment.section_id ?? "").trim() ||
+        String(
+          assignment.assignmentId ?? assignment.assignment_id ?? "",
+        ).trim() ||
+        assignment.sectionIdentity;
+      if (!sectionKey) return;
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectKeys: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      if (current.sectionKeys.has(sectionKey)) {
+        loadMap.set(instructorKey, current);
+        return;
+      }
+
+      current.sectionKeys.add(sectionKey);
+
+      const subjectKey = String(assignment.code ?? assignment.subjectCode ?? "")
+        .trim()
+        .toUpperCase();
+      if (subjectKey) {
+        current.subjectKeys.add(subjectKey);
+      }
+
+      const duration = Number(assignment.duration ?? 0) || 0;
+      const roomType = String(
+        assignment.roomType ?? assignment.room_type ?? "",
+      ).trim();
+      const isLab = roomType === "Lab" || roomType === "Computer Lab";
+      if (isLab) current.labHours += duration;
+      else current.lectureHours += duration;
+
+      loadMap.set(instructorKey, current);
+    });
+
+    const loads = new Map();
+    loadMap.forEach((load, key) => {
+      loads.set(key, {
+        subjectCount: load.subjectKeys.size,
+        sectionCount: load.sectionKeys.size,
+        lectureHours: load.lectureHours,
+        labHours: load.labHours,
+        totalHours: load.lectureHours + load.labHours,
+      });
+    });
+
+    return loads;
+  }, [scheduleAssignments]);
+
+  const getInstructorLoad = useCallback(
+    (instructor) => {
+      const idKey = getInstructorLoadKey(instructor);
+      const nameKey = getInstructorLoadKey({ name: instructor?.name });
+      return (
+        instructorLoads.get(idKey) ??
+        instructorLoads.get(nameKey) ?? {
+          subjectCount: 0,
+          sectionCount: 0,
+          lectureHours: 0,
+          labHours: 0,
+          totalHours: 0,
+        }
+      );
+    },
+    [instructorLoads],
   );
 
   // Auto-save whenever any data changes
@@ -303,7 +481,7 @@ export function DataProvider({ children }) {
   }, []);
 
   const updateScheduleAssignments = useCallback((newAssignments) => {
-    setScheduleAssignments(newAssignments);
+    setScheduleAssignments(normalizeScheduleAssignments(newAssignments));
   }, []);
 
   // Reset everything back to defaults and clear storage
@@ -330,6 +508,8 @@ export function DataProvider({ children }) {
       rooms,
       instructors,
       scheduleAssignments,
+      instructorLoads,
+      getInstructorLoad,
       assignments,
       conflicts,
       addSubject,
@@ -353,6 +533,8 @@ export function DataProvider({ children }) {
       rooms,
       instructors,
       scheduleAssignments,
+      instructorLoads,
+      getInstructorLoad,
       assignments,
       conflicts,
       addSubject,

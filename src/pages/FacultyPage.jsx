@@ -210,7 +210,7 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
 
 export default function FacultyPage() {
   const { isAdmin } = useAuth();
-  const { scheduleAssignments } = useData();
+  const { scheduleAssignments, getInstructorLoad } = useData();
   const { showNotification } = useNotification();
 
   const [instructors, setInstructors] = useState([]);
@@ -218,38 +218,13 @@ export default function FacultyPage() {
   const [showModal, setShowModal] = useState(false);
   const [editInstructor, setEditInstructor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [instructorSubjectsMap, setInstructorSubjectsMap] = useState(
-    () => new Map(),
-  );
 
   const fetchInstructors = useCallback(async () => {
     try {
-      const [
-        { data, error },
-        { data: instructorSubjects, error: instructorSubjectsError },
-      ] = await Promise.all([
-        supabase.from("instructors").select("*").order("name"),
-        supabase
-          .from("instructor_subjects")
-          .select("instructor_id, subject_id"),
-      ]);
-
-      if (instructorSubjectsError) {
-        console.error(instructorSubjectsError);
-        showNotification(`⚠ ${instructorSubjectsError.message}`);
-      }
-
-      const fallbackMap = new Map();
-      (instructorSubjects ?? []).forEach((row) => {
-        const instructorId = String(row?.instructor_id ?? "").trim();
-        const subjectId = String(row?.subject_id ?? "").trim();
-        if (!instructorId || !subjectId) return;
-
-        const existingSubjects = fallbackMap.get(instructorId) ?? new Set();
-        existingSubjects.add(subjectId);
-        fallbackMap.set(instructorId, existingSubjects);
-      });
-      setInstructorSubjectsMap(fallbackMap);
+      const { data, error } = await supabase
+        .from("instructors")
+        .select("*")
+        .order("name");
 
       if (error) {
         console.error(error);
@@ -262,48 +237,6 @@ export default function FacultyPage() {
       setLoading(false);
     }
   }, [showNotification]);
-
-  const getInstructorAssignmentCounts = useCallback(
-    (instructor) => {
-      const assignedRows = scheduleAssignments.filter(
-        (assignment) =>
-          assignment.status === "Assigned" &&
-          getAssignmentInstructorMatch(assignment, instructor),
-      );
-
-      const subjectKeys = new Set();
-      const sectionKeys = new Set();
-
-      assignedRows.forEach((assignment) => {
-        const subjectKey = getAssignmentSubjectKey(assignment);
-        if (subjectKey) {
-          subjectKeys.add(subjectKey);
-        }
-
-        const sectionKey = getAssignmentSectionKey(assignment);
-        if (sectionKey) {
-          sectionKeys.add(sectionKey);
-        }
-      });
-
-      const instructorId = String(instructor?.id ?? "").trim();
-      if (subjectKeys.size === 0 && instructorId) {
-        const fallbackSubjects = instructorSubjectsMap.get(instructorId);
-        if (fallbackSubjects?.size) {
-          return {
-            subjectCount: fallbackSubjects.size,
-            sectionCount: sectionKeys.size,
-          };
-        }
-      }
-
-      return {
-        subjectCount: subjectKeys.size,
-        sectionCount: sectionKeys.size,
-      };
-    },
-    [instructorSubjectsMap, scheduleAssignments],
-  );
 
   useEffect(() => {
     fetchInstructors();
@@ -433,7 +366,7 @@ export default function FacultyPage() {
                   </td>
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
-                      const counts = getInstructorAssignmentCounts(inst);
+                      const counts = getInstructorLoad(inst);
                       if (
                         counts.subjectCount === 0 &&
                         counts.sectionCount === 0
