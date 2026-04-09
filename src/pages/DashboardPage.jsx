@@ -363,14 +363,7 @@ export default function DashboardPage() {
                 style={{ justifyContent: "center" }}
                 onClick={() => {
                   if (!requireAdmin()) return;
-                  if (
-                    window.confirm(
-                      "Reset all data to defaults? This cannot be undone.",
-                    )
-                  ) {
-                    resetAllData();
-                    showNotification("All data reset to defaults ✓");
-                  }
+                  setShowResetConfirm(true);
                 }}
                 disabled={!isAdmin}
               >

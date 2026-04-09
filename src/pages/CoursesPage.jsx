@@ -20,18 +20,22 @@ export default function CoursesPage() {
   }, []);
 
   async function fetchCourses() {
-    const { data, error } = await supabase
-      .from("courses")
-      .select("*")
-      .order("code");
+    try {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*")
+        .order("code");
 
-    if (error) {
-      console.error(error);
-      return;
+      if (error) {
+        console.error(error);
+        showNotification(`⚠ ${error.message}`);
+        return;
+      }
+
+      setCourses(data ?? []);
+    } finally {
+      setLoading(false);
     }
-
-    setCourses(data);
-    setLoading(false);
   }
 
   async function addCourse(course) {
@@ -62,8 +66,7 @@ export default function CoursesPage() {
     const { data, error } = await supabase
       .from("courses")
       .update(course)
-      .eq("code", course.code)
-      .eq("section", course.section)
+      .eq("id", id)
       .select();
 
     if (error) {
