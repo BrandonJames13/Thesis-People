@@ -3,17 +3,42 @@ import Modal from "./Modal";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { supabase } from "../../lib/supabaseClient";
+import { getDefaultRoomCapacity } from "../../data/constants";
+import { getWingFromRoomInput } from "../../utils/roomUtils";
 import {
+  buildSectionIdentityKey,
+  buildSubjectIdentityKey,
   CSV_TYPE_OPTIONS,
   CSV_TYPES,
   downloadCsvTemplate,
   getCsvTypeConfig,
   parseImportCsv,
+  normalizeSectionStatusForDb,
   summarizeImportedRows,
 } from "../../utils/exportUtils";
 
 async function readFileText(file) {
   return file.text();
+}
+
+function normalizeLookupKey(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function dedupeByKey(rows, keyFn) {
+  const seen = new Set();
+  const deduped = [];
+
+  (rows ?? []).forEach((row) => {
+    const key = normalizeLookupKey(keyFn(row));
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    deduped.push(row);
+  });
+
+  return deduped;
 }
 
 export default function ImportModal({ isOpen, onClose }) {
@@ -139,14 +164,65 @@ export default function ImportModal({ isOpen, onClose }) {
     );
   };
 
-  const buildCompositeSubjectKey = (code, program, year) =>
-    [code, program, year]
-      .map((value) =>
-        String(value ?? "")
-          .trim()
-          .toLowerCase(),
-      )
-      .join("|");
+  const upsertRows = async (
+    table,
+    rows,
+    onConflict,
+    fallbackMessage,
+    select = "*",
+  ) => {
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from(table)
+      .upsert(rows, { onConflict })
+      .select(select);
+
+    if (error) {
+      const normalizedError = new Error(
+        normalizeDbError(error, fallbackMessage),
+      );
+      normalizedError.code = error.code;
+      normalizedError.details = error.details;
+      normalizedError.hint = error.hint;
+      throw normalizedError;
+    }
+
+    return data ?? [];
+  };
+
+  const fetchExistingRows = async (table, column, values) => {
+    const uniqueValues = Array.from(
+      new Set(
+        (values ?? [])
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (uniqueValues.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from(table)
+      .select("*")
+      .in(column, uniqueValues);
+
+    if (error) {
+      const normalizedError = new Error(
+        normalizeDbError(error, `Unable to load existing ${table}.`),
+      );
+      normalizedError.code = error.code;
+      normalizedError.details = error.details;
+      normalizedError.hint = error.hint;
+      throw normalizedError;
+    }
+
+    return data ?? [];
+  };
 
   const importRooms = async (payload) => {
     const dbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
@@ -154,55 +230,7 @@ export default function ImportModal({ isOpen, onClose }) {
       throw new Error("No room rows were parsed for import.");
     }
 
-    const { error: writeError } = await supabase
-      .from("rooms")
-      .upsert(dbRows, { onConflict: "number" });
-
-    if (writeError) {
-      throw new Error(normalizeDbError(writeError, "Unable to import rooms."));
-    }
-  };
-
-  const importScheduleAssignments = async (payload) => {
-    const dbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
-    if (dbRows.length === 0) {
-      throw new Error("No schedule assignment rows were parsed for import.");
-    }
-
-    const rowsWithSectionId = dbRows.filter((row) => row.section_id);
-    const rowsWithoutSectionId = dbRows.filter((row) => !row.section_id);
-
-    if (rowsWithSectionId.length > 0) {
-      const { error: upsertError } = await supabase
-        .from("schedule_assignments")
-        .upsert(rowsWithSectionId, {
-          onConflict: "section_id,academic_year,semester",
-        });
-
-      if (upsertError) {
-        throw new Error(
-          normalizeDbError(
-            upsertError,
-            "Unable to upsert schedule assignments.",
-          ),
-        );
-      }
-    }
-
-    if (rowsWithoutSectionId.length > 0) {
-      const { error: insertError } = await supabase
-        .from("schedule_assignments")
-        .insert(rowsWithoutSectionId);
-
-      if (insertError) {
-        throw new Error(
-          normalizeDbError(
-            insertError,
-            "Unable to insert schedule assignments.",
-          ),
-        );
-      }
-    }
+    await upsertRows("rooms", dbRows, "number", "Unable to import rooms.");
   };
 
   const importInstructors = async (payload) => {
@@ -217,19 +245,7 @@ export default function ImportModal({ isOpen, onClose }) {
 
     const importRows = async (rows) => {
       const names = rows.map((row) => row.name).filter(Boolean);
-      const { data: existing, error: existingError } = await supabase
-        .from("instructors")
-        .select("id, name")
-        .in("name", names);
-
-      if (existingError) {
-        throw new Error(
-          normalizeDbError(
-            existingError,
-            "Unable to load existing instructors.",
-          ),
-        );
-      }
+      const existing = await fetchExistingRows("instructors", "name", names);
 
       const existingByName = new Map(
         (existing ?? []).map((row) => [
@@ -267,12 +283,12 @@ export default function ImportModal({ isOpen, onClose }) {
       });
 
       if (toInsert.length > 0) {
-        const { error: insertError } = await supabase
-          .from("instructors")
-          .insert(toInsert);
-        if (insertError) {
-          throw insertError;
-        }
+        await upsertRows(
+          "instructors",
+          toInsert,
+          "name",
+          "Unable to import instructors.",
+        );
       }
 
       for (const op of updateOps) {
@@ -302,7 +318,8 @@ export default function ImportModal({ isOpen, onClose }) {
     }
 
     if (subjectRows.length > 0) {
-      const { error: subjectError } = await supabase.from("subjects").upsert(
+      await upsertRows(
+        "subjects",
         subjectRows.map((row) => ({
           code: row.code,
           title: row.title,
@@ -311,14 +328,9 @@ export default function ImportModal({ isOpen, onClose }) {
           room_type: row.room_type,
           duration: row.duration,
         })),
-        { onConflict: "code,program,year" },
+        "code,program,year",
+        "Unable to import subjects.",
       );
-
-      if (subjectError) {
-        throw new Error(
-          normalizeDbError(subjectError, "Unable to import subjects."),
-        );
-      }
     }
 
     if (sectionRows.length === 0) {
@@ -345,22 +357,19 @@ export default function ImportModal({ isOpen, onClose }) {
 
     const subjectIdByIdentity = new Map(
       (subjectIndexRows ?? []).map((row) => [
-        buildCompositeSubjectKey(row.code, row.program, row.year),
+        buildSubjectIdentityKey(row),
         row.id,
       ]),
     );
 
     const sectionUpsertRows = sectionRows
       .map((row) => {
-        const key = buildCompositeSubjectKey(
-          row?.subject_ref?.code,
-          row?.subject_ref?.program,
-          row?.subject_ref?.year,
-        );
+        const key = buildSubjectIdentityKey(row?.subject_ref);
         const subjectId = subjectIdByIdentity.get(key);
         if (!subjectId) return null;
 
         return {
+          ...(row.id ? { id: row.id } : {}),
           subject_id: subjectId,
           section: row.section,
           enrolled: row.enrolled,
@@ -377,17 +386,227 @@ export default function ImportModal({ isOpen, onClose }) {
       );
     }
 
-    const { error: sectionError } = await supabase
-      .from("subject_sections")
-      .upsert(sectionUpsertRows, {
-        onConflict: "subject_id,section,academic_year,semester",
-      });
+    await upsertRows(
+      "subject_sections",
+      sectionUpsertRows,
+      "subject_id,section,academic_year,semester",
+      "Unable to import subject sections.",
+    );
+  };
 
-    if (sectionError) {
+  const importFullList = async (payload) => {
+    const sourceRows = Array.isArray(payload?.rows) ? payload.rows : [];
+    const scheduleDbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+
+    if (sourceRows.length === 0 || scheduleDbRows.length === 0) {
+      throw new Error("No full list rows were parsed for import.");
+    }
+
+    const subjectSourceRows = dedupeByKey(sourceRows, (row) =>
+      buildSubjectIdentityKey(row),
+    ).map((row) => ({
+      code: row.code,
+      title: row.title,
+      program: row.program,
+      year: row.year,
+      room_type: row.roomType,
+      duration: Number(row.duration ?? 1.5),
+    }));
+
+    const roomSourceRows = dedupeByKey(
+      sourceRows.filter((row) => String(row.room ?? "").trim()),
+      (row) => String(row.room ?? ""),
+    );
+
+    const instructorSourceRows = dedupeByKey(
+      sourceRows.filter((row) => String(row.instructor ?? "").trim()),
+      (row) => String(row.instructor ?? ""),
+    ).map((row) => ({
+      name: row.instructor,
+      department: "TBD",
+      availability: null,
+      status: "Active",
+    }));
+
+    const existingRooms = await fetchExistingRows(
+      "rooms",
+      "number",
+      roomSourceRows.map((row) => row.room),
+    );
+    const existingRoomByNumber = new Map(
+      existingRooms.map((row) => [normalizeLookupKey(row.number), row]),
+    );
+
+    const roomUpsertRows = roomSourceRows.map((row) => {
+      const existing = existingRoomByNumber.get(normalizeLookupKey(row.room));
+      const resolvedWing = getWingFromRoomInput(row.room).resolvedWing;
+      const capacity =
+        existing?.capacity ?? getDefaultRoomCapacity(row.roomType);
+      return existing
+        ? {
+            number: row.room,
+            type: row.roomType,
+            capacity,
+            status: existing.status ?? "Available",
+            wing: existing.wing ?? resolvedWing,
+          }
+        : {
+            number: row.room,
+            type: row.roomType,
+            capacity,
+            status: "Available",
+            wing: resolvedWing,
+          };
+    });
+
+    const existingInstructors = await fetchExistingRows(
+      "instructors",
+      "name",
+      instructorSourceRows.map((row) => row.name),
+    );
+    const existingInstructorByName = new Map(
+      existingInstructors.map((row) => [normalizeLookupKey(row.name), row]),
+    );
+
+    const instructorUpsertRows = instructorSourceRows.map((row) => {
+      const existing = existingInstructorByName.get(
+        normalizeLookupKey(row.name),
+      );
+      return existing
+        ? {
+            name: row.name,
+            department: existing.department ?? row.department,
+            availability: existing.availability ?? row.availability,
+            status: existing.status ?? row.status,
+          }
+        : row;
+    });
+
+    const subjectUpsertRows = subjectSourceRows.map((row) => ({
+      code: row.code,
+      title: row.title,
+      program: row.program,
+      year: row.year,
+      room_type: row.room_type,
+      duration: row.duration,
+    }));
+
+    const [importedRooms, importedInstructors, importedSubjects] =
+      await Promise.all([
+        upsertRows(
+          "rooms",
+          roomUpsertRows,
+          "number",
+          "Unable to import rooms.",
+        ),
+        upsertRows(
+          "instructors",
+          instructorUpsertRows,
+          "name",
+          "Unable to import instructors.",
+        ),
+        upsertRows(
+          "subjects",
+          subjectUpsertRows,
+          "code,program,year",
+          "Unable to import subjects.",
+        ),
+      ]);
+
+    const subjectByKey = new Map(
+      importedSubjects.map((row) => [buildSubjectIdentityKey(row), row]),
+    );
+    const roomByNumber = new Map(
+      importedRooms.map((row) => [normalizeLookupKey(row.number), row]),
+    );
+    const instructorByName = new Map(
+      importedInstructors.map((row) => [normalizeLookupKey(row.name), row]),
+    );
+
+    const sectionSourceRows = dedupeByKey(sourceRows, (row) =>
+      buildSectionIdentityKey(row, { includeProgramYear: true }),
+    );
+
+    const sectionUpsertRows = sectionSourceRows
+      .map((row) => {
+        const subject = subjectByKey.get(buildSubjectIdentityKey(row));
+        if (!subject) {
+          return null;
+        }
+
+        return {
+          ...(row.section_id ? { id: row.section_id } : {}),
+          subject_id: subject.id,
+          section: row.section,
+          enrolled: Number(row.enrolled ?? 0),
+          status: normalizeSectionStatusForDb(row.status),
+          academic_year: row.academicYear,
+          semester: row.semester,
+        };
+      })
+      .filter(Boolean);
+
+    const importedSections = await upsertRows(
+      "subject_sections",
+      sectionUpsertRows,
+      "subject_id,section,academic_year,semester",
+      "Unable to import subject sections.",
+    );
+
+    const sectionById = new Map(
+      importedSections.map((row) => [normalizeLookupKey(row.id), row]),
+    );
+    const sectionByKey = new Map(
+      importedSections.map((row) => [
+        `${normalizeLookupKey(row.subject_id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academic_year)}|${normalizeLookupKey(row.semester)}`,
+        row,
+      ]),
+    );
+
+    const scheduleUpsertRows = [];
+    sourceRows.forEach((row, index) => {
+      const scheduleRow = scheduleDbRows[index];
+      if (!scheduleRow) return;
+
+      const subject = subjectByKey.get(buildSubjectIdentityKey(row));
+      const directSection = row.section_id
+        ? sectionById.get(normalizeLookupKey(row.section_id))
+        : null;
+      const derivedSection = sectionByKey.get(
+        `${normalizeLookupKey(subject?.id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academicYear)}|${normalizeLookupKey(row.semester)}`,
+      );
+      const resolvedSection = directSection ?? derivedSection;
+
+      if (!resolvedSection) {
+        return;
+      }
+
+      const room = roomByNumber.get(normalizeLookupKey(row.room));
+      const instructor = instructorByName.get(
+        normalizeLookupKey(row.instructor),
+      );
+
+      scheduleUpsertRows.push({
+        ...scheduleRow,
+        section_id: resolvedSection.id,
+        subject_id: subject?.id ?? scheduleRow.subject_id ?? null,
+        room_id: room?.id ?? null,
+        instructor_id: instructor?.id ?? null,
+      });
+    });
+
+    if (scheduleUpsertRows.length === 0) {
       throw new Error(
-        normalizeDbError(sectionError, "Unable to import subject sections."),
+        "No schedule rows could be matched to subject sections. Check subject, section, room, and instructor values.",
       );
     }
+
+    await upsertRows(
+      "schedule_assignments",
+      scheduleUpsertRows,
+      "section_id,academic_year,semester",
+      "Unable to import schedule assignments.",
+    );
   };
 
   const applyImport = async () => {
@@ -401,7 +620,7 @@ export default function ImportModal({ isOpen, onClose }) {
 
     try {
       if (parsed.type === CSV_TYPES.FULL_LIST) {
-        await importScheduleAssignments(parsed);
+        await importFullList(parsed);
       } else if (parsed.type === CSV_TYPES.SUBJECTS) {
         await importSubjectsAndSections(parsed);
       } else if (parsed.type === CSV_TYPES.ROOMS) {
@@ -543,6 +762,29 @@ export default function ImportModal({ isOpen, onClose }) {
             Supported payloads: full list, rooms, instructors, subject sections.
           </div>
         </div>
+
+        {Array.isArray(parsed?.warnings) && parsed.warnings.length > 0 && (
+          <div
+            style={{
+              padding: 10,
+              borderRadius: 8,
+              fontSize: 12,
+              color: "#92400e",
+              background: "#fffbeb",
+              border: "1px solid #fcd34d",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontWeight: 700 }}>Validation feedback</div>
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {parsed.warnings.map((warning, index) => (
+                <li key={`${warning}-${index}`}>{warning}</li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {error && (
           <div
