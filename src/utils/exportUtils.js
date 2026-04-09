@@ -270,6 +270,56 @@ function assertRoomHeaderMatch(actualHeaders) {
   return ["wing", "room wing"].includes(normalizedActual[baseHeaders.length]);
 }
 
+function resolveInstructorHeaderIndexes(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+
+  // Required base columns remain fixed for compatibility.
+  if (normalizedActual[0] !== "name" || normalizedActual[1] !== "department") {
+    return null;
+  }
+
+  // Standard template: Name, Department, Availability, Status
+  if (
+    normalizedActual.length >= 4 &&
+    normalizedActual[2] === "availability" &&
+    normalizedActual[3] === "status"
+  ) {
+    return {
+      availabilityIndex: 2,
+      statusIndex: 3,
+      availabilityColumnMissing: false,
+    };
+  }
+
+  // Optional availability column support: Name, Department, Status
+  if (normalizedActual.length >= 3 && normalizedActual[2] === "status") {
+    return {
+      availabilityIndex: -1,
+      statusIndex: 2,
+      availabilityColumnMissing: true,
+    };
+  }
+
+  // Accept an explicitly blank availability header before Status.
+  if (
+    normalizedActual.length >= 4 &&
+    !normalizedActual[2] &&
+    normalizedActual[3] === "status"
+  ) {
+    return {
+      availabilityIndex: -1,
+      statusIndex: 3,
+      availabilityColumnMissing: true,
+    };
+  }
+
+  return null;
+}
+
+function assertInstructorHeaderMatch(actualHeaders) {
+  return !!resolveInstructorHeaderIndexes(actualHeaders);
+}
+
 function getTypeConfig(type) {
   const config = CSV_FORMATS[type];
   if (!config) {
@@ -348,14 +398,31 @@ function parseFullListRows(rows, warnings = []) {
     .filter((course) => course.code);
 }
 
-function parseFacultyRows(rows, warnings = []) {
+function parseFacultyRows(rows, warnings = [], options = {}) {
+  const availabilityIndex =
+    Number.isInteger(options?.availabilityIndex) &&
+    options.availabilityIndex >= 0
+      ? options.availabilityIndex
+      : -1;
+  const statusIndex = Number.isInteger(options?.statusIndex)
+    ? options.statusIndex
+    : 3;
+
+  if (options?.availabilityColumnMissing) {
+    addImportWarning(
+      warnings,
+      "Instructors CSV: availability column missing; importing availability as null.",
+    );
+  }
+
   return rows
     .map((r, index) => {
       const rowNumber = index + 2;
-      const availability = String(r[2] ?? "").trim();
-      const status = String(r[3] ?? "").trim();
+      const availability =
+        availabilityIndex >= 0 ? String(r[availabilityIndex] ?? "").trim() : "";
+      const status = String(r[statusIndex] ?? "").trim();
 
-      if (!availability) {
+      if (!availability && availabilityIndex >= 0) {
         addImportWarning(
           warnings,
           `Instructors row ${rowNumber}: blank availability; storing null.`,
@@ -516,6 +583,9 @@ export function parseImportCsv(csvText, type) {
     if (candidate === CSV_TYPES.ROOMS) {
       return assertRoomHeaderMatch(headers);
     }
+    if (candidate === CSV_TYPES.INSTRUCTORS) {
+      return assertInstructorHeaderMatch(headers);
+    }
     return assertHeaderMatch(headers, getTypeConfig(candidate).headers);
   });
 
@@ -599,8 +669,15 @@ export function parseImportCsv(csvText, type) {
   }
 
   if (selectedType === CSV_TYPES.INSTRUCTORS) {
+    const instructorHeaderConfig = resolveInstructorHeaderIndexes(headers);
+    if (!instructorHeaderConfig) {
+      throw new Error(
+        "Invalid instructors CSV header. Use Name, Department, Availability, Status (or Name, Department, Status).",
+      );
+    }
+
     const instructors = dedupeByIdentity(
-      parseFacultyRows(dataRows, warnings),
+      parseFacultyRows(dataRows, warnings, instructorHeaderConfig),
       getTypeConfig(selectedType).rowKey,
     );
     return {
