@@ -357,7 +357,7 @@ export function DataProvider({ children }) {
     }, 0);
 
     return () => clearTimeout(timer);
-  }, [migrated, bootstrapFromSupabase]);
+  }, [bootstrapFromSupabase]);
 
   const subjectByCode = useMemo(() => {
     const map = new Map();

@@ -1,5 +1,9 @@
 import { getWingFromRoomInput } from "./roomUtils";
-import { normalizeRoomType, sanitizeRoomCapacity } from "../data/constants";
+import {
+  normalizeRoomType,
+  sanitizeRoomCapacity,
+  getDefaultRoomCapacity,
+} from "../data/constants";
 
 export const CSV_TYPES = {
   FULL_LIST: "full-list",
@@ -13,6 +17,9 @@ const DEFAULT_INSTRUCTOR = {
   availability: "TBD",
   status: "Active",
 };
+
+const DEFAULT_ASSIGNMENT_STATUS = "Pending";
+const DEFAULT_SECTION_STATUS_DB = "Not Assigned";
 
 export const CSV_FORMATS = {
   [CSV_TYPES.FULL_LIST]: {
@@ -43,17 +50,7 @@ export const CSV_FORMATS = {
     rowKey: (row) => {
       const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
       if (sectionId) return `id:${sectionId.toLowerCase()}`;
-      return [
-        row?.code,
-        row?.section,
-        row?.academicYear,
-        row?.semester,
-        row?.room,
-        row?.time,
-        row?.instructor,
-      ]
-        .map((value) => normalizeHeader(value))
-        .join("|");
+      return buildSectionIdentityKey(row, { includeProgramYear: true });
     },
   },
   [CSV_TYPES.ROOMS]: {
@@ -95,7 +92,14 @@ export const CSV_FORMATS = {
       "Status",
     ],
     rowKey: (row) =>
-      [row?.code, row?.section, row?.academicYear, row?.semester]
+      [
+        row?.code,
+        row?.program,
+        row?.year,
+        row?.section,
+        row?.academicYear,
+        row?.semester,
+      ]
         .map((value) => normalizeHeader(value))
         .join("|"),
   },
@@ -127,6 +131,55 @@ function normalizeSectionIdentity(value) {
   return String(value ?? "")
     .trim()
     .toLowerCase();
+}
+
+function normalizeAssignmentStatus(
+  value,
+  fallback = DEFAULT_ASSIGNMENT_STATUS,
+) {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return fallback;
+  if (normalized === "assigned") return "Assigned";
+  if (normalized === "conflict") return "Conflict";
+  if (normalized === "pending" || normalized === "unresolved") return "Pending";
+  return fallback;
+}
+
+function normalizeSectionStatusForDb(value) {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return DEFAULT_SECTION_STATUS_DB;
+  if (normalized === "assigned") return "Assigned";
+  if (
+    normalized === "pending" ||
+    normalized === "unresolved" ||
+    normalized === "not assigned" ||
+    normalized === "not_assigned"
+  ) {
+    return "Not Assigned";
+  }
+  return DEFAULT_SECTION_STATUS_DB;
+}
+
+function buildSectionIdentityKey(row, options = {}) {
+  const { includeProgramYear = false } = options;
+  const parts = includeProgramYear
+    ? [
+        row?.code,
+        row?.program,
+        row?.year,
+        row?.section,
+        row?.academicYear,
+        row?.semester,
+      ]
+    : [row?.code, row?.section, row?.academicYear, row?.semester];
+
+  return parts.map((value) => normalizeHeader(value)).join("|");
+}
+
+function buildSubjectIdentityKey(row) {
+  return [row?.code, row?.program, row?.year]
+    .map((value) => normalizeHeader(value))
+    .join("|");
 }
 
 function toNumber(value, fallback = 0) {
@@ -225,20 +278,29 @@ function getTypeConfig(type) {
 function parseFullListRows(rows) {
   return rows.map((r) => {
     const roomType = normalizeRoomType(r[9]);
+    const section_id = String(r[0] ?? "").trim();
+    const code = String(r[1] ?? "")
+      .trim()
+      .toUpperCase();
+    const section = String(r[3] ?? "").trim();
+    const academicYear = String(r[4] ?? "").trim();
+    const semester = String(r[5] ?? "").trim();
+    const program = String(r[6] ?? "")
+      .trim()
+      .toUpperCase();
+    const year = String(r[7] ?? "").trim();
+    const statusRaw = String(r[15] ?? "").trim();
 
     return {
-      section_id: String(r[0] ?? "").trim(),
-      code: String(r[1] ?? "")
-        .trim()
-        .toUpperCase(),
+      section_id,
+      sectionId: section_id,
+      code,
       title: String(r[2] ?? "").trim(),
-      section: String(r[3] ?? "").trim(),
-      academicYear: String(r[4] ?? "").trim(),
-      semester: String(r[5] ?? "").trim(),
-      program: String(r[6] ?? "")
-        .trim()
-        .toUpperCase(),
-      year: String(r[7] ?? "").trim(),
+      section,
+      academicYear,
+      semester,
+      program,
+      year,
       enrolled: toNumber(r[8], 0),
       roomType,
       room: String(r[10] ?? "").trim(),
@@ -248,7 +310,17 @@ function parseFullListRows(rows) {
       instructor: String(r[14] ?? "")
         .trim()
         .replace(/^—$/, ""),
-      status: String(r[15] ?? "").trim() || "Pending",
+      status: statusRaw,
+      dedupeKey:
+        section_id ||
+        buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+      sectionIdentityKey: buildSectionIdentityKey(
+        { code, program, year, section, academicYear, semester },
+        { includeProgramYear: true },
+      ),
     };
   });
 }
@@ -258,9 +330,8 @@ function parseFacultyRows(rows) {
     .map((r) => ({
       name: String(r[0] ?? "").trim(),
       department: String(r[1] ?? "").trim() || DEFAULT_INSTRUCTOR.department,
-      availability:
-        String(r[2] ?? "").trim() || DEFAULT_INSTRUCTOR.availability,
-      status: String(r[3] ?? "").trim() || DEFAULT_INSTRUCTOR.status,
+      availability: String(r[2] ?? "").trim(),
+      status: String(r[3] ?? "").trim(),
     }))
     .filter((inst) => inst.name);
 }
@@ -271,13 +342,18 @@ function parseRoomRows(rows) {
       const number = String(r[0] ?? "").trim();
       const type = normalizeRoomType(r[1]);
       const wingData = getWingFromRoomInput(number, r[4]);
+      const rawCapacity = String(r[2] ?? "").trim();
+      const computedCapacity = rawCapacity
+        ? sanitizeRoomCapacity(type, rawCapacity)
+        : getDefaultRoomCapacity(type);
 
       return {
         number,
         type,
-        capacity: sanitizeRoomCapacity(type, r[2]),
+        capacity: computedCapacity,
         status: String(r[3] ?? "").trim() || "Available",
         wing: wingData.resolvedWing,
+        dedupeKey: normalizeHeader(number),
       };
     })
     .filter((room) => room.number);
@@ -287,27 +363,43 @@ function parseSubjectRows(rows) {
   return rows
     .map((r) => {
       const roomType = normalizeRoomType(r[8]);
+      const code = String(r[0] ?? "")
+        .trim()
+        .toUpperCase();
+      const section = String(r[2] ?? "").trim();
+      const academicYear = String(r[3] ?? "").trim();
+      const semester = String(r[4] ?? "").trim();
+      const program = String(r[5] ?? "")
+        .trim()
+        .toUpperCase();
+      const year = String(r[6] ?? "").trim();
+      const statusRaw = String(r[11] ?? "").trim();
 
       return {
-        code: String(r[0] ?? "")
-          .trim()
-          .toUpperCase(),
+        code,
         title: String(r[1] ?? "").trim(),
-        section: String(r[2] ?? "").trim(),
-        academicYear: String(r[3] ?? "").trim(),
-        semester: String(r[4] ?? "").trim(),
-        program: String(r[5] ?? "")
-          .trim()
-          .toUpperCase(),
-        year: String(r[6] ?? "").trim(),
+        section,
+        academicYear,
+        semester,
+        program,
+        year,
         enrolled: toNumber(r[7], 0),
         roomType,
         duration: toNumber(r[9], 1.5),
         instructor: String(r[10] ?? "").trim(),
-        status: String(r[11] ?? "").trim() || "Pending",
+        status: statusRaw,
         room: "",
         time: "",
         pattern: "",
+        dedupeKey: buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+        sectionIdentityKey: buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+        subjectIdentityKey: buildSubjectIdentityKey({ code, program, year }),
       };
     })
     .filter((course) => course.code);
@@ -376,7 +468,38 @@ export function parseImportCsv(csvText, type) {
       parseFullListRows(dataRows),
       config?.rowKey ?? getTypeConfig(selectedType).rowKey,
     );
-    return { type: selectedType, rows, rowCount: rows.length };
+    return {
+      type: selectedType,
+      rows,
+      dbRows: rows.map((row) => ({
+        section_id:
+          String(row.section_id ?? row.sectionId ?? "").trim() || null,
+        course_code: row.code,
+        course_title: row.title,
+        section: row.section,
+        academic_year: row.academicYear,
+        semester: row.semester,
+        program: row.program,
+        year: row.year,
+        enrolled: Number(row.enrolled ?? 0),
+        room_number: row.room,
+        room_type: normalizeRoomType(row.roomType),
+        instructor_name: row.instructor,
+        pattern: row.pattern,
+        time_display: row.time,
+        duration: Number(row.duration ?? 0),
+        status: normalizeAssignmentStatus(row.status),
+        dedupe_key:
+          String(row.section_id ?? row.sectionId ?? "").trim() ||
+          row.sectionIdentityKey ||
+          buildSectionIdentityKey(row, { includeProgramYear: true }),
+      })),
+      upsert: {
+        table: "schedule_assignments",
+        conflictTarget: ["section_id", "academic_year", "semester"],
+      },
+      rowCount: rows.length,
+    };
   }
 
   if (selectedType === CSV_TYPES.ROOMS) {
@@ -384,15 +507,53 @@ export function parseImportCsv(csvText, type) {
       parseRoomRows(dataRows),
       getTypeConfig(selectedType).rowKey,
     );
-    return { type: selectedType, rooms, rowCount: rooms.length };
+    return {
+      type: selectedType,
+      rooms,
+      dbRows: rooms.map((room) => ({
+        number: room.number,
+        type: normalizeRoomType(room.type),
+        capacity: sanitizeRoomCapacity(room.type, room.capacity),
+        status: room.status || "Available",
+        wing: room.wing || null,
+        dedupe_key: normalizeHeader(room.number),
+      })),
+      upsert: {
+        table: "rooms",
+        conflictTarget: ["number"],
+      },
+      rowCount: rooms.length,
+    };
   }
 
   if (selectedType === CSV_TYPES.INSTRUCTORS) {
     const instructors = dedupeByIdentity(
-      parseFacultyRows(dataRows).map(normalizeImportedInstructor),
+      parseFacultyRows(dataRows),
       getTypeConfig(selectedType).rowKey,
     );
-    return { type: selectedType, instructors, rowCount: instructors.length };
+    return {
+      type: selectedType,
+      instructors,
+      dbRows: instructors.map((inst) => ({
+        name: inst.name,
+        department: inst.department || DEFAULT_INSTRUCTOR.department,
+        availability: inst.availability || null,
+        status: inst.status || null,
+        dedupe_key: normalizeInstructorName(inst.name),
+      })),
+      dbRowsWithDefaults: instructors.map((inst) => ({
+        name: inst.name,
+        department: inst.department || DEFAULT_INSTRUCTOR.department,
+        availability: inst.availability || DEFAULT_INSTRUCTOR.availability,
+        status: inst.status || DEFAULT_INSTRUCTOR.status,
+        dedupe_key: normalizeInstructorName(inst.name),
+      })),
+      upsert: {
+        table: "instructors",
+        conflictTarget: ["name"],
+      },
+      rowCount: instructors.length,
+    };
   }
 
   if (selectedType === CSV_TYPES.SUBJECTS) {
@@ -400,7 +561,57 @@ export function parseImportCsv(csvText, type) {
       parseSubjectRows(dataRows),
       getTypeConfig(selectedType).rowKey,
     );
-    return { type: selectedType, subjects, rowCount: subjects.length };
+    const dbSubjects = dedupeByIdentity(
+      subjects.map((row) => ({
+        code: row.code,
+        title: row.title,
+        program: row.program,
+        year: row.year,
+        room_type: normalizeRoomType(row.roomType),
+        duration: Number(row.duration ?? 1.5),
+        dedupe_key: buildSubjectIdentityKey(row),
+      })),
+      (row) => row.dedupe_key,
+    );
+
+    const dbSections = subjects.map((row) => ({
+      subject_ref: {
+        code: row.code,
+        program: row.program,
+        year: row.year,
+      },
+      section: row.section,
+      enrolled: Number(row.enrolled ?? 0),
+      status: normalizeSectionStatusForDb(row.status),
+      academic_year: row.academicYear,
+      semester: row.semester,
+      dedupe_key: buildSectionIdentityKey(row, { includeProgramYear: true }),
+    }));
+
+    return {
+      type: selectedType,
+      subjects,
+      dbRows: {
+        subjects: dbSubjects,
+        subject_sections: dbSections,
+      },
+      upsert: {
+        subjects: {
+          table: "subjects",
+          conflictTarget: ["code", "program", "year"],
+        },
+        subject_sections: {
+          table: "subject_sections",
+          conflictTarget: [
+            "subject_id",
+            "section",
+            "academic_year",
+            "semester",
+          ],
+        },
+      },
+      rowCount: subjects.length,
+    };
   }
 
   throw new Error(`Unsupported CSV type: ${selectedType}`);

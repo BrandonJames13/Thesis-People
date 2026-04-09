@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
+import { supabase } from "../../lib/supabaseClient";
 import {
   CSV_TYPE_OPTIONS,
   CSV_TYPES,
-  dedupeImportedRecords,
   downloadCsvTemplate,
   getCsvTypeConfig,
   parseImportCsv,
@@ -17,12 +17,7 @@ async function readFileText(file) {
 }
 
 export default function ImportModal({ isOpen, onClose }) {
-  const {
-    updateSubjectSectionsFromCourseRows,
-    updateInstructors,
-    updateRooms,
-    updateScheduleAssignments,
-  } = useData();
+  const { resetAllData } = useData();
   const { showNotification } = useNotification();
 
   const [source, setSource] = useState("upload");
@@ -33,6 +28,7 @@ export default function ImportModal({ isOpen, onClose }) {
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState("");
   const [isParsing, setIsParsing] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
 
   const selectedTypeConfig = useMemo(
     () => getCsvTypeConfig(importType),
@@ -127,45 +123,305 @@ export default function ImportModal({ isOpen, onClose }) {
     }
   };
 
-  const applyImport = () => {
+  const normalizeDbError = (err, fallback) => {
+    if (!err) return fallback;
+    const parts = [err.message, err.details, err.hint].filter(Boolean);
+    return parts.join(" | ") || fallback;
+  };
+
+  const isNotNullViolation = (err) => {
+    if (!err) return false;
+    const code = String(err.code ?? "").trim();
+    if (code === "23502") return true;
+    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
+    return (
+      message.includes("null value") && message.includes("violates not-null")
+    );
+  };
+
+  const buildCompositeSubjectKey = (code, program, year) =>
+    [code, program, year]
+      .map((value) =>
+        String(value ?? "")
+          .trim()
+          .toLowerCase(),
+      )
+      .join("|");
+
+  const importRooms = async (payload) => {
+    const dbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+    if (dbRows.length === 0) {
+      throw new Error("No room rows were parsed for import.");
+    }
+
+    const { error: writeError } = await supabase
+      .from("rooms")
+      .upsert(dbRows, { onConflict: "number" });
+
+    if (writeError) {
+      throw new Error(normalizeDbError(writeError, "Unable to import rooms."));
+    }
+  };
+
+  const importScheduleAssignments = async (payload) => {
+    const dbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+    if (dbRows.length === 0) {
+      throw new Error("No schedule assignment rows were parsed for import.");
+    }
+
+    const rowsWithSectionId = dbRows.filter((row) => row.section_id);
+    const rowsWithoutSectionId = dbRows.filter((row) => !row.section_id);
+
+    if (rowsWithSectionId.length > 0) {
+      const { error: upsertError } = await supabase
+        .from("schedule_assignments")
+        .upsert(rowsWithSectionId, {
+          onConflict: "section_id,academic_year,semester",
+        });
+
+      if (upsertError) {
+        throw new Error(
+          normalizeDbError(
+            upsertError,
+            "Unable to upsert schedule assignments.",
+          ),
+        );
+      }
+    }
+
+    if (rowsWithoutSectionId.length > 0) {
+      const { error: insertError } = await supabase
+        .from("schedule_assignments")
+        .insert(rowsWithoutSectionId);
+
+      if (insertError) {
+        throw new Error(
+          normalizeDbError(
+            insertError,
+            "Unable to insert schedule assignments.",
+          ),
+        );
+      }
+    }
+  };
+
+  const importInstructors = async (payload) => {
+    const rawRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+    const defaultRows = Array.isArray(payload?.dbRowsWithDefaults)
+      ? payload.dbRowsWithDefaults
+      : [];
+
+    if (rawRows.length === 0) {
+      throw new Error("No instructor rows were parsed for import.");
+    }
+
+    const importRows = async (rows) => {
+      const names = rows.map((row) => row.name).filter(Boolean);
+      const { data: existing, error: existingError } = await supabase
+        .from("instructors")
+        .select("id, name")
+        .in("name", names);
+
+      if (existingError) {
+        throw new Error(
+          normalizeDbError(
+            existingError,
+            "Unable to load existing instructors.",
+          ),
+        );
+      }
+
+      const existingByName = new Map(
+        (existing ?? []).map((row) => [
+          String(row.name).trim().toLowerCase(),
+          row,
+        ]),
+      );
+
+      const toInsert = [];
+      const updateOps = [];
+
+      rows.forEach((row) => {
+        const key = String(row.name ?? "")
+          .trim()
+          .toLowerCase();
+        const existingRow = existingByName.get(key);
+        const payloadRow = {
+          name: row.name,
+          department: row.department,
+          availability: row.availability,
+          status: row.status,
+        };
+
+        if (!existingRow) {
+          toInsert.push(payloadRow);
+          return;
+        }
+
+        updateOps.push(
+          supabase
+            .from("instructors")
+            .update(payloadRow)
+            .eq("id", existingRow.id),
+        );
+      });
+
+      if (toInsert.length > 0) {
+        const { error: insertError } = await supabase
+          .from("instructors")
+          .insert(toInsert);
+        if (insertError) {
+          throw insertError;
+        }
+      }
+
+      for (const op of updateOps) {
+        const { error: updateError } = await op;
+        if (updateError) {
+          throw updateError;
+        }
+      }
+    };
+
+    try {
+      await importRows(rawRows);
+    } catch (err) {
+      if (!isNotNullViolation(err) || defaultRows.length === 0) {
+        throw new Error(normalizeDbError(err, "Unable to import instructors."));
+      }
+      await importRows(defaultRows);
+    }
+  };
+
+  const importSubjectsAndSections = async (payload) => {
+    const subjectRows = payload?.dbRows?.subjects ?? [];
+    const sectionRows = payload?.dbRows?.subject_sections ?? [];
+
+    if (subjectRows.length === 0 && sectionRows.length === 0) {
+      throw new Error("No subject section rows were parsed for import.");
+    }
+
+    if (subjectRows.length > 0) {
+      const { error: subjectError } = await supabase.from("subjects").upsert(
+        subjectRows.map((row) => ({
+          code: row.code,
+          title: row.title,
+          program: row.program,
+          year: row.year,
+          room_type: row.room_type,
+          duration: row.duration,
+        })),
+        { onConflict: "code,program,year" },
+      );
+
+      if (subjectError) {
+        throw new Error(
+          normalizeDbError(subjectError, "Unable to import subjects."),
+        );
+      }
+    }
+
+    if (sectionRows.length === 0) {
+      return;
+    }
+
+    const codes = Array.from(
+      new Set(sectionRows.map((row) => row?.subject_ref?.code).filter(Boolean)),
+    );
+
+    const { data: subjectIndexRows, error: subjectIndexError } = await supabase
+      .from("subjects")
+      .select("id, code, program, year")
+      .in("code", codes);
+
+    if (subjectIndexError) {
+      throw new Error(
+        normalizeDbError(
+          subjectIndexError,
+          "Unable to map imported sections to subjects.",
+        ),
+      );
+    }
+
+    const subjectIdByIdentity = new Map(
+      (subjectIndexRows ?? []).map((row) => [
+        buildCompositeSubjectKey(row.code, row.program, row.year),
+        row.id,
+      ]),
+    );
+
+    const sectionUpsertRows = sectionRows
+      .map((row) => {
+        const key = buildCompositeSubjectKey(
+          row?.subject_ref?.code,
+          row?.subject_ref?.program,
+          row?.subject_ref?.year,
+        );
+        const subjectId = subjectIdByIdentity.get(key);
+        if (!subjectId) return null;
+
+        return {
+          subject_id: subjectId,
+          section: row.section,
+          enrolled: row.enrolled,
+          status: row.status,
+          academic_year: row.academic_year,
+          semester: row.semester,
+        };
+      })
+      .filter(Boolean);
+
+    if (sectionUpsertRows.length === 0) {
+      throw new Error(
+        "No subject sections could be matched to subjects. Check subject code/program/year values.",
+      );
+    }
+
+    const { error: sectionError } = await supabase
+      .from("subject_sections")
+      .upsert(sectionUpsertRows, {
+        onConflict: "subject_id,section,academic_year,semester",
+      });
+
+    if (sectionError) {
+      throw new Error(
+        normalizeDbError(sectionError, "Unable to import subject sections."),
+      );
+    }
+  };
+
+  const applyImport = async () => {
     if (!parsed) {
       setError("Parse a CSV file before importing.");
       return;
     }
 
-    if (parsed.type === CSV_TYPES.FULL_LIST) {
-      const rows = dedupeImportedRecords(parsed.type, parsed.rows);
-      updateScheduleAssignments(rows);
-      showNotification(`Imported ${rows.length} full list row(s).`);
-      onClose();
-      return;
-    }
+    setIsImporting(true);
+    setError("");
 
-    if (parsed.type === CSV_TYPES.SUBJECTS) {
-      const rows = dedupeImportedRecords(parsed.type, parsed.subjects);
-      updateSubjectSectionsFromCourseRows(rows);
-      showNotification(`Imported ${rows.length} subject section row(s).`);
-      onClose();
-      return;
-    }
+    try {
+      if (parsed.type === CSV_TYPES.FULL_LIST) {
+        await importScheduleAssignments(parsed);
+      } else if (parsed.type === CSV_TYPES.SUBJECTS) {
+        await importSubjectsAndSections(parsed);
+      } else if (parsed.type === CSV_TYPES.ROOMS) {
+        await importRooms(parsed);
+      } else if (parsed.type === CSV_TYPES.INSTRUCTORS) {
+        await importInstructors(parsed);
+      } else {
+        throw new Error(`Unsupported import type: ${parsed.type}`);
+      }
 
-    if (parsed.type === CSV_TYPES.ROOMS) {
-      const rows = dedupeImportedRecords(parsed.type, parsed.rooms);
-      updateRooms(rows);
-      showNotification(`Imported ${rows.length} room row(s).`);
+      resetAllData();
+      showNotification(
+        `Imported ${parsed.rowCount ?? 0} ${selectedTypeConfig.label.toLowerCase()} row(s).`,
+      );
       onClose();
-      return;
+    } catch (err) {
+      setError(err.message || "Unable to import CSV data.");
+    } finally {
+      setIsImporting(false);
     }
-
-    if (parsed.type === CSV_TYPES.INSTRUCTORS) {
-      const rows = dedupeImportedRecords(parsed.type, parsed.instructors);
-      updateInstructors(rows);
-      showNotification(`Imported ${rows.length} instructor row(s).`);
-      onClose();
-      return;
-    }
-
-    setError(`Unsupported import type: ${parsed.type}`);
   };
 
   return (
@@ -308,7 +564,7 @@ export default function ImportModal({ isOpen, onClose }) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={applyImport}>
-            Import
+            {isImporting ? "Importing..." : "Import"}
           </button>
         </div>
       </div>
