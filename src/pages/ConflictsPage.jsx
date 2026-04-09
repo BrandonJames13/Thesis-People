@@ -3,7 +3,10 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
-import { formatAssignmentLabel } from "../utils/scheduleUtils";
+import {
+  formatAssignmentLabel,
+  getAssignmentSectionId,
+} from "../utils/scheduleUtils";
 
 export default function ConflictsPage() {
   const navigate = useNavigate();
@@ -50,9 +53,14 @@ export default function ConflictsPage() {
   };
 
   const getConflictSectionSummary = (conflict) => {
-    const labels = (conflict?.courses ?? []).map((assignment) =>
-      formatAssignmentLabel(assignment),
-    );
+    const labels = (conflict?.courses ?? []).map((assignment) => {
+      const label = formatAssignmentLabel(assignment);
+      const sectionRef = String(
+        getAssignmentSectionId(assignment) ?? assignment?.assignment_id ?? "",
+      ).trim();
+      if (!sectionRef) return label;
+      return `${label} [${sectionRef.slice(-10).toUpperCase()}]`;
+    });
     if (labels.length === 0) return "";
     return labels.join(" • ");
   };
@@ -225,7 +233,9 @@ export default function ConflictsPage() {
       {reallocationLog.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>
           <div className="card-header">
-            <div className="card-title">📋 Reallocation Log</div>
+            <div className="card-title">
+              📋 Reallocation Log (Section-Aware)
+            </div>
             <span className="pill pill-green">
               {reallocationLog.length} resolved this session
             </span>

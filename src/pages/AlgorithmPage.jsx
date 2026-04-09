@@ -25,7 +25,15 @@ function loadWeights() {
 }
 
 export default function AlgorithmPage() {
-  const { subjectSections, scheduleAssignments } = useData();
+  const {
+    subjectSections,
+    scheduleAssignments,
+    assignments,
+    availableRooms,
+    availableInstructors,
+    availableSubjects,
+    availableSections,
+  } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
@@ -33,15 +41,14 @@ export default function AlgorithmPage() {
   const [weights, setWeights] = useState(loadWeights);
 
   const { hard } = detectConflicts();
-  const assignedCount = scheduleAssignments.length;
+  const assignedCount = assignments.length;
   const totalSections = subjectSections.length;
   const conflictRate =
     assignedCount > 0
       ? ((hard.length / assignedCount) * 100).toFixed(1)
       : "0.0";
-  const occupiedRooms = new Set(
-    scheduleAssignments.map((c) => c.room).filter(Boolean),
-  ).size;
+  const occupiedRooms = new Set(assignments.map((c) => c.room).filter(Boolean))
+    .size;
 
   const totalWeight =
     weights.timePreference +
@@ -100,7 +107,8 @@ export default function AlgorithmPage() {
           <div className="section-title">Algorithm Configuration</div>
           <div className="section-subtitle">
             Constraint-Based Greedy · Tier 1 (Hard) + Tier 2 (Soft) ·
-            Transparent &amp; customizable
+            Transparent &amp; customizable · Uses all available
+            rooms/instructors/subjects/sections
           </div>
         </div>
         <button
@@ -286,6 +294,19 @@ export default function AlgorithmPage() {
               ⚡ Performance Benchmarks vs. Target
             </div>
           </div>
+          <div
+            style={{
+              padding: "10px 14px",
+              borderBottom: "1px solid var(--border)",
+              fontSize: 11,
+              color: "var(--text3)",
+              fontFamily: "var(--mono)",
+            }}
+          >
+            AVAILABLE INPUTS · Rooms: {availableRooms.length} · Instructors:{" "}
+            {availableInstructors.length} · Subjects: {availableSubjects.length}{" "}
+            · Sections: {availableSections.length}
+          </div>
           <table>
             <thead>
               <tr>
@@ -322,9 +343,14 @@ export default function AlgorithmPage() {
                   "Rooms Utilized",
                   "> 80%",
                   assignedCount > 0
-                    ? `${Math.round((occupiedRooms / Math.max(1, new Set(scheduleAssignments.map((c) => c.room).filter(Boolean)).size + 1)) * 100)}%`
+                    ? `${Math.round((occupiedRooms / Math.max(1, availableRooms.length)) * 100)}%`
                     : "—",
-                  "orange",
+                  assignedCount > 0 &&
+                  Math.round(
+                    (occupiedRooms / Math.max(1, availableRooms.length)) * 100,
+                  ) >= 80
+                    ? "green"
+                    : "orange",
                 ],
                 [
                   "Admin Time per Semester",

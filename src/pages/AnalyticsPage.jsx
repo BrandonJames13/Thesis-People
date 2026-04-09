@@ -2,17 +2,18 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 
 export default function AnalyticsPage() {
-  const { rooms, subjectSections, scheduleAssignments } = useData();
+  const { rooms, subjectSections, scheduleAssignments, assignments } =
+    useData();
   const { detectConflicts } = useConflicts();
 
   const { hard } = detectConflicts();
-  const hasSchedule = scheduleAssignments.length > 0;
+  const hasSchedule = assignments.length > 0;
 
   // Room-by-room utilization: % of time slots occupied per room
   const utilData = rooms
     .map((room) => {
       const assignedToRoom = scheduleAssignments.filter(
-        (c) => c.room === room.number,
+        (c) => c.status === "Assigned" && c.room === room.number,
       ).length;
       const totalSlots = 10; // approx available daily slots
       const pct = Math.min(
@@ -35,7 +36,7 @@ export default function AnalyticsPage() {
     rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
   const totalSections = subjectSections.length;
-  const assignedSections = scheduleAssignments.length;
+  const assignedSections = assignments.length;
   const conflictRate =
     assignedSections > 0
       ? Math.round((hard.length / assignedSections) * 100)

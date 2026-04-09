@@ -17,6 +17,10 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const {
     rooms,
+    availableRooms,
+    availableSubjects,
+    availableSections,
+    availableInstructors,
     subjectSections,
     assignments,
     scheduleAssignments,
@@ -42,9 +46,10 @@ export default function DashboardPage() {
   // Dynamic computed values from real data
   const totalSections = subjectSections.length;
   const totalRooms = rooms.length;
-  const totalInstructors = new Set(
-    scheduleAssignments.map((c) => c.instructor).filter(Boolean),
-  ).size;
+  const totalSubjects = availableSubjects.length;
+  const totalAvailableSections = availableSections.length;
+  const totalAvailableRooms = availableRooms.length;
+  const totalAvailableInstructors = availableInstructors.length;
   const assignedSections = assignments.length;
   const hasSchedule = scheduleAssignments.length > 0;
   const progressPct =
@@ -66,7 +71,7 @@ export default function DashboardPage() {
       icon: hasSchedule ? "✓" : "○",
       name: "Input Data Collection",
       desc: hasSchedule
-        ? `${totalSections} sections · ${totalRooms} rooms · ${totalInstructors} instructors loaded`
+        ? `${totalAvailableRooms} available rooms · ${totalAvailableInstructors} available instructors · ${totalSubjects} subjects · ${totalAvailableSections} available sections loaded`
         : "Waiting for schedule generation",
       time: hasSchedule ? "0.3s" : "—",
     },
@@ -216,7 +221,7 @@ export default function DashboardPage() {
           {/* Recent Assignments */}
           <div className="card">
             <div className="card-header">
-              <div className="card-title">📋 Recent Assignments</div>
+              <div className="card-title">📋 Recent Section Assignments</div>
               <button
                 className="btn btn-secondary"
                 style={{ padding: "4px 10px", fontSize: 11 }}
@@ -245,6 +250,9 @@ export default function DashboardPage() {
                       <br />
                       <span style={{ fontSize: 11, color: "var(--text3)" }}>
                         {assignment.title}
+                        {assignment.sectionId
+                          ? ` · ${String(assignment.sectionId).slice(-10).toUpperCase()}`
+                          : ""}
                       </span>
                     </td>
                     <td className="monospace">{assignment.room}</td>
@@ -269,7 +277,7 @@ export default function DashboardPage() {
                         color: "var(--text3)",
                       }}
                     >
-                      No assignments yet
+                      No section assignments yet
                     </td>
                   </tr>
                 )}
