@@ -6,11 +6,7 @@ import {
   useMemo,
   useEffect,
 } from "react";
-import {
-  initialSubjects,
-  initialSubjectSections,
-} from "../data/initialSubjects";
-import { initialRooms } from "../data/initialRooms";
+import { supabase } from "../lib/supabaseClient";
 import { normalizeRoomType } from "../data/constants";
 
 const STORAGE_KEY = "rss_data_v1";
@@ -243,10 +239,9 @@ function migrateStoredData(data) {
 }
 
 const DEFAULT_NORMALIZED = {
-  subjects: cloneSubjects(initialSubjects),
-  subjectSections: initialSubjectSections.map((section) =>
-    normalizeSectionFromRow(section),
-  ),
+  subjects: [],
+  subjectSections: [],
+  rooms: [],
 };
 
 function loadFromStorage() {
@@ -282,7 +277,7 @@ export function DataProvider({ children }) {
       cloneSubjectSections(DEFAULT_NORMALIZED.subjectSections),
   );
   const [rooms, setRooms] = useState(
-    () => migrated?.rooms ?? initialRooms.map((r) => ({ ...r })),
+    () => migrated?.rooms ?? DEFAULT_NORMALIZED.rooms,
   );
   const [instructors, setInstructors] = useState(
     () => migrated?.instructors ?? [],
@@ -290,6 +285,75 @@ export function DataProvider({ children }) {
   const [scheduleAssignments, setScheduleAssignments] = useState(
     () => migrated?.scheduleAssignments ?? [],
   );
+
+  const bootstrapFromSupabase = useCallback(async () => {
+    const [roomsResult, subjectsResult, sectionsResult] = await Promise.all([
+      supabase.from("rooms").select("*").order("number"),
+      supabase
+        .from("subjects")
+        .select("id, code, title, program, year, room_type, duration"),
+      supabase
+        .from("subject_sections")
+        .select(
+          "id, subject_id, section, enrolled, status, academic_year, semester",
+        ),
+    ]);
+
+    if (!roomsResult.error) {
+      setRooms((roomsResult.data ?? []).map((room) => ({ ...room })));
+    }
+
+    if (subjectsResult.error) {
+      setSubjects([]);
+      setSubjectSections([]);
+      return;
+    }
+
+    const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
+      normalizeSubjectFromRow(row),
+    );
+    setSubjects(normalizedSubjects);
+
+    if (sectionsResult.error) {
+      setSubjectSections([]);
+      return;
+    }
+
+    const subjectById = new Map(
+      (subjectsResult.data ?? []).map((row) => [String(row.id), row]),
+    );
+
+    const normalizedSections = (sectionsResult.data ?? [])
+      .map((row) => {
+        const subject = subjectById.get(String(row.subject_id));
+        if (!subject) return null;
+
+        return normalizeSectionFromRow({
+          section_id: row.id,
+          subjectCode: subject.code,
+          section: row.section,
+          academic_year: row.academic_year,
+          semester: row.semester,
+          enrolled: row.enrolled,
+          status: row.status === "Not Assigned" ? "Pending" : row.status,
+          duration: Number(subject.duration ?? 1.5),
+          room_type: subject.room_type,
+        });
+      })
+      .filter(Boolean);
+
+    setSubjectSections(normalizedSections);
+  }, []);
+
+  useEffect(() => {
+    if (migrated) return;
+
+    const timer = setTimeout(() => {
+      bootstrapFromSupabase();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [migrated, bootstrapFromSupabase]);
 
   const subjectByCode = useMemo(() => {
     const map = new Map();
@@ -488,14 +552,13 @@ export function DataProvider({ children }) {
     } catch {
       return;
     }
-    setSubjects(cloneSubjects(DEFAULT_NORMALIZED.subjects));
-    setSubjectSections(
-      cloneSubjectSections(DEFAULT_NORMALIZED.subjectSections),
-    );
-    setRooms(initialRooms.map((r) => ({ ...r })));
+    setSubjects([]);
+    setSubjectSections([]);
+    setRooms([]);
     setInstructors([]);
     setScheduleAssignments([]);
-  }, []);
+    bootstrapFromSupabase();
+  }, [bootstrapFromSupabase]);
 
   const value = useMemo(
     () => ({
