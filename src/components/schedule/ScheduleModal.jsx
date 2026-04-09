@@ -7,7 +7,8 @@ import {
   checkManualConflict,
   formatAssignmentLabel,
   getAssignmentIdentityKey,
-  getAssignmentSectionId,
+  extractStartTime24,
+  applyManualAssignments,
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
@@ -27,8 +28,6 @@ export default function ScheduleModal({ onClose }) {
   const [mode, setMode] = useState("auto");
 
   // Auto mode state
-  const [autoDurationH, setAutoDurationH] = useState(1);
-  const [autoDurationM, setAutoDurationM] = useState(30);
   const [autoStart, setAutoStart] = useState("08:00");
   const [autoEnd, setAutoEnd] = useState("18:00");
   const [autoPattern, setAutoPattern] = useState("TTH");
@@ -55,9 +54,17 @@ export default function ScheduleModal({ onClose }) {
     const subjectByCode = new Map(
       availableSubjects.map((subject) => [subject.code, subject]),
     );
+    const assignmentByKey = new Map(
+      scheduleAssignments.map((assignment) => [
+        getAssignmentIdentityKey(assignment),
+        assignment,
+      ]),
+    );
 
     return availableSections.map((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
+      const sectionKey = getAssignmentIdentityKey(section);
+      const importedAssignment = assignmentByKey.get(sectionKey) ?? {};
       return {
         ...section,
         code: section.subjectCode,
@@ -67,9 +74,16 @@ export default function ScheduleModal({ onClose }) {
         program: subject.program ?? "",
         year: subject.year ?? "",
         roomType: section.roomType ?? subject.roomType ?? "Lecture",
+        duration:
+          Number(
+            section.duration ?? importedAssignment.duration ?? subject.duration,
+          ) || 1.5,
+        time: section.time || importedAssignment.time || "",
+        pattern: section.pattern || importedAssignment.pattern || "",
+        instructor: section.instructor || importedAssignment.instructor || "",
       };
     });
-  }, [availableSubjects, availableSections]);
+  }, [availableSubjects, availableSections, scheduleAssignments]);
 
   const sectionRowsByIdentity = useMemo(
     () =>
@@ -79,6 +93,41 @@ export default function ScheduleModal({ onClose }) {
 
   const selectedManualSection =
     sectionRowsByIdentity.get(manualSectionKey) || null;
+
+  useEffect(() => {
+    if (!selectedManualSection) return;
+
+    const assignmentKey = getAssignmentIdentityKey(selectedManualSection);
+    const existingAssignment = scheduleAssignments.find(
+      (assignment) => getAssignmentIdentityKey(assignment) === assignmentKey,
+    );
+
+    const source = existingAssignment || selectedManualSection;
+    const duration =
+      Number(source?.duration ?? selectedManualSection.duration ?? 1.5) || 1.5;
+    const nextHours = Math.floor(duration);
+    const nextMinutes = Math.round((duration - nextHours) * 60);
+    const nextPattern = String(source?.pattern ?? "").trim() || "MWF";
+    const importedStart = extractStartTime24(source, "");
+
+    setManualDurationH(nextHours);
+    setManualDurationM(nextMinutes);
+    setManualPattern(nextPattern);
+
+    if (importedStart) {
+      setManualTime(importedStart);
+    }
+
+    if (existingAssignment?.room) {
+      setManualRoom(existingAssignment.room);
+    }
+
+    if (existingAssignment?.instructor) {
+      setManualInstructor(existingAssignment.instructor);
+    } else if (selectedManualSection?.instructor) {
+      setManualInstructor(selectedManualSection.instructor);
+    }
+  }, [selectedManualSection, scheduleAssignments]);
 
   const toggleDay = (day) => {
     setActiveDays((prev) =>
@@ -100,11 +149,6 @@ export default function ScheduleModal({ onClose }) {
   }
 
   const handleRunAuto = () => {
-    const duration = autoDurationH + autoDurationM / 60;
-    if (duration <= 0) {
-      alert("Please enter a valid duration.");
-      return;
-    }
     if (activeDays.length === 0) {
       alert("Please select at least one active day.");
       return;
@@ -115,12 +159,16 @@ export default function ScheduleModal({ onClose }) {
       rooms: [...availableRooms],
       instructors: [...availableInstructors],
       scheduleAssignments: [...scheduleAssignments],
-      duration,
       startTime: autoStart,
       endTime: autoEnd,
       pattern: autoPattern,
       activeDays,
     });
+
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
 
     const roomUpdatesByNumber = new Map(
       result.rooms.map((room) => [room.number, room]),
@@ -162,8 +210,6 @@ export default function ScheduleModal({ onClose }) {
     scheduleAssignments,
     selectedManualSection,
   ]);
-
-  const hasConflict = conflictMsg?.type === "error";
 
   const handleAddEntry = () => {
     if (!selectedManualSection || !manualRoom || !manualTime) {
@@ -215,35 +261,31 @@ export default function ScheduleModal({ onClose }) {
       return;
     }
 
-    const newAssignments = [...scheduleAssignments];
-
-    toSave.forEach((entry) => {
-      const sectionRow = sectionRowsByIdentity.get(entry.assignmentKey);
-      if (!sectionRow) return;
-
-      const updatedAssignment = {
-        ...sectionRow,
-        sectionId: getAssignmentSectionId(sectionRow),
-        room: entry.roomName,
-        time: `${entry.pattern} ${formatTime(entry.startTime)}`,
-        instructor: entry.instructor || sectionRow.instructor || "",
-        duration: entry.duration,
-        pattern: entry.pattern,
-        status: "Assigned",
-      };
-
-      const targetSectionId = getAssignmentSectionId(updatedAssignment);
-      const idx = newAssignments.findIndex(
-        (s) =>
-          (targetSectionId && getAssignmentSectionId(s) === targetSectionId) ||
-          getAssignmentIdentityKey(s) === entry.assignmentKey,
-      );
-      if (idx >= 0) newAssignments[idx] = { ...updatedAssignment };
-      else newAssignments.push({ ...updatedAssignment });
+    const result = applyManualAssignments({
+      entries: toSave,
+      sectionRowsByIdentity,
+      scheduleAssignments,
+      rooms: [...availableRooms],
+      startTime: "07:00",
+      endTime: "21:00",
     });
 
-    updateScheduleAssignments(newAssignments);
+    if (result.error) {
+      showNotification(`⚠ ${result.error}`);
+      return;
+    }
+
+    updateScheduleAssignments(result.scheduleAssignments);
     onClose();
+
+    const movedCount = (result.moved ?? []).length;
+    if (movedCount > 0) {
+      showNotification(
+        `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved. Relocated ${movedCount} conflicted assignment${movedCount > 1 ? "s" : ""}.`,
+      );
+      return;
+    }
+
     showNotification(
       `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved!`,
     );
@@ -269,7 +311,7 @@ export default function ScheduleModal({ onClose }) {
               ▶ Generate Schedule
             </div>
             <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>
-              Manual entry or auto-generate · Flexible durations · Mon–Sat
+              Manual entry or auto-generate · Section-level durations · Mon–Sat
             </div>
           </div>
           <button
@@ -333,7 +375,8 @@ export default function ScheduleModal({ onClose }) {
             >
               ⚙ The algorithm will assign rooms and time slots to all{" "}
               <strong>Pending</strong> subject/sections automatically using the
-              Constraint-Based Greedy method.
+              Constraint-Based Greedy method and each section's imported
+              duration.
             </div>
             <div
               style={{
@@ -342,48 +385,6 @@ export default function ScheduleModal({ onClose }) {
                 gap: 14,
               }}
             >
-              <div>
-                <label
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: "var(--text2)",
-                    marginBottom: 6,
-                    display: "block",
-                  }}
-                >
-                  Duration per Class
-                </label>
-                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                  <input
-                    type="number"
-                    min={0}
-                    max={8}
-                    value={autoDurationH}
-                    onChange={(e) =>
-                      setAutoDurationH(parseInt(e.target.value) || 0)
-                    }
-                    className="search-input"
-                    style={{ width: 70, boxSizing: "border-box" }}
-                  />
-                  <span style={{ fontSize: 12, color: "var(--text3)" }}>h</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={59}
-                    step={5}
-                    value={autoDurationM}
-                    onChange={(e) =>
-                      setAutoDurationM(parseInt(e.target.value) || 0)
-                    }
-                    className="search-input"
-                    style={{ width: 70, boxSizing: "border-box" }}
-                  />
-                  <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                    min
-                  </span>
-                </div>
-              </div>
               <div>
                 <label
                   style={{
@@ -816,14 +817,11 @@ export default function ScheduleModal({ onClose }) {
                 <button
                   className="btn btn-primary"
                   onClick={handleSubmitManual}
-                  disabled={hasConflict}
                   title={
-                    hasConflict ? "Resolve the conflict before saving" : ""
+                    conflictMsg?.type === "error"
+                      ? "Conflicts will be relocated on save when possible"
+                      : ""
                   }
-                  style={{
-                    opacity: hasConflict ? 0.45 : 1,
-                    cursor: hasConflict ? "not-allowed" : "pointer",
-                  }}
                 >
                   ✓ Save Assignment
                 </button>
