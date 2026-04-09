@@ -198,6 +198,17 @@ function AddRoomModal({ onClose, onAdd, showNotification }) {
       setError("Please fill in all fields correctly.");
       return;
     }
+
+    // Capacity limits based on room type
+    if (type === "Computer Lab" && (cap < 30 || cap > 35)) {
+      setError("Computer Lab capacity must be between 30 and 35.");
+      return;
+    }
+    if (type === "Lecture" && (cap < 40 || cap > 45)) {
+      setError("Lecture room capacity must be between 40 and 45.");
+      return;
+    }
+
     setError("");
     onAdd({ number: number.trim(), type, capacity: cap, status });
   };
@@ -230,12 +241,26 @@ function AddRoomModal({ onClose, onAdd, showNotification }) {
           <input
             className="search-input"
             type="number"
-            placeholder="Capacity"
-            min={1}
+            placeholder={
+              type === "Computer Lab"
+                ? "Capacity (30–35)"
+                : type === "Lecture"
+                  ? "Capacity (40–45)"
+                  : "Capacity"
+            }
+            min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
+            max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
             style={{ width: "100%" }}
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />
+          {type && (
+            <div style={{ fontSize: 11, color: "var(--text3)" }}>
+              {type === "Computer Lab"
+                ? "⚠ Lab capacity: min 30, max 35"
+                : "⚠ Lecture capacity: min 40, max 45"}
+            </div>
+          )}
           <select
             className="search-input"
             style={{ width: "100%" }}
