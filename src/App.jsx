@@ -16,6 +16,7 @@ import CoursesPage from "./pages/CoursesPage";
 import FacultyPage from "./pages/FacultyPage";
 import AlgorithmPage from "./pages/AlgorithmPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
+import UserManagementPage from "./pages/UserManagementPage";
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
                       <Route path="/faculty" element={<FacultyPage />} />
                       <Route path="/algorithm" element={<AlgorithmPage />} />
                       <Route path="/analytics" element={<AnalyticsPage />} />
+                      <Route path="/users" element={<UserManagementPage />} />
                     </Route>
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />

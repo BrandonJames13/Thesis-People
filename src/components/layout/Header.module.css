@@ -114,12 +114,39 @@
   margin-bottom: 4px;
 }
 
+.menuEmail {
+  padding: 0 10px 4px;
+  font-size: 11px;
+  color: var(--text3);
+  word-break: break-all;
+}
+
 .menuRole {
-  padding: 2px 10px 8px;
+  padding: 4px 10px 8px;
   font-size: 11px;
   color: var(--text3);
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
+}
+
+.statusPill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.statusAdmin {
+  background: rgba(188, 140, 255, 0.2);
+  color: var(--purple);
+  border: 1px solid var(--purple);
+}
+
+.statusFaculty {
+  background: rgba(63, 185, 80, 0.2);
+  color: var(--green);
+  border: 1px solid var(--green);
 }
 
 .menuItem {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useData } from "../context/DataContext";
 import { useNotification } from "../context/NotificationContext";
 import { exportToExcel } from "../utils/exportUtils";
@@ -7,18 +7,38 @@ import { patternDaysMap } from "../data/constants";
 import ScheduleModal from "../components/schedule/ScheduleModal";
 
 export default function SchedulePage() {
-  const { rooms, scheduleAssignments } = useData();
+  const { rooms, scheduleAssignments, instructors } = useData();
   const { showNotification } = useNotification();
 
   const [roomFilter, setRoomFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
+  const [instructorFilter, setInstructorFilter] = useState("");
+  const [instructorSearch, setInstructorSearch] = useState("");
+  const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
-  // Filter assignments by selected room and year
+  // Get unique instructor names from assignments + instructor list
+  const allInstructorNames = useMemo(() => {
+    const fromAssignments = scheduleAssignments
+      .map((a) => a.instructor)
+      .filter(Boolean);
+    const fromList = instructors.map((i) => i.name);
+    return [...new Set([...fromList, ...fromAssignments])].sort();
+  }, [scheduleAssignments, instructors]);
+
+  const filteredInstructorNames = allInstructorNames.filter((name) =>
+    name.toLowerCase().includes(instructorSearch.toLowerCase()),
+  );
+
+  // Filter assignments by selected room, year, and instructor
   const visibleAssignments = scheduleAssignments.filter((c) => {
     const roomMatch = roomFilter ? c.room === roomFilter : true;
     const yearMatch = yearFilter ? c.year === yearFilter : true;
-    return roomMatch && yearMatch;
+    const instrMatch = instructorFilter
+      ? c.instructor?.trim().toLowerCase() ===
+        instructorFilter.trim().toLowerCase()
+      : true;
+    return roomMatch && yearMatch && instrMatch;
   });
 
   // Build grid
@@ -72,7 +92,10 @@ export default function SchedulePage() {
       );
     }
 
-    if ((roomFilter || yearFilter) && visibleAssignments.length === 0) {
+    if (
+      (roomFilter || yearFilter || instructorFilter) &&
+      visibleAssignments.length === 0
+    ) {
       return (
         <tr>
           <td colSpan={7} className="schedule-empty-state">
@@ -141,10 +164,110 @@ export default function SchedulePage() {
           <div className="section-title">Weekly Schedule</div>
           <div className="section-subtitle">
             AY 2025–2026 · 1st Semester · Permanent Schedule
+            {instructorFilter ? ` · ${instructorFilter}` : ""}
             {yearFilter ? ` · ${yearFilter} Year` : " · All Year Levels"}
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          {/* Instructor Dropdown Search */}
+          <div style={{ position: "relative" }}>
+            <input
+              className="search-input"
+              style={{ width: 200 }}
+              placeholder="🔍 Search instructor..."
+              value={instructorSearch}
+              onFocus={() => setShowInstructorDropdown(true)}
+              onBlur={() =>
+                setTimeout(() => setShowInstructorDropdown(false), 150)
+              }
+              onChange={(e) => {
+                setInstructorSearch(e.target.value);
+                setInstructorFilter("");
+                setShowInstructorDropdown(true);
+              }}
+            />
+            {instructorFilter && (
+              <button
+                style={{
+                  position: "absolute",
+                  right: 6,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "var(--text3)",
+                  fontSize: 14,
+                }}
+                onClick={() => {
+                  setInstructorFilter("");
+                  setInstructorSearch("");
+                }}
+              >
+                ✕
+              </button>
+            )}
+            {showInstructorDropdown && filteredInstructorNames.length > 0 && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "110%",
+                  left: 0,
+                  right: 0,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  zIndex: 100,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    color: "var(--text3)",
+                  }}
+                  onMouseDown={() => {
+                    setInstructorFilter("");
+                    setInstructorSearch("");
+                  }}
+                >
+                  All Instructors
+                </div>
+                {filteredInstructorNames.map((name) => (
+                  <div
+                    key={name}
+                    style={{
+                      padding: "8px 12px",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      background:
+                        instructorFilter === name
+                          ? "var(--accent)"
+                          : "transparent",
+                      color: instructorFilter === name ? "#fff" : "var(--text)",
+                    }}
+                    onMouseDown={() => {
+                      setInstructorFilter(name);
+                      setInstructorSearch(name);
+                    }}
+                  >
+                    {name}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
           <select
             className="search-input"
             style={{ width: 150 }}

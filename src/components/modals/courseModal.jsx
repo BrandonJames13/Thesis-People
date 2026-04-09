@@ -1,7 +1,10 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
+import { useData } from "../../context/DataContext";
 
 export function CourseModal({ courses, existing, onClose, onSave }) {
+  const { instructors } = useData();
+
   const [code, setCode] = useState(existing?.code ?? "");
   const [title, setTitle] = useState(existing?.title ?? "");
   const [program, setProgram] = useState(existing?.program ?? "");
@@ -9,6 +12,9 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
   const [section, setSection] = useState(existing?.section ?? "");
   const [enrolled, setEnrolled] = useState(existing?.enrolled ?? "");
   const [roomType, setRoomType] = useState(existing?.room_type ?? "Lecture");
+  const [assignedInstructor, setAssignedInstructor] = useState(
+    existing?.instructor ?? "",
+  );
 
   const isEdit = !!existing;
   const [formError, setFormError] = useState("");
@@ -39,6 +45,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
       room_type: roomType,
       status: existing?.status ?? "Not Assigned",
       duration: existing?.duration ?? 1.5,
+      instructor: assignedInstructor || null,
     });
   };
 
@@ -137,6 +144,36 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
               <option value="Computer Lab">Computer Lab</option>
             </select>
           </div>
+
+          {isEdit && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={labelStyle}>👤 Assigned Instructor</label>
+              <select
+                className="search-input"
+                style={{ width: "100%", boxSizing: "border-box" }}
+                value={assignedInstructor}
+                onChange={(e) => setAssignedInstructor(e.target.value)}
+              >
+                <option value="">— Not Assigned —</option>
+                {instructors.map((inst) => (
+                  <option key={inst.name} value={inst.name}>
+                    {inst.name}
+                    {inst.department ? ` (${inst.department})` : ""}
+                  </option>
+                ))}
+              </select>
+              {assignedInstructor && (
+                <div
+                  style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}
+                >
+                  Currently assigned:{" "}
+                  <strong style={{ color: "var(--text2)" }}>
+                    {assignedInstructor}
+                  </strong>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {formError && (
@@ -156,7 +193,6 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-
           <button className="btn btn-primary" onClick={handleSubmit}>
             {isEdit ? "Save Changes" : "Add Course"}
           </button>

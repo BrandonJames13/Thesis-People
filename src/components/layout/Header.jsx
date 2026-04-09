@@ -82,9 +82,15 @@ export default function Header() {
           {menuOpen && (
             <div className={styles.dropdown}>
               <div className={styles.menuName}>{currentUser?.name || "—"}</div>
-              <div className={styles.menuName}>{currentUser?.email || "—"}</div>
+              <div className={styles.menuEmail}>
+                {currentUser?.email || "—"}
+              </div>
               <div className={styles.menuRole}>
-                {currentUser?.role === "admin" ? "Administrator" : "Faculty"}
+                <span
+                  className={`${styles.statusPill} ${currentUser?.role === "admin" ? styles.statusAdmin : styles.statusFaculty}`}
+                >
+                  {currentUser?.role === "admin" ? "👑 Admin" : "🎓 Faculty"}
+                </span>
               </div>
               <button className={styles.menuItem} onClick={openPwModal}>
                 🔑 Change Password
@@ -98,10 +104,8 @@ export default function Header() {
             </div>
           )}
         </div>
-
-
       </div>
-{/* //! change password modal */}
+      {/* //! change password modal */}
       <Modal
         isOpen={pwModalOpen}
         onClose={() => setPwModalOpen(false)}
