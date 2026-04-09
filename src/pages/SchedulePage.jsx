@@ -4,7 +4,33 @@ import { TIME_SLOTS, DAYS, COLOR_MAP } from "../data/constants";
 import { patternDaysMap } from "../data/constants";
 import ScheduleModal from "../components/schedule/ScheduleModal";
 import ExportModal from "../components/common/ExportModal";
-import { formatAssignmentLabel } from "../utils/scheduleUtils";
+import {
+  formatAssignmentLabel,
+  getAssignmentSectionId,
+} from "../utils/scheduleUtils";
+import { formatTimeFromMin } from "../utils/timeUtils";
+
+function getTimeRangeFromAssignment(assignment) {
+  const rawTime = String(assignment?.time ?? "");
+  const match = rawTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const period = String(match[3]).toUpperCase();
+
+  if (period === "PM" && hour !== 12) hour += 12;
+  if (period === "AM" && hour === 12) hour = 0;
+
+  const startMin = hour * 60 + minute;
+  const durationMinutes = Math.max(
+    1,
+    Math.round((Number(assignment?.duration ?? 1.5) || 1.5) * 60),
+  );
+  const endMin = startMin + durationMinutes;
+
+  return { startMin, endMin };
+}
 
 export default function SchedulePage() {
   const { rooms, scheduleAssignments, instructors } = useData();
@@ -31,6 +57,29 @@ export default function SchedulePage() {
     name.toLowerCase().includes(instructorSearch.toLowerCase()),
   );
 
+  const labelCounts = useMemo(() => {
+    const counts = new Map();
+    scheduleAssignments.forEach((assignment) => {
+      const label = formatAssignmentLabel(assignment);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    });
+    return counts;
+  }, [scheduleAssignments]);
+
+  const getDisplayLabel = (assignment) => {
+    const label = formatAssignmentLabel(assignment);
+    if ((labelCounts.get(label) ?? 0) <= 1) return label;
+
+    const sectionRef = String(
+      getAssignmentSectionId(assignment) ?? assignment?.assignment_id ?? "",
+    ).trim();
+    if (!sectionRef) return label;
+
+    const shortRef =
+      sectionRef.length > 14 ? sectionRef.slice(-14).toUpperCase() : sectionRef;
+    return `${label} · ${shortRef}`;
+  };
+
   // Filter assignments by selected room, year, and instructor
   const visibleAssignments = scheduleAssignments.filter((assignment) => {
     const roomMatch = roomFilter ? assignment.room === roomFilter : true;
@@ -47,37 +96,56 @@ export default function SchedulePage() {
     return roomMatch && yearMatch && instrMatch && sectionMatch;
   });
 
-  // Build grid
+  // Build bounded grid map (one visible block per day/slot cell).
   const grid = {};
   DAYS.forEach((d) => {
     grid[d] = {};
   });
 
+  const slotRanges = TIME_SLOTS.map((hour, index) => ({
+    hour,
+    index,
+    startMin: hour * 60,
+    endMin: (hour + 1) * 60,
+  }));
+
   visibleAssignments.forEach((assignment) => {
     if (!assignment.time || !assignment.pattern) return;
-    const timeMatch = assignment.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-    if (!timeMatch) return;
-    let h = parseInt(timeMatch[1]);
-    const ampm = timeMatch[3].toUpperCase();
-    if (ampm === "PM" && h !== 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    const spanCount = Math.max(
-      1,
-      Math.ceil(Math.round((assignment.duration || 1.5) * 60) / 60),
+
+    const timeRange = getTimeRangeFromAssignment(assignment);
+    if (!timeRange) return;
+
+    const coveredSlots = slotRanges.filter(
+      (slot) =>
+        timeRange.startMin < slot.endMin && timeRange.endMin > slot.startMin,
     );
+    if (coveredSlots.length === 0) return;
+
+    const startingSlot = coveredSlots[0];
+    const boundedSpan = coveredSlots.length;
+
     const assignedDays = patternDaysMap[assignment.pattern] || [];
     assignedDays.forEach((day) => {
-      for (let s = 0; s < spanCount; s++) {
-        const slotH = h + s;
-        if (!TIME_SLOTS.includes(slotH)) continue;
-        grid[day][slotH] =
-          s === 0
+      if (!DAYS.includes(day)) return;
+      if (grid[day][startingSlot.hour]) return;
+
+      coveredSlots.forEach((slot, slotIndex) => {
+        grid[day][slot.hour] =
+          slotIndex === 0
             ? {
                 assignment,
-                span: spanCount,
+                span: boundedSpan,
                 color: COLOR_MAP[assignment.pattern] || "blue",
+                visibleStartMin: timeRange.startMin,
+                visibleEndMin: timeRange.endMin,
               }
             : "blocked";
+      });
+
+      for (const slot of coveredSlots) {
+        if (!TIME_SLOTS.includes(slot.hour)) {
+          delete grid[day][slot.hour];
+        }
       }
     });
   });
@@ -129,6 +197,11 @@ export default function SchedulePage() {
         const assignment = cell.assignment;
         const dh = Math.floor(assignment.duration);
         const dm = Math.round((assignment.duration - dh) * 60);
+        const visibleWindow =
+          Number.isFinite(cell.visibleStartMin) &&
+          Number.isFinite(cell.visibleEndMin)
+            ? `${formatTimeFromMin(cell.visibleStartMin)}-${formatTimeFromMin(cell.visibleEndMin)}`
+            : assignment.time;
         cells.push(
           <td
             key={day}
@@ -137,12 +210,14 @@ export default function SchedulePage() {
           >
             <div
               className={`sched-section${assignment.status === "Conflict" ? " conflict-text" : ""}`}
+              title={getDisplayLabel(assignment)}
             >
-              {formatAssignmentLabel(assignment)}
+              {getDisplayLabel(assignment)}
               {assignment.status === "Conflict" ? " ⚠" : ""}
             </div>
             <div className="sched-room">{assignment.room}</div>
             <div className="sched-prof">{assignment.instructor}</div>
+            <div className="sched-time-window">{visibleWindow}</div>
             <div className="sched-dur">
               {dm > 0 ? `${dh}h ${dm}m` : `${dh}h`} · {assignment.pattern}
             </div>
