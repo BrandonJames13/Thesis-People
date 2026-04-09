@@ -13,11 +13,12 @@ function normalizeText(value) {
 }
 
 function buildInstructorPayload(instructor) {
+  const status = String(instructor?.status ?? "").trim();
   return {
     name: String(instructor?.name ?? "").trim(),
     department: instructor?.department || null,
     availability: String(instructor?.availability ?? "").trim() || null,
-    status: instructor?.status || "Active",
+    status: status || null,
   };
 }
 
@@ -129,12 +130,12 @@ function getAssignmentExportRow(assignment) {
 }
 
 function exportInstructorSchedule(instructor, scheduleAssignments) {
-  const myCourses = scheduleAssignments.filter(
+  const assignedSections = scheduleAssignments.filter(
     (a) =>
       a.status === "Assigned" && getAssignmentInstructorMatch(a, instructor),
   );
 
-  if (myCourses.length === 0) {
+  if (assignedSections.length === 0) {
     alert(
       `${instructor.name} has no assigned subject sections in the schedule yet.`,
     );
@@ -161,7 +162,7 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
   let totalStudents = 0;
 
   const seenSections = new Set();
-  myCourses.forEach((assignment) => {
+  assignedSections.forEach((assignment) => {
     const sectionKey = getAssignmentSectionKey(assignment);
     if (!sectionKey || seenSections.has(sectionKey)) {
       return;
@@ -343,7 +344,7 @@ export default function FacultyPage() {
           <thead>
             <tr>
               <th>Instructor</th>
-              <th>Assigned Subjects / Sections</th>
+              <th>Scheduled Load</th>
               <th>Department</th>
               <th>Availability</th>
               <th>Status</th>
@@ -373,22 +374,31 @@ export default function FacultyPage() {
                       ) {
                         return (
                           <span style={{ color: "var(--text3)" }}>
-                            None assigned
+                            No scheduled sections
                           </span>
                         );
                       }
 
-                      return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"}`;
+                      return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
                   <td>
-                    <span
-                      className={`pill pill-${inst.status === "Active" ? "green" : "red"}`}
-                    >
-                      {inst.status}
-                    </span>
+                    {(() => {
+                      const statusLabel = String(inst.status ?? "").trim();
+                      const pillTone =
+                        statusLabel.toLowerCase() === "active"
+                          ? "green"
+                          : statusLabel
+                            ? "red"
+                            : "orange";
+                      return (
+                        <span className={`pill pill-${pillTone}`}>
+                          {statusLabel || "Unspecified"}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td>
                     {isAdmin && (

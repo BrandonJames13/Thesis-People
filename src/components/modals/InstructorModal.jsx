@@ -7,7 +7,9 @@ export function InstructorModal({ existing, onClose, onSave }) {
   const [availability, setAvailability] = useState(
     existing?.availability ?? "",
   );
-  const [status, setStatus] = useState(existing?.status ?? "Active");
+  const [status, setStatus] = useState(
+    existing ? String(existing?.status ?? "") : "Active",
+  );
 
   const isEdit = !!existing;
   const [formError, setFormError] = useState("");
@@ -22,7 +24,7 @@ export function InstructorModal({ existing, onClose, onSave }) {
       name: name.trim(),
       department: dept || null,
       availability: availability.trim() || null,
-      status,
+      status: String(status ?? "").trim() || null,
     });
   };
 
@@ -93,6 +95,7 @@ export function InstructorModal({ existing, onClose, onSave }) {
               value={status}
               onChange={(e) => setStatus(e.target.value)}
             >
+              <option value="">Unspecified</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
             </select>
