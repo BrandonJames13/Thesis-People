@@ -8,7 +8,6 @@ export const CSV_TYPES = {
 const DEFAULT_INSTRUCTOR = {
   department: "TBD",
   availability: "TBD",
-  courses: [],
   status: "Active",
 };
 
@@ -242,7 +241,6 @@ function parseFacultyRows(rows) {
       availability:
         String(r[2] ?? "").trim() || DEFAULT_INSTRUCTOR.availability,
       status: String(r[3] ?? "").trim() || DEFAULT_INSTRUCTOR.status,
-      courses: [],
     }))
     .filter((inst) => inst.name);
 }
@@ -309,7 +307,6 @@ function normalizeImportedInstructor(value) {
       String(value?.availability ?? "").trim() ||
       DEFAULT_INSTRUCTOR.availability,
     status: String(value?.status ?? "").trim() || DEFAULT_INSTRUCTOR.status,
-    courses: Array.isArray(value?.courses) ? value.courses : [],
   };
 }
 
@@ -387,7 +384,6 @@ function ensureInstructorObject(value) {
     ...DEFAULT_INSTRUCTOR,
     ...value,
     name: String(value?.name ?? "").trim(),
-    courses: Array.isArray(value?.courses) ? value.courses : [],
   };
 }
 
@@ -395,7 +391,6 @@ export function mergeUniqueInstructors(
   existingInstructors,
   importedInstructors = [],
   instructorNames = [],
-  courses = [],
 ) {
   const merged = dedupeByIdentity(
     [
@@ -405,15 +400,6 @@ export function mergeUniqueInstructors(
     ],
     (value) => normalizeInstructorName(value?.name),
   );
-
-  if ((courses ?? []).length > 0) {
-    merged.forEach((inst) => {
-      const key = normalizeInstructorName(inst.name);
-      inst.courses = courses
-        .filter((course) => normalizeInstructorName(course.instructor) === key)
-        .map((course) => course.code);
-    });
-  }
 
   const existingCount = (existingInstructors ?? []).length;
   return {

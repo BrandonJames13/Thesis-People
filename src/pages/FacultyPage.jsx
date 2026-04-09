@@ -6,15 +6,138 @@ import { useNotification } from "../context/NotificationContext";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { InstructorModal } from "../components/modals/InstructorModal";
 
+function normalizeText(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function buildInstructorPayload(instructor) {
+  return {
+    name: String(instructor?.name ?? "").trim(),
+    department: instructor?.department || null,
+    availability: String(instructor?.availability ?? "").trim() || null,
+    status: instructor?.status || "Active",
+  };
+}
+
+function getAssignmentInstructorMatch(assignment, instructor) {
+  const assignmentInstructorId = String(
+    assignment?.instructor_id ?? assignment?.instructorId ?? "",
+  ).trim();
+  const instructorId = String(instructor?.id ?? "").trim();
+
+  if (assignmentInstructorId && instructorId) {
+    return assignmentInstructorId === instructorId;
+  }
+
+  return (
+    normalizeText(assignment?.instructor ?? assignment?.instructor_name) ===
+    normalizeText(instructor?.name)
+  );
+}
+
+function getAssignmentSubjectKey(assignment) {
+  const subjectId = String(
+    assignment?.subject_id ?? assignment?.subjectId ?? "",
+  ).trim();
+  if (subjectId) return `id:${subjectId.toLowerCase()}`;
+
+  const code = String(
+    assignment?.course_code ??
+      assignment?.subject_code ??
+      assignment?.code ??
+      "",
+  )
+    .trim()
+    .toUpperCase();
+  return code ? `code:${code}` : "";
+}
+
+function getAssignmentSectionKey(assignment) {
+  const sectionId = String(
+    assignment?.section_id ?? assignment?.sectionId ?? "",
+  ).trim();
+  if (sectionId) return `id:${sectionId.toLowerCase()}`;
+
+  const code = String(
+    assignment?.course_code ??
+      assignment?.subject_code ??
+      assignment?.code ??
+      "",
+  )
+    .trim()
+    .toUpperCase();
+  const section = String(assignment?.section ?? "").trim() || "A";
+  const academicYear = String(
+    assignment?.academic_year ?? assignment?.academicYear ?? "",
+  ).trim();
+  const semester = String(assignment?.semester ?? "").trim();
+
+  if (code) {
+    return `compound:${code}|${section}|${academicYear}|${semester}`.toLowerCase();
+  }
+
+  const assignmentId = String(
+    assignment?.assignment_id ??
+      assignment?.assignmentId ??
+      assignment?.id ??
+      "",
+  ).trim();
+  if (assignmentId) return `assignment:${assignmentId.toLowerCase()}`;
+
+  return "";
+}
+
+function getAssignmentExportRow(assignment) {
+  const code = String(
+    assignment?.course_code ??
+      assignment?.subject_code ??
+      assignment?.code ??
+      "",
+  )
+    .trim()
+    .toUpperCase();
+  const title = String(
+    assignment?.course_title ?? assignment?.title ?? "",
+  ).trim();
+  const section = String(assignment?.section ?? "").trim() || "A";
+  const sectionId = String(
+    assignment?.section_id ?? assignment?.sectionId ?? "",
+  ).trim();
+  const roomType = String(
+    assignment?.room_type ?? assignment?.roomType ?? "",
+  ).trim();
+  const duration = Number(assignment?.duration ?? 1.5) || 1.5;
+  const room = String(assignment?.room_number ?? assignment?.room ?? "").trim();
+  const time = String(
+    assignment?.time_display ?? assignment?.time ?? "",
+  ).trim();
+  const enrolled = Number(assignment?.enrolled ?? 0) || 0;
+
+  return {
+    code,
+    title,
+    section,
+    sectionId,
+    roomType,
+    duration,
+    room,
+    time,
+    enrolled,
+  };
+}
+
 function exportInstructorSchedule(instructor, scheduleAssignments) {
   const myCourses = scheduleAssignments.filter(
     (a) =>
-      a.instructor?.trim().toLowerCase() ===
-      instructor.name.trim().toLowerCase(),
+      a.status === "Assigned" && getAssignmentInstructorMatch(a, instructor),
   );
 
   if (myCourses.length === 0) {
-    alert(`${instructor.name} has no assigned courses in the schedule yet.`);
+    alert(
+      `${instructor.name} has no assigned subject sections in the schedule yet.`,
+    );
     return;
   }
 
@@ -30,23 +153,31 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
   lines.push(`Status:,${instructor.status || "Active"}`);
   lines.push("");
   lines.push(
-    "Subject Code,Subject Title,Section,LEC (hrs),LAB (hrs),Days/Time,Room,Total Students",
+    "Subject Code,Subject Title,Section,Section ID,LEC (hrs),LAB (hrs),Days/Time,Room,Total Students",
   );
 
   let totalLec = 0;
   let totalLab = 0;
   let totalStudents = 0;
 
-  myCourses.forEach((c) => {
+  const seenSections = new Set();
+  myCourses.forEach((assignment) => {
+    const sectionKey = getAssignmentSectionKey(assignment);
+    if (!sectionKey || seenSections.has(sectionKey)) {
+      return;
+    }
+    seenSections.add(sectionKey);
+
+    const c = getAssignmentExportRow(assignment);
     const isLab = c.roomType === "Lab" || c.roomType === "Computer Lab";
-    const lec = isLab ? 0 : c.duration || 1.5;
-    const lab = isLab ? c.duration || 1.5 : 0;
+    const lec = isLab ? 0 : c.duration;
+    const lab = isLab ? c.duration : 0;
     totalLec += lec;
     totalLab += lab;
-    totalStudents += c.enrolled || 0;
+    totalStudents += c.enrolled;
 
     lines.push(
-      `${c.code},${c.title},${c.section || ""},${lec.toFixed(2)},${lab.toFixed(2)},"${c.time || ""}","${c.room || ""}",${c.enrolled || 0}`,
+      `${c.code},${c.title},${c.section},${c.sectionId},${lec.toFixed(2)},${lab.toFixed(2)},"${c.time}","${c.room}",${c.enrolled}`,
     );
   });
 
@@ -87,13 +218,38 @@ export default function FacultyPage() {
   const [showModal, setShowModal] = useState(false);
   const [editInstructor, setEditInstructor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [instructorSubjectsMap, setInstructorSubjectsMap] = useState(
+    () => new Map(),
+  );
 
   const fetchInstructors = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("instructors")
-        .select("*")
-        .order("name");
+      const [
+        { data, error },
+        { data: instructorSubjects, error: instructorSubjectsError },
+      ] = await Promise.all([
+        supabase.from("instructors").select("*").order("name"),
+        supabase
+          .from("instructor_subjects")
+          .select("instructor_id, subject_id"),
+      ]);
+
+      if (instructorSubjectsError) {
+        console.error(instructorSubjectsError);
+        showNotification(`⚠ ${instructorSubjectsError.message}`);
+      }
+
+      const fallbackMap = new Map();
+      (instructorSubjects ?? []).forEach((row) => {
+        const instructorId = String(row?.instructor_id ?? "").trim();
+        const subjectId = String(row?.subject_id ?? "").trim();
+        if (!instructorId || !subjectId) return;
+
+        const existingSubjects = fallbackMap.get(instructorId) ?? new Set();
+        existingSubjects.add(subjectId);
+        fallbackMap.set(instructorId, existingSubjects);
+      });
+      setInstructorSubjectsMap(fallbackMap);
 
       if (error) {
         console.error(error);
@@ -107,6 +263,48 @@ export default function FacultyPage() {
     }
   }, [showNotification]);
 
+  const getInstructorAssignmentCounts = useCallback(
+    (instructor) => {
+      const assignedRows = scheduleAssignments.filter(
+        (assignment) =>
+          assignment.status === "Assigned" &&
+          getAssignmentInstructorMatch(assignment, instructor),
+      );
+
+      const subjectKeys = new Set();
+      const sectionKeys = new Set();
+
+      assignedRows.forEach((assignment) => {
+        const subjectKey = getAssignmentSubjectKey(assignment);
+        if (subjectKey) {
+          subjectKeys.add(subjectKey);
+        }
+
+        const sectionKey = getAssignmentSectionKey(assignment);
+        if (sectionKey) {
+          sectionKeys.add(sectionKey);
+        }
+      });
+
+      const instructorId = String(instructor?.id ?? "").trim();
+      if (subjectKeys.size === 0 && instructorId) {
+        const fallbackSubjects = instructorSubjectsMap.get(instructorId);
+        if (fallbackSubjects?.size) {
+          return {
+            subjectCount: fallbackSubjects.size,
+            sectionCount: sectionKeys.size,
+          };
+        }
+      }
+
+      return {
+        subjectCount: subjectKeys.size,
+        sectionCount: sectionKeys.size,
+      };
+    },
+    [instructorSubjectsMap, scheduleAssignments],
+  );
+
   useEffect(() => {
     fetchInstructors();
   }, [fetchInstructors]);
@@ -117,7 +315,7 @@ export default function FacultyPage() {
       return false;
     }
 
-    const { courses: _courses, ...instructorRow } = instructor;
+    const instructorRow = buildInstructorPayload(instructor);
     const { data, error } = await supabase
       .from("instructors")
       .insert([instructorRow])
@@ -138,7 +336,7 @@ export default function FacultyPage() {
       return false;
     }
 
-    const { courses: _courses, ...instructorRow } = instructor;
+    const instructorRow = buildInstructorPayload(instructor);
     const { data, error } = await supabase
       .from("instructors")
       .update(instructorRow)
@@ -212,7 +410,7 @@ export default function FacultyPage() {
           <thead>
             <tr>
               <th>Instructor</th>
-              <th>Assigned Courses</th>
+              <th>Assigned Subjects / Sections</th>
               <th>Department</th>
               <th>Availability</th>
               <th>Status</th>
@@ -234,11 +432,21 @@ export default function FacultyPage() {
                     <strong>{inst.name}</strong>
                   </td>
                   <td className="monospace" style={{ fontSize: 12 }}>
-                    {Array.isArray(inst.courses) && inst.courses.length > 0 ? (
-                      inst.courses.join(", ")
-                    ) : (
-                      <span style={{ color: "var(--text3)" }}>None</span>
-                    )}
+                    {(() => {
+                      const counts = getInstructorAssignmentCounts(inst);
+                      if (
+                        counts.subjectCount === 0 &&
+                        counts.sectionCount === 0
+                      ) {
+                        return (
+                          <span style={{ color: "var(--text3)" }}>
+                            None assigned
+                          </span>
+                        );
+                      }
+
+                      return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"}`;
+                    })()}
                   </td>
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
@@ -266,7 +474,7 @@ export default function FacultyPage() {
                           onClick={() => {
                             exportInstructorSchedule(inst, scheduleAssignments);
                             showNotification(
-                              `Schedule exported for ${inst.name} ?`,
+                              `Schedule exported for ${inst.name}.`,
                             );
                           }}
                           title="Export this instructor's schedule"
