@@ -144,7 +144,7 @@ export default function ImportModal({ isOpen, onClose }) {
     if (parsed.type === CSV_TYPES.SUBJECTS) {
       const rows = dedupeImportedRecords(parsed.type, parsed.subjects);
       updateSubjectSectionsFromCourseRows(rows);
-      showNotification(`Imported ${rows.length} subject row(s).`);
+      showNotification(`Imported ${rows.length} subject section row(s).`);
       onClose();
       return;
     }
@@ -284,7 +284,7 @@ export default function ImportModal({ isOpen, onClose }) {
             Preview: <strong>{summarizeImportedRows(parsed)}</strong>
           </div>
           <div style={{ color: "var(--text3)", marginTop: 6 }}>
-            Supported payloads: full list, rooms, instructors, subjects.
+            Supported payloads: full list, rooms, instructors, subject sections.
           </div>
         </div>
 

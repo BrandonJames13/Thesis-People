@@ -20,9 +20,9 @@
     },
     {
       "type": "subjects",
-      "label": "Subjects",
+      "label": "Subject Sections",
       "path": "/csv/subjects-list.csv",
-      "description": "Subject catalog records with section, academic year, and semester."
+      "description": "Subject section records with academic year and semester."
     }
   ]
 }

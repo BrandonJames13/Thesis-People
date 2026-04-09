@@ -136,7 +136,7 @@ export default function SchedulePage() {
             rowSpan={cell.span}
           >
             <div
-              className={`sched-course${assignment.status === "Conflict" ? " conflict-text" : ""}`}
+              className={`sched-section${assignment.status === "Conflict" ? " conflict-text" : ""}`}
             >
               {formatAssignmentLabel(assignment)}
               {assignment.status === "Conflict" ? " ⚠" : ""}

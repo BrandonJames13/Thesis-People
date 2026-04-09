@@ -274,7 +274,7 @@ export default function CoursesPage() {
       </div>
 
       <div className="card">
-        <table className="course-table">
+        <table className="subject-table">
           <thead>
             <tr>
               <th>Code</th>

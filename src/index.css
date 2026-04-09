@@ -522,13 +522,13 @@ tr:hover td {
   background: rgba(248, 81, 73, 0.14);
   border-color: rgba(248, 81, 73, 0.4) !important;
 }
-.sched-course {
+.sched-section {
   font-weight: 700;
   color: var(--text);
   font-size: 11px;
   line-height: 1.2;
 }
-.sched-course.conflict-text {
+.sched-section.conflict-text {
   color: var(--red);
 }
 .sched-room {

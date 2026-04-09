@@ -74,12 +74,11 @@ export const CSV_FORMATS = {
     rowKey: (row) => normalizeInstructorName(row?.name),
   },
   [CSV_TYPES.SUBJECTS]: {
-    label: "Subjects",
-    description:
-      "Subject catalog records with section, academic year, and semester.",
+    label: "Subject Sections",
+    description: "Subject section records with academic year and semester.",
     templatePath: "/csv/subjects-list.csv",
-    templateLabel: "Subjects Template",
-    filename: "TSU_CCS_Subjects_List_AY2025-2026.csv",
+    templateLabel: "Subject Sections Template",
+    filename: "TSU_CCS_Subject_Sections_List_AY2025-2026.csv",
     headers: [
       "Subject Code",
       "Subject Title",
