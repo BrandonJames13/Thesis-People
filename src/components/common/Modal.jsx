@@ -1,7 +1,7 @@
 import styles from "./Modal.module.css";
 import { useEffect } from "react";
 
-export default function Modal({ isOpen, onClose, children }) {
+export default function Modal({ isOpen, onClose, children, size = "md" }) {
   useEffect(() => {
     if (!isOpen) return;
     function handleKey(e) {
@@ -18,7 +18,7 @@ export default function Modal({ isOpen, onClose, children }) {
       className={styles.overlay}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className={styles.card}>{children}</div>
+      <div className={`${styles.card} ${styles[size]}`}>{children}</div>
     </div>
   );
 }

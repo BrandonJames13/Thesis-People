@@ -54,19 +54,11 @@ body.light {
 }
 
 /* Smooth theme transition */
-body,
-.card,
-.stat-card,
-.room-card,
-.sched-td,
-.conflict-card,
-.side-panel,
-.nav-item,
-header,
-nav,
-main {
+*,
+*::before,
+*::after {
   transition:
-    background 0.4s,
+    background-color 0.4s,
     color 0.4s,
     border-color 0.4s;
 }
@@ -445,11 +437,8 @@ tr:hover td {
 .schedule-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: auto;
+  table-layout: fixed;
   min-width: 700px;
-}
-.schedule-table th:not(.time-col) {
-  width: calc((100% - 72px) / 6);
 }
 .schedule-table th {
   background: var(--surface2);
@@ -493,8 +482,6 @@ tr:hover td {
   background: var(--surface2);
   opacity: 0.5;
   height: 56px;
-  min-height: 56px;
-  box-sizing: border-box;
 }
 .sched-td {
   padding: 6px 8px !important;
@@ -502,9 +489,7 @@ tr:hover td {
   vertical-align: top !important;
   transition: filter 0.15s;
   cursor: default;
-  min-height: 56px;
   height: 56px;
-  box-sizing: border-box;
 }
 .sched-td:hover {
   filter: brightness(1.15);
@@ -836,7 +821,6 @@ tr:hover td {
   font-family: var(--sans);
   outline: none;
   transition: border-color 0.15s;
-  width: 220px;
 }
 .search-input:focus {
   border-color: var(--accent);
@@ -846,6 +830,9 @@ tr:hover td {
 }
 select.search-input {
   cursor: pointer;
+}
+.filter-row .search-input {
+  width: 220px;
 }
 .filter-row {
   display: flex;
@@ -894,6 +881,11 @@ select.search-input {
   }
   .dashboard-grid {
     grid-template-columns: 1fr;
+  }
+  .dashboard-grid > *:last-child {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
   }
 }
 @media (max-width: 768px) {

@@ -30,7 +30,7 @@ export function AddRoomModal({ onClose, onAdd }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose} size="sm">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
           + Add New Room
@@ -97,7 +97,7 @@ export function AddRoomModal({ onClose, onAdd }) {
             gap: 8,
             justifyContent: "flex-end",
             borderTop: "1px solid var(--border)",
-            paddingTop: 10,
+            paddingTop: 16,
           }}
         >
           <button className="btn btn-secondary" onClick={onClose}>

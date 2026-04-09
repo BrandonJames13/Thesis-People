@@ -1,6 +1,7 @@
 .layout {
   display: flex;
   flex: 1;
+  min-height: calc(100vh - 56px);
 }
 
 .main {

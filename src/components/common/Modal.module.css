@@ -24,3 +24,16 @@
   overflow-y: auto;
   margin: auto;
 }
+
+/* Size variants */
+.sm {
+  max-width: 420px;
+}
+
+.md {
+  max-width: 560px;
+}
+
+.lg {
+  max-width: 720px;
+}

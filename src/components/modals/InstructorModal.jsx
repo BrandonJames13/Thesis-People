@@ -67,7 +67,7 @@ export function InstructorModal({ existing, onClose, onSave }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose} size="md">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
           {isEdit ? "✏ Edit Instructor" : "+ Add New Instructor"}
@@ -267,7 +267,7 @@ export function InstructorModal({ existing, onClose, onSave }) {
             gap: 10,
             justifyContent: "flex-end",
             borderTop: "1px solid var(--border)",
-            paddingTop: 10,
+            paddingTop: 16,
           }}
         >
           <button className="btn btn-secondary" onClick={onClose}>

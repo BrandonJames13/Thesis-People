@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { formatTime, getEndTime } from "../../utils/timeUtils";
@@ -98,13 +98,11 @@ export default function ScheduleModal({ onClose }) {
     showNotification(result.message);
   };
 
-  const handleCheckConflict = () => {
+  // Auto-check conflicts whenever relevant fields change
+  useEffect(() => {
     if (!manualCourse || !manualRoom || !manualTime) {
-      setConflictMsg({
-        type: "error",
-        text: "⚠ Please fill in Course, Room, and Start Time first.",
-      });
-      return false;
+      setConflictMsg(null);
+      return;
     }
     const duration = manualDurationH + manualDurationM / 60;
     const result = checkManualConflict({
@@ -116,8 +114,17 @@ export default function ScheduleModal({ onClose }) {
       scheduleAssignments,
     });
     setConflictMsg(result);
-    return result.type === "success";
-  };
+  }, [
+    manualCourse,
+    manualRoom,
+    manualTime,
+    manualDurationH,
+    manualDurationM,
+    manualPattern,
+    scheduleAssignments,
+  ]);
+
+  const hasConflict = conflictMsg?.type === "error";
 
   const handleAddEntry = () => {
     if (!manualCourse || !manualRoom || !manualTime) {
@@ -752,18 +759,20 @@ export default function ScheduleModal({ onClose }) {
                 Cancel
               </button>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  className="btn btn-secondary"
-                  onClick={handleCheckConflict}
-                >
-                  🔍 Check Conflicts
-                </button>
                 <button className="btn btn-secondary" onClick={handleAddEntry}>
                   + Add Another
                 </button>
                 <button
                   className="btn btn-primary"
                   onClick={handleSubmitManual}
+                  disabled={hasConflict}
+                  title={
+                    hasConflict ? "Resolve the conflict before saving" : ""
+                  }
+                  style={{
+                    opacity: hasConflict ? 0.45 : 1,
+                    cursor: hasConflict ? "not-allowed" : "pointer",
+                  }}
                 >
                   ✓ Save Assignment
                 </button>

@@ -57,7 +57,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose} size="lg">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 16, fontWeight: 700 }}>
           {isEdit ? "✏ Edit Course" : "+ Add Course"}
@@ -70,6 +70,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Course Code</label>
             <input
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={code}
               disabled={isEdit}
               onChange={(e) => setCode(e.target.value)}
@@ -80,6 +81,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Section</label>
             <input
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={section}
               onChange={(e) => setSection(e.target.value)}
             />
@@ -89,6 +91,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Title</label>
             <input
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -98,6 +101,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Program</label>
             <select
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={program}
               onChange={(e) => setProgram(e.target.value)}
             >
@@ -113,6 +117,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Year</label>
             <select
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={year}
               onChange={(e) => setYear(e.target.value)}
             >
@@ -128,6 +133,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <input
               type="number"
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={enrolled}
               onChange={(e) => setEnrolled(e.target.value)}
             />
@@ -137,6 +143,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             <label style={labelStyle}>Room Type</label>
             <select
               className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
               value={roomType}
               onChange={(e) => setRoomType(e.target.value)}
             >
@@ -187,7 +194,7 @@ export function CourseModal({ courses, existing, onClose, onSave }) {
             justifyContent: "flex-end",
             gap: 10,
             borderTop: "1px solid var(--border)",
-            paddingTop: 10,
+            paddingTop: 16,
           }}
         >
           <button className="btn btn-secondary" onClick={onClose}>
