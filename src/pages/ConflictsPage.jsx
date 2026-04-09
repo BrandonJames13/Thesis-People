@@ -3,6 +3,7 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
+import { formatAssignmentLabel } from "../utils/scheduleUtils";
 
 export default function ConflictsPage() {
   const navigate = useNavigate();
@@ -46,6 +47,14 @@ export default function ConflictsPage() {
       return;
     }
     autoResolveAll();
+  };
+
+  const getConflictSectionSummary = (conflict) => {
+    const labels = (conflict?.courses ?? []).map((assignment) =>
+      formatAssignmentLabel(assignment),
+    );
+    if (labels.length === 0) return "";
+    return labels.join(" • ");
   };
 
   return (
@@ -93,11 +102,21 @@ export default function ConflictsPage() {
             <div className="conflict-card" key={cf.id}>
               <div className="conflict-icon">🔴</div>
               <div style={{ flex: 1 }}>
-                <div className="conflict-title">{cf.title}</div>
+                <div className="conflict-title">
+                  {cf.title}
+                  {getConflictSectionSummary(cf)
+                    ? ` · ${getConflictSectionSummary(cf)}`
+                    : ""}
+                </div>
                 <div
                   className="conflict-desc"
                   dangerouslySetInnerHTML={{ __html: cf.desc }}
                 />
+                {getConflictSectionSummary(cf) && (
+                  <div className="conflict-meta">
+                    SECTIONS: {getConflictSectionSummary(cf)}
+                  </div>
+                )}
                 <div className="conflict-meta">{cf.meta}</div>
                 <div className="conflict-actions">
                   <button
@@ -146,11 +165,21 @@ export default function ConflictsPage() {
             <div className="conflict-card warning" key={cf.id}>
               <div className="conflict-icon">🟡</div>
               <div style={{ flex: 1 }}>
-                <div className="conflict-title">{cf.title}</div>
+                <div className="conflict-title">
+                  {cf.title}
+                  {getConflictSectionSummary(cf)
+                    ? ` · ${getConflictSectionSummary(cf)}`
+                    : ""}
+                </div>
                 <div
                   className="conflict-desc"
                   dangerouslySetInnerHTML={{ __html: cf.desc }}
                 />
+                {getConflictSectionSummary(cf) && (
+                  <div className="conflict-meta">
+                    SECTIONS: {getConflictSectionSummary(cf)}
+                  </div>
+                )}
                 <div className="conflict-meta">{cf.meta}</div>
                 <div className="conflict-actions">
                   {cf.betterRoom && (
@@ -204,7 +233,7 @@ export default function ConflictsPage() {
           <table>
             <thead>
               <tr>
-                <th>Course</th>
+                <th>Section Assignment</th>
                 <th>Original Assignment</th>
                 <th>Reallocated To</th>
                 <th>Conflict Type</th>
@@ -213,8 +242,18 @@ export default function ConflictsPage() {
             </thead>
             <tbody>
               {[...reallocationLog].reverse().map((entry, i) => (
-                <tr key={i}>
-                  <td className="monospace">{entry.code}</td>
+                <tr
+                  key={`${entry.assignmentKey || entry.sectionId || entry.code}-${i}`}
+                >
+                  <td className="monospace">
+                    <div>{entry.code}</div>
+                    <div
+                      style={{ fontSize: 10, color: "var(--text3)" }}
+                      title={entry.assignmentKey || entry.sectionId}
+                    >
+                      {entry.sectionId || entry.assignmentKey}
+                    </div>
+                  </td>
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {entry.from}
                   </td>

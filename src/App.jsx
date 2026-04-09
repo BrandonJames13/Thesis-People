@@ -35,7 +35,7 @@ export default function App() {
                       <Route element={<ProtectedRoute adminOnly />}>
                         <Route path="/conflicts" element={<ConflictsPage />} />
                         <Route path="/rooms" element={<RoomsPage />} />
-                        <Route path="/courses" element={<CoursesPage />} />
+                        <Route path="/subjects" element={<CoursesPage />} />
                         <Route path="/faculty" element={<FacultyPage />} />
                         <Route path="/algorithm" element={<AlgorithmPage />} />
                         <Route path="/analytics" element={<AnalyticsPage />} />

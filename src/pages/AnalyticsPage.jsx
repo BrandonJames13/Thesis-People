@@ -2,7 +2,7 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 
 export default function AnalyticsPage() {
-  const { rooms, courses, scheduleAssignments } = useData();
+  const { rooms, subjectSections, scheduleAssignments } = useData();
   const { detectConflicts } = useConflicts();
 
   const { hard } = detectConflicts();
@@ -34,10 +34,12 @@ export default function AnalyticsPage() {
   const avgUtil =
     rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
-  const totalCourses = courses.length;
-  const assignedCourses = scheduleAssignments.length;
+  const totalSections = subjectSections.length;
+  const assignedSections = scheduleAssignments.length;
   const conflictRate =
-    assignedCourses > 0 ? Math.round((hard.length / assignedCourses) * 100) : 0;
+    assignedSections > 0
+      ? Math.round((hard.length / assignedSections) * 100)
+      : 0;
   const conflictFree = 100 - conflictRate;
 
   const qualityData = [
@@ -45,7 +47,7 @@ export default function AnalyticsPage() {
       attr: "Functional Suitability",
       method: "Black Box",
       result: hasSchedule
-        ? `${Math.round((assignedCourses / Math.max(totalCourses, 1)) * 100)}%`
+        ? `${Math.round((assignedSections / Math.max(totalSections, 1)) * 100)}%`
         : "No data yet",
       color: hasSchedule ? "green" : "orange",
     },
@@ -122,18 +124,18 @@ export default function AnalyticsPage() {
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedCourses} assignments`
+              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedSections} section assignments`
               : "Generate a schedule to see data"}
           </div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-label">Courses Scheduled</div>
+          <div className="stat-label">Sections Scheduled</div>
           <div className="stat-value">
-            {hasSchedule ? assignedCourses : "—"}
+            {hasSchedule ? assignedSections : "—"}
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${assignedCourses} of ${totalCourses} total courses`
+              ? `${assignedSections} of ${totalSections} total sections`
               : "No schedule generated yet"}
           </div>
         </div>

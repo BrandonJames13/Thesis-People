@@ -25,7 +25,7 @@ function loadWeights() {
 }
 
 export default function AlgorithmPage() {
-  const { courses, scheduleAssignments } = useData();
+  const { subjectSections, scheduleAssignments } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
@@ -34,7 +34,7 @@ export default function AlgorithmPage() {
 
   const { hard } = detectConflicts();
   const assignedCount = scheduleAssignments.length;
-  const totalCourses = courses.length;
+  const totalSections = subjectSections.length;
   const conflictRate =
     assignedCount > 0
       ? ((hard.length / assignedCount) * 100).toFixed(1)
@@ -131,9 +131,15 @@ export default function AlgorithmPage() {
             </thead>
             <tbody>
               {[
-                ["No Double Booking", "Room ≠ 2 courses at same slot"],
+                [
+                  "No Double Booking",
+                  "Room ≠ 2 section assignments at same slot",
+                ],
                 ["Room Capacity", "Capacity ≥ Enrollment count"],
-                ["Instructor Conflict", "Faculty ≠ 2 courses simultaneously"],
+                [
+                  "Instructor Conflict",
+                  "Faculty ≠ 2 section assignments simultaneously",
+                ],
                 ["Time Slot Validity", "Within TSU academic calendar"],
               ].map(([name, rule]) => (
                 <tr key={name}>
@@ -291,7 +297,7 @@ export default function AlgorithmPage() {
             <tbody>
               {[
                 [
-                  `Schedule Generation (${totalCourses} courses)`,
+                  `Schedule Generation (${totalSections} sections)`,
                   "< 10s",
                   assignedCount > 0 ? "< 10s ✓" : "Not run",
                   assignedCount > 0 ? "green" : "orange",

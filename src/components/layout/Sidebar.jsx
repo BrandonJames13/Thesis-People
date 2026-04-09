@@ -23,7 +23,7 @@ const navGroups = [
     items: [
       { to: "/rooms", icon: "🏫", label: "Rooms", adminOnly: true },
       { to: "/faculty", icon: "👤", label: "Faculty", adminOnly: true },
-      { to: "/courses", icon: "📚", label: "Courses", adminOnly: true },
+      { to: "/subjects", icon: "📚", label: "Subjects", adminOnly: true },
       { to: "/users", icon: "👑", label: "Users", adminOnly: true },
     ],
   },

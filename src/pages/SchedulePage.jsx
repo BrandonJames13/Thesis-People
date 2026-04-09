@@ -4,12 +4,14 @@ import { TIME_SLOTS, DAYS, COLOR_MAP } from "../data/constants";
 import { patternDaysMap } from "../data/constants";
 import ScheduleModal from "../components/schedule/ScheduleModal";
 import ExportModal from "../components/common/ExportModal";
+import { formatAssignmentLabel } from "../utils/scheduleUtils";
 
 export default function SchedulePage() {
   const { rooms, scheduleAssignments, instructors } = useData();
 
   const [roomFilter, setRoomFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [instructorFilter, setInstructorFilter] = useState("");
   const [instructorSearch, setInstructorSearch] = useState("");
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
@@ -30,14 +32,19 @@ export default function SchedulePage() {
   );
 
   // Filter assignments by selected room, year, and instructor
-  const visibleAssignments = scheduleAssignments.filter((c) => {
-    const roomMatch = roomFilter ? c.room === roomFilter : true;
-    const yearMatch = yearFilter ? c.year === yearFilter : true;
+  const visibleAssignments = scheduleAssignments.filter((assignment) => {
+    const roomMatch = roomFilter ? assignment.room === roomFilter : true;
+    const yearMatch = yearFilter ? assignment.year === yearFilter : true;
     const instrMatch = instructorFilter
-      ? c.instructor?.trim().toLowerCase() ===
+      ? assignment.instructor?.trim().toLowerCase() ===
         instructorFilter.trim().toLowerCase()
       : true;
-    return roomMatch && yearMatch && instrMatch;
+    const sectionMatch = sectionFilter
+      ? formatAssignmentLabel(assignment)
+          .toLowerCase()
+          .includes(sectionFilter.trim().toLowerCase())
+      : true;
+    return roomMatch && yearMatch && instrMatch && sectionMatch;
   });
 
   // Build grid
@@ -46,9 +53,9 @@ export default function SchedulePage() {
     grid[d] = {};
   });
 
-  visibleAssignments.forEach((course) => {
-    if (!course.time || !course.pattern) return;
-    const timeMatch = course.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+  visibleAssignments.forEach((assignment) => {
+    if (!assignment.time || !assignment.pattern) return;
+    const timeMatch = assignment.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
     if (!timeMatch) return;
     let h = parseInt(timeMatch[1]);
     const ampm = timeMatch[3].toUpperCase();
@@ -56,9 +63,9 @@ export default function SchedulePage() {
     if (ampm === "AM" && h === 12) h = 0;
     const spanCount = Math.max(
       1,
-      Math.ceil(Math.round((course.duration || 1.5) * 60) / 60),
+      Math.ceil(Math.round((assignment.duration || 1.5) * 60) / 60),
     );
-    const assignedDays = patternDaysMap[course.pattern] || [];
+    const assignedDays = patternDaysMap[assignment.pattern] || [];
     assignedDays.forEach((day) => {
       for (let s = 0; s < spanCount; s++) {
         const slotH = h + s;
@@ -66,9 +73,9 @@ export default function SchedulePage() {
         grid[day][slotH] =
           s === 0
             ? {
-                course,
+                assignment,
                 span: spanCount,
-                color: COLOR_MAP[course.pattern] || "blue",
+                color: COLOR_MAP[assignment.pattern] || "blue",
               }
             : "blocked";
       }
@@ -84,7 +91,7 @@ export default function SchedulePage() {
             <div className="empty-title">No schedule generated yet</div>
             <div className="empty-sub">
               Click <strong>▶ Generate Schedule</strong> on the Dashboard to
-              auto-assign or manually add courses.
+              auto-assign or manually add section assignments.
             </div>
           </td>
         </tr>
@@ -99,7 +106,7 @@ export default function SchedulePage() {
         <tr>
           <td colSpan={7} className="schedule-empty-state">
             <div className="empty-icon">🏫</div>
-            <div className="empty-title">No classes found</div>
+            <div className="empty-title">No section assignments found</div>
             <div className="empty-sub">
               No assignments match the selected filters.
             </div>
@@ -119,25 +126,25 @@ export default function SchedulePage() {
           cells.push(<td key={day} className="sched-td empty-slot" />);
           return;
         }
-        const c = cell.course;
-        const dh = Math.floor(c.duration);
-        const dm = Math.round((c.duration - dh) * 60);
+        const assignment = cell.assignment;
+        const dh = Math.floor(assignment.duration);
+        const dm = Math.round((assignment.duration - dh) * 60);
         cells.push(
           <td
             key={day}
-            className={`sched-td occupied-${cell.color}${c.status === "Conflict" ? " conflict-slot" : ""}`}
+            className={`sched-td occupied-${cell.color}${assignment.status === "Conflict" ? " conflict-slot" : ""}`}
             rowSpan={cell.span}
           >
             <div
-              className={`sched-course${c.status === "Conflict" ? " conflict-text" : ""}`}
+              className={`sched-course${assignment.status === "Conflict" ? " conflict-text" : ""}`}
             >
-              {c.code}
-              {c.status === "Conflict" ? " ⚠" : ""}
+              {formatAssignmentLabel(assignment)}
+              {assignment.status === "Conflict" ? " ⚠" : ""}
             </div>
-            <div className="sched-room">{c.room}</div>
-            <div className="sched-prof">{c.instructor}</div>
+            <div className="sched-room">{assignment.room}</div>
+            <div className="sched-prof">{assignment.instructor}</div>
             <div className="sched-dur">
-              {dm > 0 ? `${dh}h ${dm}m` : `${dh}h`} · {c.pattern}
+              {dm > 0 ? `${dh}h ${dm}m` : `${dh}h`} · {assignment.pattern}
             </div>
           </td>,
         );
@@ -176,6 +183,16 @@ export default function SchedulePage() {
           }}
         >
           {/* Instructor Dropdown Search */}
+          <div style={{ position: "relative" }}>
+            <input
+              className="search-input"
+              style={{ width: 230 }}
+              placeholder="🔎 Subject/Section (e.g., IT101-A)"
+              value={sectionFilter}
+              onChange={(e) => setSectionFilter(e.target.value)}
+            />
+          </div>
+
           <div style={{ position: "relative" }}>
             <input
               className="search-input"

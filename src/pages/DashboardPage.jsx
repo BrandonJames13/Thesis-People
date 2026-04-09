@@ -8,11 +8,20 @@ import ExportModal from "../components/common/ExportModal";
 import { useState, useRef } from "react";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
+import {
+  formatAssignmentLabel,
+  getAssignmentIdentityKey,
+} from "../utils/scheduleUtils";
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { rooms, courses, assignments, scheduleAssignments, resetAllData } =
-    useData();
+  const {
+    rooms,
+    subjectSections,
+    assignments,
+    scheduleAssignments,
+    resetAllData,
+  } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
@@ -24,22 +33,24 @@ export default function DashboardPage() {
   const genStartRef = useRef(null);
 
   const utilization =
-    courses.length > 0
-      ? Math.round((assignments.length / courses.length) * 100)
+    subjectSections.length > 0
+      ? Math.round((assignments.length / subjectSections.length) * 100)
       : 0;
   const { hard } = detectConflicts();
   const hardCount = hard.length;
 
   // Dynamic computed values from real data
-  const totalCourses = courses.length;
+  const totalSections = subjectSections.length;
   const totalRooms = rooms.length;
   const totalInstructors = new Set(
     scheduleAssignments.map((c) => c.instructor).filter(Boolean),
   ).size;
-  const assignedCount = scheduleAssignments.length;
-  const hasSchedule = assignedCount > 0;
+  const assignedSections = assignments.length;
+  const hasSchedule = scheduleAssignments.length > 0;
   const progressPct =
-    totalCourses > 0 ? Math.round((assignedCount / totalCourses) * 100) : 0;
+    totalSections > 0
+      ? Math.round((assignedSections / totalSections) * 100)
+      : 0;
   const genTimeLabel = lastGenTime !== null ? `${lastGenTime}s` : "—";
 
   const requireAdmin = () => {
@@ -55,7 +66,7 @@ export default function DashboardPage() {
       icon: hasSchedule ? "✓" : "○",
       name: "Input Data Collection",
       desc: hasSchedule
-        ? `${totalCourses} courses · ${totalRooms} rooms · ${totalInstructors} instructors loaded`
+        ? `${totalSections} sections · ${totalRooms} rooms · ${totalInstructors} instructors loaded`
         : "Waiting for schedule generation",
       time: hasSchedule ? "0.3s" : "—",
     },
@@ -93,7 +104,7 @@ export default function DashboardPage() {
       name: "Localized Reallocation",
       desc: hasSchedule
         ? hardCount > 0
-          ? `${hardCount} conflict${hardCount !== 1 ? "s" : ""} detected — attempting alternative assignments`
+          ? `${hardCount} conflict${hardCount !== 1 ? "s" : ""} detected — attempting alternative section assignments`
           : "No conflicts detected — all constraints satisfied"
         : "—",
       time: hasSchedule ? "1.3s" : "—",
@@ -183,7 +194,7 @@ export default function DashboardPage() {
           <div className="stat-icon">✅</div>
           <div className="stat-label">Scheduled</div>
           <div className="stat-value">{assignments.length}</div>
-          <div className="stat-delta">{courses.length} total courses</div>
+          <div className="stat-delta">{totalSections} total sections</div>
         </div>
         <div className="stat-card red">
           <div className="stat-icon">⚠</div>
@@ -217,7 +228,7 @@ export default function DashboardPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Course</th>
+                  <th>Section</th>
                   <th>Room</th>
                   <th>Time Slot</th>
                   <th>Instructor</th>
@@ -225,23 +236,25 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments.slice(0, 6).map((c) => (
-                  <tr key={c.code}>
+                {assignments.slice(0, 6).map((assignment) => (
+                  <tr key={getAssignmentIdentityKey(assignment)}>
                     <td>
-                      <span className="monospace">{c.code}</span>
+                      <span className="monospace">
+                        {formatAssignmentLabel(assignment)}
+                      </span>
                       <br />
                       <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                        {c.title}
+                        {assignment.title}
                       </span>
                     </td>
-                    <td className="monospace">{c.room}</td>
-                    <td className="monospace">{c.time}</td>
-                    <td>{c.instructor}</td>
+                    <td className="monospace">{assignment.room}</td>
+                    <td className="monospace">{assignment.time}</td>
+                    <td>{assignment.instructor}</td>
                     <td>
                       <span
-                        className={`pill pill-${c.status === "Assigned" ? "green" : "red"}`}
+                        className={`pill pill-${assignment.status === "Assigned" ? "green" : "red"}`}
                       >
-                        {c.status}
+                        {assignment.status}
                       </span>
                     </td>
                   </tr>
@@ -290,7 +303,7 @@ export default function DashboardPage() {
               <div className="progress-header">
                 <span>Generation Progress</span>
                 <span>
-                  {assignedCount} / {totalCourses} courses assigned
+                  {assignedSections} / {totalSections} sections assigned
                 </span>
               </div>
               <div className="progress-bar">
@@ -416,7 +429,7 @@ export default function DashboardPage() {
                   <div className="mini-value">
                     {genTimeLabel}{" "}
                     <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      / {totalCourses} courses
+                      / {totalSections} sections
                     </span>
                   </div>
                 </div>
