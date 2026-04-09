@@ -1,16 +1,33 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
+import { getWingFromRoomInput } from "../../utils/roomUtils";
 
-export function AddRoomModal({ onClose, onAdd }) {
-  const [number, setNumber] = useState("");
-  const [type, setType] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [status, setStatus] = useState("Available");
+const WING_OPTIONS = [
+  { value: "", label: "Auto (infer from room number)" },
+  { value: "L", label: "Left Wing (L)" },
+  { value: "C", label: "Center Wing (C)" },
+  { value: "R", label: "Right Wing (R)" },
+];
+
+export function AddRoomModal({
+  onClose,
+  onSubmit,
+  initialRoom = null,
+  mode = "add",
+}) {
+  const [number, setNumber] = useState(initialRoom?.number ?? "");
+  const [type, setType] = useState(initialRoom?.type ?? "");
+  const [capacity, setCapacity] = useState(
+    initialRoom?.capacity != null ? String(initialRoom.capacity) : "",
+  );
+  const [status, setStatus] = useState(initialRoom?.status ?? "Available");
+  const [wing, setWing] = useState(initialRoom?.wing ?? "");
   const [error, setError] = useState("");
 
   const handleSubmit = () => {
-    const cap = parseInt(capacity);
-    if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
+    const trimmedNumber = number.trim();
+    const cap = parseInt(capacity, 10);
+    if (!trimmedNumber || !type || isNaN(cap) || cap <= 0) {
       setError("Please fill in all fields correctly.");
       return;
     }
@@ -25,15 +42,36 @@ export function AddRoomModal({ onClose, onAdd }) {
       return;
     }
 
+    const { providedWing, inferredWing, resolvedWing } = getWingFromRoomInput(
+      trimmedNumber,
+      wing,
+    );
+
+    if (providedWing && inferredWing && providedWing !== inferredWing) {
+      setError(
+        `Wing mismatch: room number suggests ${inferredWing}, but selected wing is ${providedWing}.`,
+      );
+      return;
+    }
+
     setError("");
-    onAdd({ number: number.trim(), type, capacity: cap, status });
+    onSubmit({
+      number: trimmedNumber,
+      type,
+      capacity: cap,
+      status,
+      wing: resolvedWing,
+    });
   };
+
+  const modalTitle = mode === "edit" ? "✎ Edit Room" : "+ Add New Room";
+  const submitLabel = mode === "edit" ? "Save Changes" : "+ Add Room";
 
   return (
     <Modal isOpen={true} onClose={onClose} size="sm">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-          + Add New Room
+          {modalTitle}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <input
@@ -87,6 +125,22 @@ export function AddRoomModal({ onClose, onAdd }) {
             <option value="Occupied">Occupied</option>
             <option value="Maintenance">Maintenance</option>
           </select>
+          <select
+            className="search-input"
+            style={{ width: "100%" }}
+            value={wing}
+            onChange={(e) => setWing(e.target.value)}
+          >
+            {WING_OPTIONS.map((option) => (
+              <option key={option.value || "auto"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+            Wing is optional. Leave as Auto to infer from formatted numbers like
+            L120, C211, or R222.
+          </div>
           {error && (
             <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
           )}
@@ -104,7 +158,7 @@ export function AddRoomModal({ onClose, onAdd }) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Room
+            {submitLabel}
           </button>
         </div>
       </div>

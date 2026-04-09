@@ -22,6 +22,7 @@ export default function RoomsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [wingFilter, setWingFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [editingRoom, setEditingRoom] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const fetchRooms = useCallback(async () => {
@@ -53,9 +54,17 @@ export default function RoomsPage() {
       return false;
     }
 
+    const payload = {
+      number: room.number,
+      type: room.type,
+      capacity: room.capacity,
+      status: room.status,
+      wing: room.wing ?? null,
+    };
+
     const { data, error } = await supabase
       .from("rooms")
-      .insert([room])
+      .insert([payload])
       .select();
 
     if (error) {
@@ -65,6 +74,57 @@ export default function RoomsPage() {
 
     setRooms((current) => [...current, ...(data ?? [])]);
     return true;
+  }
+
+  async function editRoom(id, room) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return false;
+    }
+
+    const payload = {
+      number: room.number,
+      type: room.type,
+      capacity: room.capacity,
+      status: room.status,
+      wing: room.wing ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from("rooms")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      showNotification(`⚠ ${error.message}`);
+      return false;
+    }
+
+    setRooms((current) =>
+      current.map((roomItem) =>
+        roomItem.id === id ? (data ?? { ...roomItem, ...payload }) : roomItem,
+      ),
+    );
+    return true;
+  }
+
+  function openAddModal() {
+    if (!isAdmin) return;
+    setEditingRoom(null);
+    setShowModal(true);
+  }
+
+  function openEditModal(room) {
+    if (!isAdmin) return;
+    setEditingRoom(room);
+    setShowModal(true);
+  }
+
+  function closeRoomModal() {
+    setShowModal(false);
+    setEditingRoom(null);
   }
 
   async function handleDeleteConfirm() {
@@ -173,10 +233,7 @@ export default function RoomsPage() {
             <option>Maintenance</option>
           </select>
           {isAdmin && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowModal(true)}
-            >
+            <button className="btn btn-primary" onClick={openAddModal}>
               + Add Room
             </button>
           )}
@@ -216,21 +273,38 @@ export default function RoomsPage() {
                   >
                     <div className="room-number">{room.number}</div>
                     {isAdmin && (
-                      <button
-                        onClick={() => setDeleteTarget(room)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--text3)",
-                          cursor: "pointer",
-                          fontSize: 16,
-                          lineHeight: 1,
-                          padding: 0,
-                        }}
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => openEditModal(room)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text3)",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                          title="Edit"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(room)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text3)",
+                            cursor: "pointer",
+                            fontSize: 16,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                          title="Delete"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     )}
                   </div>
                   <div className="room-type">{room.type}</div>
@@ -273,13 +347,23 @@ export default function RoomsPage() {
 
       {showModal && isAdmin && (
         <AddRoomModal
-          onClose={() => setShowModal(false)}
-          onAdd={async (room) => {
-            const saved = await addRoom(room);
+          key={editingRoom?.id ?? "add-room"}
+          onClose={closeRoomModal}
+          mode={editingRoom ? "edit" : "add"}
+          initialRoom={editingRoom}
+          onSubmit={async (room) => {
+            if (editingRoom) {
+              const saved = await editRoom(editingRoom.id, room);
+              if (!saved) return;
+              closeRoomModal();
+              showNotification("Room updated successfully!");
+              return;
+            }
 
+            const saved = await addRoom(room);
             if (!saved) return;
 
-            setShowModal(false);
+            closeRoomModal();
             showNotification("Room added successfully!");
           }}
         />

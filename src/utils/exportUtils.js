@@ -1,3 +1,5 @@
+import { getWingFromRoomInput } from "./roomUtils";
+
 export const CSV_TYPES = {
   FULL_LIST: "full-list",
   ROOMS: "rooms",
@@ -194,6 +196,22 @@ function assertHeaderMatch(actualHeaders, expectedHeaders) {
   });
 }
 
+function assertRoomHeaderMatch(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+  const baseHeaders = CSV_FORMATS[CSV_TYPES.ROOMS].headers.map(normalizeHeader);
+
+  const hasBaseHeaders = baseHeaders.every((header, index) => {
+    return normalizedActual[index] === header;
+  });
+
+  if (!hasBaseHeaders) return false;
+
+  if (normalizedActual.length === baseHeaders.length) return true;
+  if (normalizedActual.length !== baseHeaders.length + 1) return false;
+
+  return ["wing", "room wing"].includes(normalizedActual[baseHeaders.length]);
+}
+
 function getTypeConfig(type) {
   const config = CSV_FORMATS[type];
   if (!config) {
@@ -247,12 +265,18 @@ function parseFacultyRows(rows) {
 
 function parseRoomRows(rows) {
   return rows
-    .map((r) => ({
-      number: String(r[0] ?? "").trim(),
-      type: String(r[1] ?? "").trim(),
-      capacity: toNumber(r[2], 0),
-      status: String(r[3] ?? "").trim() || "Available",
-    }))
+    .map((r) => {
+      const number = String(r[0] ?? "").trim();
+      const wingData = getWingFromRoomInput(number, r[4]);
+
+      return {
+        number,
+        type: String(r[1] ?? "").trim(),
+        capacity: toNumber(r[2], 0),
+        status: String(r[3] ?? "").trim() || "Available",
+        wing: wingData.resolvedWing,
+      };
+    })
     .filter((room) => room.number);
 }
 
@@ -322,6 +346,9 @@ export function parseImportCsv(csvText, type) {
 
   const typesToCheck = config ? [type] : Object.values(CSV_TYPES);
   const selectedType = typesToCheck.find((candidate) => {
+    if (candidate === CSV_TYPES.ROOMS) {
+      return assertRoomHeaderMatch(headers);
+    }
     return assertHeaderMatch(headers, getTypeConfig(candidate).headers);
   });
 
