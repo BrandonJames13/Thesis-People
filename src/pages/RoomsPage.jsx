@@ -4,6 +4,12 @@ import { useNotification } from "../context/NotificationContext";
 import Modal from "../components/common/Modal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
+const WINGS = [
+  { code: "L", label: "Left Wing (L)" },
+  { code: "R", label: "Right Wing (R)" },
+  { code: "C", label: "Center Wing (C)" },
+];
+
 export default function RoomsPage() {
   const { rooms, addRoom, deleteRoom } = useData();
   const { showNotification } = useNotification();
@@ -11,6 +17,7 @@ export default function RoomsPage() {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [wingFilter, setWingFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -20,7 +27,8 @@ export default function RoomsPage() {
       .includes(search.toLowerCase());
     const matchType = !typeFilter || room.type === typeFilter;
     const matchStatus = !statusFilter || room.status === statusFilter;
-    return matchSearch && matchType && matchStatus;
+    const matchWing = !wingFilter || room.wing === wingFilter;
+    return matchSearch && matchType && matchStatus && matchWing;
   });
 
   const handleDeleteConfirm = () => {
@@ -29,6 +37,9 @@ export default function RoomsPage() {
     showNotification(`${deleteTarget.number} deleted.`);
     setDeleteTarget(null);
   };
+
+  const getWingLabel = (code) =>
+    WINGS.find((w) => w.code === code)?.label || code || "—";
 
   return (
     <div className="page-container">
@@ -60,6 +71,23 @@ export default function RoomsPage() {
             <option>All Types</option>
             <option>Lecture</option>
             <option>Computer Lab</option>
+          </select>
+          <select
+            className="search-input"
+            style={{ width: 140 }}
+            value={wingFilter || "All Wings"}
+            onChange={(e) =>
+              setWingFilter(
+                e.target.value === "All Wings" ? "" : e.target.value,
+              )
+            }
+          >
+            <option>All Wings</option>
+            {WINGS.map((w) => (
+              <option key={w.code} value={w.code}>
+                {w.label}
+              </option>
+            ))}
           </select>
           <select
             className="search-input"
@@ -134,6 +162,17 @@ export default function RoomsPage() {
                     </button>
                   </div>
                   <div className="room-type">{room.type}</div>
+                  {room.wing && (
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text3)",
+                        marginBottom: 4,
+                      }}
+                    >
+                      📍 {getWingLabel(room.wing)}
+                    </div>
+                  )}
                   <div style={{ marginBottom: 10 }}>
                     <span className={`pill pill-${statusColor}`}>
                       {room.status}
@@ -168,7 +207,6 @@ export default function RoomsPage() {
             setShowModal(false);
             showNotification("Room added successfully!");
           }}
-          showNotification={showNotification}
         />
       )}
 
@@ -185,21 +223,21 @@ export default function RoomsPage() {
   );
 }
 
-function AddRoomModal({ onClose, onAdd, showNotification }) {
+function AddRoomModal({ onClose, onAdd }) {
   const [number, setNumber] = useState("");
   const [type, setType] = useState("");
+  const [wing, setWing] = useState("");
   const [capacity, setCapacity] = useState("");
   const [status, setStatus] = useState("Available");
   const [error, setError] = useState("");
 
   const handleSubmit = () => {
     const cap = parseInt(capacity);
-    if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
+    if (!number.trim() || !type || !wing || isNaN(cap) || cap <= 0) {
       setError("Please fill in all fields correctly.");
       return;
     }
 
-    // Capacity limits based on room type
     if (type === "Computer Lab" && (cap < 30 || cap > 35)) {
       setError("Computer Lab capacity must be between 30 and 35.");
       return;
@@ -210,72 +248,142 @@ function AddRoomModal({ onClose, onAdd, showNotification }) {
     }
 
     setError("");
-    onAdd({ number: number.trim(), type, capacity: cap, status });
+    onAdd({ number: number.trim(), type, wing, capacity: cap, status });
+  };
+
+  const labelStyle = {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "var(--text2)",
+    marginBottom: 4,
+    display: "block",
   };
 
   return (
     <Modal isOpen={true} onClose={onClose}>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-          + Add New Room
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Room Number (e.g. Room 104)"
-            style={{ width: "100%" }}
-            value={number}
-            onChange={(e) => setNumber(e.target.value)}
-          />
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={type}
-            onChange={(e) => setType(e.target.value)}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
+            + Add New Room
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              background: "none",
+              border: "none",
+              fontSize: 20,
+              color: "var(--text3)",
+              cursor: "pointer",
+              padding: 0,
+            }}
           >
-            <option value="">-- Select Type --</option>
-            <option value="Lecture">Lecture</option>
-            <option value="Computer Lab">Computer Lab</option>
-          </select>
-          <input
-            className="search-input"
-            type="number"
-            placeholder={
-              type === "Computer Lab"
-                ? "Capacity (30–35)"
-                : type === "Lecture"
-                  ? "Capacity (40–45)"
-                  : "Capacity"
-            }
-            min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
-            max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
-            style={{ width: "100%" }}
-            value={capacity}
-            onChange={(e) => setCapacity(e.target.value)}
-          />
-          {type && (
-            <div style={{ fontSize: 11, color: "var(--text3)" }}>
-              {type === "Computer Lab"
-                ? "⚠ Lab capacity: min 30, max 35"
-                : "⚠ Lecture capacity: min 40, max 45"}
-            </div>
-          )}
-          <select
-            className="search-input"
-            style={{ width: "100%" }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="Available">Available</option>
-            <option value="Occupied">Occupied</option>
-            <option value="Maintenance">Maintenance</option>
-          </select>
-          {error && (
-            <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
-          )}
+            ✕
+          </button>
         </div>
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <div
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+        >
+          <div>
+            <label style={labelStyle}>Room Number *</label>
+            <input
+              className="search-input"
+              type="text"
+              placeholder="e.g. L101, R203, C112"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={number}
+              onChange={(e) => setNumber(e.target.value)}
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>Room Type *</label>
+            <select
+              className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setCapacity("");
+              }}
+            >
+              <option value="">-- Select Type --</option>
+              <option value="Lecture">Lecture</option>
+              <option value="Computer Lab">Computer Lab</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Wing / Location *</label>
+            <select
+              className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={wing}
+              onChange={(e) => setWing(e.target.value)}
+            >
+              <option value="">-- Select Wing --</option>
+              {WINGS.map((w) => (
+                <option key={w.code} value={w.code}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>
+              Capacity *{" "}
+              {type && (
+                <span style={{ fontWeight: 400, color: "var(--text3)" }}>
+                  ({type === "Computer Lab" ? "30–35" : "40–45"})
+                </span>
+              )}
+            </label>
+            <input
+              className="search-input"
+              type="number"
+              placeholder={
+                type === "Computer Lab"
+                  ? "30–35"
+                  : type === "Lecture"
+                    ? "40–45"
+                    : "Capacity"
+              }
+              min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
+              max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={capacity}
+              onChange={(e) => setCapacity(e.target.value)}
+            />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Status</label>
+            <select
+              className="search-input"
+              style={{ width: "100%", boxSizing: "border-box" }}
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="Available">Available</option>
+              <option value="Occupied">Occupied</option>
+              <option value="Maintenance">Maintenance</option>
+            </select>
+          </div>
+        </div>
+        {error && (
+          <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            justifyContent: "flex-end",
+            paddingTop: 4,
+            borderTop: "1px solid var(--border)",
+          }}
+        >
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
