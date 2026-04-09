@@ -3,31 +3,14 @@ import Modal from "./Modal";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import {
-  mergeUniqueInstructors,
+  CSV_TYPE_OPTIONS,
+  CSV_TYPES,
+  dedupeImportedRecords,
+  downloadCsvTemplate,
+  getCsvTypeConfig,
   parseImportCsv,
+  summarizeImportedRows,
 } from "../../utils/exportUtils";
-
-function summarizeParsed(parsed) {
-  if (!parsed) return "No file selected";
-
-  if (parsed.type === "schedule") {
-    return `${parsed.courses.length} schedule row(s)`;
-  }
-
-  if (parsed.type === "subjects") {
-    return `${parsed.courses.length} subject row(s)`;
-  }
-
-  if (parsed.type === "rooms") {
-    return `${parsed.rooms.length} room row(s)`;
-  }
-
-  if (parsed.type === "faculty") {
-    return `${parsed.instructors.length} faculty row(s)`;
-  }
-
-  return "Unknown import payload";
-}
 
 async function readFileText(file) {
   return file.text();
@@ -35,8 +18,6 @@ async function readFileText(file) {
 
 export default function ImportModal({ isOpen, onClose }) {
   const {
-    courses,
-    instructors,
     updateCourses,
     updateInstructors,
     updateRooms,
@@ -45,6 +26,7 @@ export default function ImportModal({ isOpen, onClose }) {
   const { showNotification } = useNotification();
 
   const [source, setSource] = useState("upload");
+  const [importType, setImportType] = useState(CSV_TYPES.FULL_LIST);
   const [localFile, setLocalFile] = useState(null);
   const [repoFiles, setRepoFiles] = useState([]);
   const [selectedRepoPath, setSelectedRepoPath] = useState("");
@@ -52,9 +34,18 @@ export default function ImportModal({ isOpen, onClose }) {
   const [error, setError] = useState("");
   const [isParsing, setIsParsing] = useState(false);
 
+  const selectedTypeConfig = useMemo(
+    () => getCsvTypeConfig(importType),
+    [importType],
+  );
+
+  const repoFilesForType = useMemo(() => {
+    return repoFiles.filter((item) => !item.type || item.type === importType);
+  }, [repoFiles, importType]);
+
   const selectedRepoItem = useMemo(
-    () => repoFiles.find((f) => f.path === selectedRepoPath),
-    [repoFiles, selectedRepoPath],
+    () => repoFilesForType.find((f) => f.path === selectedRepoPath),
+    [repoFilesForType, selectedRepoPath],
   );
 
   useEffect(() => {
@@ -70,9 +61,6 @@ export default function ImportModal({ isOpen, onClose }) {
 
         const files = Array.isArray(data?.files) ? data.files : [];
         setRepoFiles(files);
-        if (files.length > 0) {
-          setSelectedRepoPath(files[0].path);
-        }
       } catch {
         if (!mounted) return;
         setRepoFiles([]);
@@ -92,7 +80,19 @@ export default function ImportModal({ isOpen, onClose }) {
     setError("");
     setLocalFile(null);
     setSource("upload");
+    setImportType(CSV_TYPES.FULL_LIST);
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (repoFilesForType.length === 0) {
+      setSelectedRepoPath("");
+      return;
+    }
+    if (!repoFilesForType.some((item) => item.path === selectedRepoPath)) {
+      setSelectedRepoPath(repoFilesForType[0].path);
+    }
+  }, [isOpen, repoFilesForType, selectedRepoPath]);
 
   const parseCsvText = async () => {
     setIsParsing(true);
@@ -118,7 +118,7 @@ export default function ImportModal({ isOpen, onClose }) {
         text = await response.text();
       }
 
-      const payload = parseImportCsv(text);
+      const payload = parseImportCsv(text, importType);
       setParsed(payload);
     } catch (err) {
       setError(err.message || "Unable to parse CSV file.");
@@ -133,67 +133,39 @@ export default function ImportModal({ isOpen, onClose }) {
       return;
     }
 
-    if (parsed.type === "schedule") {
-      const nextCourses = parsed.courses;
-      const assigned = nextCourses.filter((c) => c.status === "Assigned");
-      const merged = mergeUniqueInstructors(
-        instructors,
-        [],
-        parsed.instructorNames,
-        nextCourses,
-      );
-
-      updateCourses(nextCourses);
-      updateScheduleAssignments(assigned);
-      updateInstructors(merged.instructors);
-
-      showNotification(
-        `Imported ${nextCourses.length} schedule rows. Added ${merged.addedCount} instructor(s).`,
-      );
+    if (parsed.type === CSV_TYPES.FULL_LIST) {
+      const rows = dedupeImportedRecords(parsed.type, parsed.rows);
+      updateScheduleAssignments(rows);
+      showNotification(`Imported ${rows.length} full list row(s).`);
       onClose();
       return;
     }
 
-    if (parsed.type === "subjects") {
-      const nextCourses = parsed.courses;
-      const merged = mergeUniqueInstructors(
-        instructors,
-        [],
-        parsed.instructorNames,
-        nextCourses,
-      );
-
-      updateCourses(nextCourses);
-      updateScheduleAssignments([]);
-      updateInstructors(merged.instructors);
-
-      showNotification(
-        `Imported ${nextCourses.length} subjects. Added ${merged.addedCount} instructor(s).`,
-      );
+    if (parsed.type === CSV_TYPES.SUBJECTS) {
+      const rows = dedupeImportedRecords(parsed.type, parsed.subjects);
+      updateCourses(rows);
+      showNotification(`Imported ${rows.length} subject row(s).`);
       onClose();
       return;
     }
 
-    if (parsed.type === "rooms") {
-      updateRooms(parsed.rooms);
-      showNotification(`Imported ${parsed.rooms.length} room records.`);
+    if (parsed.type === CSV_TYPES.ROOMS) {
+      const rows = dedupeImportedRecords(parsed.type, parsed.rooms);
+      updateRooms(rows);
+      showNotification(`Imported ${rows.length} room row(s).`);
       onClose();
       return;
     }
 
-    if (parsed.type === "faculty") {
-      const merged = mergeUniqueInstructors(
-        instructors,
-        parsed.instructors,
-        [],
-        courses,
-      );
-      updateInstructors(merged.instructors);
-      showNotification(
-        `Imported ${parsed.instructors.length} faculty rows. Added ${merged.addedCount} new instructor(s).`,
-      );
+    if (parsed.type === CSV_TYPES.INSTRUCTORS) {
+      const rows = dedupeImportedRecords(parsed.type, parsed.instructors);
+      updateInstructors(rows);
+      showNotification(`Imported ${rows.length} instructor row(s).`);
       onClose();
+      return;
     }
+
+    setError(`Unsupported import type: ${parsed.type}`);
   };
 
   return (
@@ -201,6 +173,28 @@ export default function ImportModal({ isOpen, onClose }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>
           Import CSV Data
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>Import type</div>
+          <select
+            className="search-input"
+            value={importType}
+            onChange={(e) => {
+              setImportType(e.target.value);
+              setParsed(null);
+              setError("");
+            }}
+          >
+            {CSV_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 12, color: "var(--text3)" }}>
+            {selectedTypeConfig.description}
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
@@ -243,12 +237,12 @@ export default function ImportModal({ isOpen, onClose }) {
               className="search-input"
               value={selectedRepoPath}
               onChange={(e) => setSelectedRepoPath(e.target.value)}
-              disabled={repoFiles.length === 0}
+              disabled={repoFilesForType.length === 0}
             >
-              {repoFiles.length === 0 ? (
+              {repoFilesForType.length === 0 ? (
                 <option value="">No repository csv files found</option>
               ) : (
-                repoFiles.map((item) => (
+                repoFilesForType.map((item) => (
                   <option value={item.path} key={item.path}>
                     {item.label}
                   </option>
@@ -257,14 +251,20 @@ export default function ImportModal({ isOpen, onClose }) {
             </select>
             <div style={{ fontSize: 12, color: "var(--text3)" }}>
               {selectedRepoItem?.description ||
-                "Choose a CSV file from public/csv to import."}
+                `Choose a ${selectedTypeConfig.label.toLowerCase()} CSV file from public/csv to import.`}
             </div>
           </div>
         )}
 
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn btn-secondary" onClick={parseCsvText}>
             {isParsing ? "Parsing..." : "Preview CSV"}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => downloadCsvTemplate(importType)}
+          >
+            Download {selectedTypeConfig.templateLabel}
           </button>
         </div>
 
@@ -278,14 +278,13 @@ export default function ImportModal({ isOpen, onClose }) {
           }}
         >
           <div style={{ color: "var(--text2)" }}>
-            Type: <strong>{parsed?.type ?? "-"}</strong>
+            Type: <strong>{selectedTypeConfig.label}</strong>
           </div>
           <div style={{ color: "var(--text2)", marginTop: 4 }}>
-            Preview: <strong>{summarizeParsed(parsed)}</strong>
+            Preview: <strong>{summarizeImportedRows(parsed)}</strong>
           </div>
           <div style={{ color: "var(--text3)", marginTop: 6 }}>
-            Supports: schedule export format, faculty list, rooms list, subjects
-            list.
+            Supported payloads: full list, rooms, instructors, subjects.
           </div>
         </div>
 

@@ -4,8 +4,8 @@ import { useConflicts } from "../context/ConflictContext";
 import ScheduleModal from "../components/schedule/ScheduleModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 import ImportModal from "../components/common/ImportModal";
+import ExportModal from "../components/common/ExportModal";
 import { useState, useRef } from "react";
-import { exportToExcel } from "../utils/exportUtils";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
 
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const { isAdmin } = useAuth();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [lastGenTime, setLastGenTime] = useState(null);
   const genStartRef = useRef(null);
@@ -149,10 +150,7 @@ export default function DashboardPage() {
           )}
           <button
             className="btn btn-secondary"
-            onClick={() => {
-              exportToExcel(scheduleAssignments);
-              showNotification("Schedule exported to Excel (CSV) ✓");
-            }}
+            onClick={() => setShowExportModal(true)}
           >
             ↓ Export
           </button>
@@ -344,12 +342,9 @@ export default function DashboardPage() {
               <button
                 className="btn btn-secondary"
                 style={{ justifyContent: "center" }}
-                onClick={() => {
-                  exportToExcel(scheduleAssignments);
-                  showNotification("Schedule exported to Excel (CSV) ✓");
-                }}
+                onClick={() => setShowExportModal(true)}
               >
-                ↓ Export to Excel
+                ↓ Export CSV
               </button>
               <button
                 className="btn btn-danger"
@@ -484,6 +479,11 @@ export default function DashboardPage() {
           onClose={() => setShowImportModal(false)}
         />
       )}
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
 
       <ConfirmModal
         isOpen={showResetConfirm}

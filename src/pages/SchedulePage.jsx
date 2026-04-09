@@ -1,14 +1,12 @@
 import { useState, useMemo } from "react";
 import { useData } from "../context/DataContext";
-import { useNotification } from "../context/NotificationContext";
-import { exportToExcel } from "../utils/exportUtils";
 import { TIME_SLOTS, DAYS, COLOR_MAP } from "../data/constants";
 import { patternDaysMap } from "../data/constants";
 import ScheduleModal from "../components/schedule/ScheduleModal";
+import ExportModal from "../components/common/ExportModal";
 
 export default function SchedulePage() {
   const { rooms, scheduleAssignments, instructors } = useData();
-  const { showNotification } = useNotification();
 
   const [roomFilter, setRoomFilter] = useState("");
   const [yearFilter, setYearFilter] = useState("");
@@ -16,6 +14,7 @@ export default function SchedulePage() {
   const [instructorSearch, setInstructorSearch] = useState("");
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Get unique instructor names from assignments + instructor list
   const allInstructorNames = useMemo(() => {
@@ -303,10 +302,7 @@ export default function SchedulePage() {
           </select>
           <button
             className="btn btn-primary"
-            onClick={() => {
-              exportToExcel(scheduleAssignments);
-              showNotification("Schedule exported to Excel (CSV) ✓");
-            }}
+            onClick={() => setShowExportModal(true)}
           >
             ↓ Export
           </button>
@@ -384,6 +380,11 @@ export default function SchedulePage() {
       </div>
 
       {showModal && <ScheduleModal onClose={() => setShowModal(false)} />}
+
+      <ExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+      />
     </div>
   );
 }
