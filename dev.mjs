@@ -8,9 +8,10 @@ const realCwd = realpathSync(process.cwd());
 process.chdir(realCwd);
 
 const viteBin = resolve(realCwd, "node_modules", "vite", "bin", "vite.js");
+const devPort = process.env.VITE_PORT || "4173";
 const child = spawn(
   process.execPath,
-  [viteBin, "--host", ...process.argv.slice(2)],
+  [viteBin, "--host", "127.0.0.1", "--port", devPort, ...process.argv.slice(2)],
   {
     cwd: realCwd,
     stdio: "inherit",
