@@ -4,6 +4,11 @@ import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
+import {
+  getRoomCapacityLimit,
+  normalizeRoomType,
+  sanitizeRoomCapacity,
+} from "../data/constants";
 
 const WINGS = [
   { code: "L", label: "Left Wing (L)" },
@@ -38,7 +43,16 @@ export default function RoomsPage() {
         return;
       }
 
-      setRooms(data ?? []);
+      setRooms(
+        (data ?? []).map((room) => {
+          const normalizedType = normalizeRoomType(room.type);
+          return {
+            ...room,
+            type: normalizedType,
+            capacity: sanitizeRoomCapacity(normalizedType, room.capacity),
+          };
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -54,10 +68,16 @@ export default function RoomsPage() {
       return false;
     }
 
+    const normalizedType = normalizeRoomType(room.type);
+    const normalizedCapacity = sanitizeRoomCapacity(
+      normalizedType,
+      room.capacity,
+    );
+
     const payload = {
       number: room.number,
-      type: room.type,
-      capacity: room.capacity,
+      type: normalizedType,
+      capacity: normalizedCapacity,
       status: room.status,
       wing: room.wing ?? null,
     };
@@ -82,10 +102,16 @@ export default function RoomsPage() {
       return false;
     }
 
+    const normalizedType = normalizeRoomType(room.type);
+    const normalizedCapacity = sanitizeRoomCapacity(
+      normalizedType,
+      room.capacity,
+    );
+
     const payload = {
       number: room.number,
-      type: room.type,
-      capacity: room.capacity,
+      type: normalizedType,
+      capacity: normalizedCapacity,
       status: room.status,
       wing: room.wing ?? null,
     };
@@ -156,7 +182,8 @@ export default function RoomsPage() {
     const matchSearch = room.number
       .toLowerCase()
       .includes(search.toLowerCase());
-    const matchType = !typeFilter || room.type === typeFilter;
+    const matchType =
+      !typeFilter || normalizeRoomType(room.type) === typeFilter;
     const matchStatus = !statusFilter || room.status === statusFilter;
     const matchWing = !wingFilter || room.wing === wingFilter;
     return matchSearch && matchType && matchStatus && matchWing;
@@ -307,7 +334,9 @@ export default function RoomsPage() {
                       </div>
                     )}
                   </div>
-                  <div className="room-type">{room.type}</div>
+                  <div className="room-type">
+                    {normalizeRoomType(room.type)}
+                  </div>
                   {room.wing && (
                     <div
                       style={{
@@ -328,15 +357,35 @@ export default function RoomsPage() {
                     <span style={{ fontSize: 11, color: "var(--text3)" }}>
                       Cap:
                     </span>
-                    <div className="cap-bar">
-                      <div
-                        className="cap-fill"
-                        style={{
-                          width: `${Math.round((room.capacity / 50) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="monospace">{room.capacity}</span>
+                    {(() => {
+                      const normalizedType = normalizeRoomType(room.type);
+                      const { max } = getRoomCapacityLimit(normalizedType);
+                      const safeCapacity = sanitizeRoomCapacity(
+                        normalizedType,
+                        room.capacity,
+                      );
+                      const percent = Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          Math.round((safeCapacity / Math.max(max, 1)) * 100),
+                        ),
+                      );
+
+                      return (
+                        <>
+                          <div className="cap-bar">
+                            <div
+                              className="cap-fill"
+                              style={{
+                                width: `${percent}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="monospace">{safeCapacity}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );

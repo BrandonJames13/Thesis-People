@@ -44,9 +44,19 @@ export function AddRoomModal({
   const handleSubmit = () => {
     const trimmedNumber = number.trim();
     const normalizedType = normalizeRoomType(type, "");
-    const cap = parseInt(capacity, 10);
-    if (!trimmedNumber || !normalizedType || isNaN(cap) || cap <= 0) {
+    const trimmedCapacity = String(capacity ?? "").trim();
+
+    if (!trimmedNumber || !normalizedType) {
       setError("Please fill in all fields correctly.");
+      return;
+    }
+
+    const cap = trimmedCapacity
+      ? parseInt(trimmedCapacity, 10)
+      : getDefaultRoomCapacity(normalizedType);
+
+    if (trimmedCapacity && (isNaN(cap) || cap <= 0)) {
+      setError("Capacity must be a positive number.");
       return;
     }
 
