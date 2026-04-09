@@ -6,7 +6,10 @@ import {
   useMemo,
   useEffect,
 } from "react";
-import { initialCourses } from "../data/initialCourses";
+import {
+  initialSubjects,
+  initialSubjectSections,
+} from "../data/initialSubjects";
 import { initialRooms } from "../data/initialRooms";
 
 const STORAGE_KEY = "rss_data_v1";
@@ -44,6 +47,8 @@ function normalizeSectionFromRow(row) {
     sectionId,
     subjectCode,
     section,
+    academicYear: row.academicYear ?? row.academic_year ?? "",
+    semester: row.semester ?? "",
     enrolled: Number(row.enrolled ?? 0),
     status: row.status ?? "Pending",
     instructor: row.instructor ?? "",
@@ -94,6 +99,8 @@ function denormalizeSectionRow(section, subjectByCode) {
     program: subject?.program ?? "",
     year: subject?.year ?? "",
     roomType: section.roomType ?? subject?.roomType ?? "Lecture",
+    academicYear: section.academicYear ?? "",
+    semester: section.semester ?? "",
     enrolled: Number(section.enrolled ?? 0),
     status: section.status ?? "Pending",
     instructor: section.instructor ?? "",
@@ -143,7 +150,10 @@ function migrateStoredData(data) {
   return null;
 }
 
-const DEFAULT_NORMALIZED = buildNormalizedFromCourseRows(initialCourses);
+const DEFAULT_NORMALIZED = {
+  subjects: cloneSubjects(initialSubjects),
+  subjectSections: cloneSubjectSections(initialSubjectSections),
+};
 
 function loadFromStorage() {
   try {
