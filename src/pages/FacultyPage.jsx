@@ -97,7 +97,7 @@ export default function FacultyPage() {
 
       if (error) {
         console.error(error);
-        showNotification(`? ${error.message}`);
+        showNotification(`⚠ ${error.message}`);
         return;
       }
 
@@ -117,13 +117,14 @@ export default function FacultyPage() {
       return false;
     }
 
+    const { courses: _courses, ...instructorRow } = instructor;
     const { data, error } = await supabase
       .from("instructors")
-      .insert([instructor])
+      .insert([instructorRow])
       .select();
 
     if (error) {
-      showNotification(`? ${error.message}`);
+      showNotification(`⚠ ${error.message}`);
       return false;
     }
 
@@ -137,14 +138,15 @@ export default function FacultyPage() {
       return false;
     }
 
+    const { courses: _courses, ...instructorRow } = instructor;
     const { data, error } = await supabase
       .from("instructors")
-      .update(instructor)
+      .update(instructorRow)
       .eq("id", id)
       .select();
 
     if (error) {
-      showNotification(`? ${error.message}`);
+      showNotification(`⚠ ${error.message}`);
       return false;
     }
 
@@ -168,7 +170,7 @@ export default function FacultyPage() {
       .eq("id", deleteTarget.id);
 
     if (error) {
-      showNotification(`? ${error.message}`);
+      showNotification(`⚠ ${error.message}`);
       return;
     }
 
@@ -263,7 +265,9 @@ export default function FacultyPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             exportInstructorSchedule(inst, scheduleAssignments);
-                            showNotification(`Schedule exported for ${inst.name} ?`);
+                            showNotification(
+                              `Schedule exported for ${inst.name} ?`,
+                            );
                           }}
                           title="Export this instructor's schedule"
                         >

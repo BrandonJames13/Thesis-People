@@ -54,11 +54,19 @@ body.light {
 }
 
 /* Smooth theme transition */
-*,
-*::before,
-*::after {
+body,
+.card,
+.stat-card,
+.room-card,
+.sched-td,
+.conflict-card,
+.side-panel,
+.nav-item,
+header,
+nav,
+main {
   transition:
-    background-color 0.4s,
+    background 0.4s,
     color 0.4s,
     border-color 0.4s;
 }
@@ -74,6 +82,29 @@ body.light {
     transform: translateY(0);
   }
 }
+
+@keyframes fadeInScale {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes fadeInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 @keyframes shimmer {
   0%,
   100% {
@@ -81,6 +112,20 @@ body.light {
   }
   50% {
     opacity: 0.75;
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  70% {
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -148,11 +193,26 @@ body.light {
   overflow: hidden;
   transition:
     border-color 0.2s,
-    transform 0.2s;
+    transform 0.2s,
+    box-shadow 0.2s;
+  animation: fadeInScale 0.3s ease both;
+}
+.stat-card:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.stat-card:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.stat-card:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.stat-card:nth-child(4) {
+  animation-delay: 0.2s;
 }
 .stat-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 }
 .stat-card::before {
   content: "";
@@ -592,6 +652,7 @@ tr:hover td {
   gap: 14px;
   margin-bottom: 12px;
   transition: all 0.15s;
+  animation: fadeInLeft 0.25s ease both;
 }
 .conflict-card:hover {
   background: var(--surface2);
@@ -679,6 +740,7 @@ tr:hover td {
   padding: 16px;
   cursor: pointer;
   transition: all 0.15s;
+  animation: fadeInScale 0.3s ease both;
 }
 .room-card:hover {
   border-color: var(--accent);
@@ -821,6 +883,7 @@ tr:hover td {
   font-family: var(--sans);
   outline: none;
   transition: border-color 0.15s;
+  width: 220px;
 }
 .search-input:focus {
   border-color: var(--accent);
@@ -830,9 +893,6 @@ tr:hover td {
 }
 select.search-input {
   cursor: pointer;
-}
-.filter-row .search-input {
-  width: 220px;
 }
 .filter-row {
   display: flex;
@@ -882,16 +942,9 @@ select.search-input {
   .dashboard-grid {
     grid-template-columns: 1fr;
   }
-  .dashboard-grid > *:last-child {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 16px;
-  }
 }
 @media (max-width: 768px) {
   .stats-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
-
-/* TABLE */

@@ -44,9 +44,14 @@ export default function CoursesPage() {
       return;
     }
 
+    const {
+      duration: _duration,
+      instructor: _instructor,
+      ...courseRow
+    } = course;
     const { data, error } = await supabase
       .from("courses")
-      .insert([course])
+      .insert([courseRow])
       .select();
 
     if (error) {
@@ -63,9 +68,14 @@ export default function CoursesPage() {
       return;
     }
 
+    const {
+      duration: _duration,
+      instructor: _instructor,
+      ...courseRow
+    } = course;
     const { data, error } = await supabase
       .from("courses")
-      .update(course)
+      .update(courseRow)
       .eq("id", id)
       .select();
 
