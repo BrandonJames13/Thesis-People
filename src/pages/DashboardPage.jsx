@@ -498,7 +498,6 @@ export default function DashboardPage() {
           onClose={() => setShowImportModal(false)}
         />
       )}
-
       <ConfirmModal
         isOpen={showResetConfirm}
         title="🗑 Reset All Data"

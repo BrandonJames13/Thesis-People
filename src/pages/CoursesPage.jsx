@@ -74,29 +74,30 @@ export default function CoursesPage() {
     setCourses(courses.map((c) => (c.id === id ? data[0] : c)));
   }
 
-  async function handleDelete(id) {
+  async function handleDeleteConfirm() {
+    if (!deleteTarget) return;
+
     if (!isAdmin) {
       showNotification("Admin access required for this action.");
       return;
     }
 
-    if (!window.confirm(`Delete course?`)) return;
-
-    const { error } = await supabase.from("courses").delete().eq("id", id);
+    const { error } = await supabase
+      .from("courses")
+      .delete()
+      .eq("id", deleteTarget.id);
 
     if (error) {
       showNotification(`⚠ ${error.message}`);
-      setDeleteTarget(null);
       return;
     }
 
-    setCourses(
-      courses.filter((c) => !(c.code === code && c.section === section)),
+    setCourses((current) => current.filter((c) => c.id !== deleteTarget.id));
+    showNotification(
+      `Course ${deleteTarget.code} (${deleteTarget.section}) deleted.`,
     );
-    showNotification(`Course ${code} (${section}) deleted.`);
     setDeleteTarget(null);
   }
-
   if (loading) {
     return <div className="page-container">Loading courses...</div>;
   }
@@ -177,7 +178,7 @@ export default function CoursesPage() {
 
                         <button
                           className="btn btn-danger"
-                          onClick={() => handleDelete(c.id)}
+                          onClick={() => setDeleteTarget(c)}
                         >
                           Delete
                         </button>
@@ -198,7 +199,7 @@ export default function CoursesPage() {
           onClose={() => setShowModal(false)}
           onSave={async (course) => {
             if (editCourse) {
-              await updateCourse(course);
+              await updateCourse(editCourse.id, course);
               showNotification("Course updated");
             } else {
               await addCourse(course);

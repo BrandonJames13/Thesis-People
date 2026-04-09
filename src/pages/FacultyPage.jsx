@@ -148,8 +148,8 @@ export default function FacultyPage() {
             {instructors.length === 0 ? (
               <tr>
                 <td colSpan={6} className="empty-table">
-                  No instructors yet. Click <strong>"Add Instructor"</strong>
-                  to add one.
+                  No instructors yet. Click <strong>"Add Instructor"</strong> to
+                  add one.
                 </td>
               </tr>
             ) : (
