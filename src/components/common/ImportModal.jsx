@@ -3,7 +3,10 @@ import Modal from "./Modal";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { supabase } from "../../lib/supabaseClient";
-import { getDefaultRoomCapacity } from "../../data/constants";
+import {
+  getDefaultRoomCapacity,
+  normalizeDepartment,
+} from "../../data/constants";
 import { getWingFromRoomInput } from "../../utils/roomUtils";
 import {
   buildSectionIdentityKey,
@@ -154,6 +157,27 @@ export default function ImportModal({ isOpen, onClose }) {
     return parts.join(" | ") || fallback;
   };
 
+  const isRlsViolation = (err) => {
+    if (!err) return false;
+    const code = String(err.code ?? "").trim();
+    if (code === "42501") return true;
+    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
+    return message.includes("row-level security policy");
+  };
+
+  const getRlsTableFromError = (err) => {
+    const text = `${err?.message ?? ""} ${err?.details ?? ""}`;
+    const match = text.match(/for table\s+"([^"]+)"/i);
+    return match?.[1] ? String(match[1]).trim() : "this table";
+  };
+
+  const buildRlsError = (err, tableName = null, action = "write") => {
+    const resolvedTable = tableName || getRlsTableFromError(err);
+    return new Error(
+      `Permission denied by Row Level Security while trying to ${action} ${resolvedTable}. Ask an admin to update RLS policies or use an authorized account. Recommended fix: run supabase/snippets/fix_import_rls.sql in Supabase SQL Editor.`,
+    );
+  };
+
   const isNotNullViolation = (err) => {
     if (!err) return false;
     const code = String(err.code ?? "").trim();
@@ -162,6 +186,32 @@ export default function ImportModal({ isOpen, onClose }) {
     return (
       message.includes("null value") && message.includes("violates not-null")
     );
+  };
+
+  const isUniqueViolation = (err) => {
+    if (!err) return false;
+    const code = String(err.code ?? "").trim();
+    if (code === "23505") return true;
+    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
+    return (
+      message.includes("duplicate key value") && message.includes("unique")
+    );
+  };
+
+  const isSubjectsCodeProgramUniqueViolation = (err) => {
+    if (!isUniqueViolation(err)) return false;
+    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
+    return message.includes("subjects_code_program_unique");
+  };
+
+  const dedupeSubjectsByCodeProgram = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+
+    // Last-row-wins for duplicate code+program rows in one import batch.
+    return dedupeByKey(
+      [...sourceRows].reverse(),
+      (row) => `${row?.code ?? ""}|${row?.program ?? ""}`,
+    ).reverse();
   };
 
   const upsertRows = async (
@@ -175,12 +225,61 @@ export default function ImportModal({ isOpen, onClose }) {
       return [];
     }
 
+    const rowsToUpsert =
+      table === "subjects" ? dedupeSubjectsByCodeProgram(rows) : rows;
+
     const { data, error } = await supabase
       .from(table)
-      .upsert(rows, { onConflict })
+      .upsert(rowsToUpsert, { onConflict })
       .select(select);
 
+    if (
+      error &&
+      table === "subjects" &&
+      onConflict !== "code,program" &&
+      isSubjectsCodeProgramUniqueViolation(error)
+    ) {
+      const retryRows = dedupeSubjectsByCodeProgram(rowsToUpsert);
+      const { data: retryData, error: retryError } = await supabase
+        .from(table)
+        .upsert(retryRows, { onConflict: "code,program" })
+        .select(select);
+
+      if (!retryError) {
+        return retryData ?? [];
+      }
+
+      const normalizedRetryError = new Error(
+        normalizeDbError(
+          retryError,
+          "Unable to import subjects. Duplicate subject code+program rows conflicted with existing records.",
+        ),
+      );
+      normalizedRetryError.code = retryError.code;
+      normalizedRetryError.details = retryError.details;
+      normalizedRetryError.hint = retryError.hint;
+      throw normalizedRetryError;
+    }
+
     if (error) {
+      if (isRlsViolation(error)) {
+        const normalizedRlsError = buildRlsError(error, table, "write");
+        normalizedRlsError.code = error.code;
+        normalizedRlsError.details = error.details;
+        normalizedRlsError.hint = error.hint;
+        throw normalizedRlsError;
+      }
+
+      if (table === "subjects" && isSubjectsCodeProgramUniqueViolation(error)) {
+        const normalizedSubjectsError = new Error(
+          "Unable to import subjects. Duplicate Subject Code + Program records were detected. Keep only one row per code/program in the import batch.",
+        );
+        normalizedSubjectsError.code = error.code;
+        normalizedSubjectsError.details = error.details;
+        normalizedSubjectsError.hint = error.hint;
+        throw normalizedSubjectsError;
+      }
+
       const normalizedError = new Error(
         normalizeDbError(error, fallbackMessage),
       );
@@ -212,6 +311,14 @@ export default function ImportModal({ isOpen, onClose }) {
       .in(column, uniqueValues);
 
     if (error) {
+      if (isRlsViolation(error)) {
+        const normalizedRlsError = buildRlsError(error, table, "read");
+        normalizedRlsError.code = error.code;
+        normalizedRlsError.details = error.details;
+        normalizedRlsError.hint = error.hint;
+        throw normalizedRlsError;
+      }
+
       const normalizedError = new Error(
         normalizeDbError(error, `Unable to load existing ${table}.`),
       );
@@ -294,6 +401,17 @@ export default function ImportModal({ isOpen, onClose }) {
       for (const op of updateOps) {
         const { error: updateError } = await op;
         if (updateError) {
+          if (isRlsViolation(updateError)) {
+            const normalizedRlsError = buildRlsError(
+              updateError,
+              "instructors",
+              "update",
+            );
+            normalizedRlsError.code = updateError.code;
+            normalizedRlsError.details = updateError.details;
+            normalizedRlsError.hint = updateError.hint;
+            throw normalizedRlsError;
+          }
           throw updateError;
         }
       }
@@ -303,6 +421,9 @@ export default function ImportModal({ isOpen, onClose }) {
       await importRows(rawRows);
     } catch (err) {
       if (!isNotNullViolation(err) || defaultRows.length === 0) {
+        if (isRlsViolation(err)) {
+          throw buildRlsError(err, "instructors", "write");
+        }
         throw new Error(normalizeDbError(err, "Unable to import instructors."));
       }
       await importRows(defaultRows);
@@ -328,7 +449,7 @@ export default function ImportModal({ isOpen, onClose }) {
           room_type: row.room_type,
           duration: row.duration,
         })),
-        "code,program,year",
+        "code,program",
         "Unable to import subjects.",
       );
     }
@@ -423,7 +544,7 @@ export default function ImportModal({ isOpen, onClose }) {
       (row) => String(row.instructor ?? ""),
     ).map((row) => ({
       name: row.instructor,
-      department: "TBD",
+      department: null,
       availability: null,
       status: "Active",
     }));
@@ -472,14 +593,20 @@ export default function ImportModal({ isOpen, onClose }) {
       const existing = existingInstructorByName.get(
         normalizeLookupKey(row.name),
       );
+      const normalizedDepartment = normalizeDepartment(
+        existing?.department ?? row.department,
+      );
       return existing
         ? {
             name: row.name,
-            department: existing.department ?? row.department,
+            department: normalizedDepartment,
             availability: existing.availability ?? row.availability,
             status: existing.status ?? row.status,
           }
-        : row;
+        : {
+            ...row,
+            department: normalizedDepartment,
+          };
     });
 
     const subjectUpsertRows = subjectSourceRows.map((row) => ({
@@ -508,7 +635,7 @@ export default function ImportModal({ isOpen, onClose }) {
         upsertRows(
           "subjects",
           subjectUpsertRows,
-          "code,program,year",
+          "code,program",
           "Unable to import subjects.",
         ),
       ]);
@@ -637,7 +764,12 @@ export default function ImportModal({ isOpen, onClose }) {
       );
       onClose();
     } catch (err) {
-      setError(err.message || "Unable to import CSV data.");
+      if (isRlsViolation(err)) {
+        const rlsError = buildRlsError(err, null, "write");
+        setError(rlsError.message);
+      } else {
+        setError(err.message || "Unable to import CSV data.");
+      }
     } finally {
       setIsImporting(false);
     }

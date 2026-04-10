@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import Modal from "../common/Modal";
+import { PROGRAM_CODES } from "../../data/constants";
 
 function normalizeSectionLabel(value) {
   return String(value ?? "")
@@ -235,10 +236,11 @@ export function CourseModal({
               onChange={(e) => setProgram(e.target.value)}
             >
               <option value="">Select</option>
-              <option value="CS">CS</option>
-              <option value="IT">IT</option>
-              <option value="IS">IS</option>
-              <option value="FREE">FREE</option>
+              {PROGRAM_CODES.map((programCode) => (
+                <option key={programCode} value={programCode}>
+                  {programCode}
+                </option>
+              ))}
             </select>
           </div>
 

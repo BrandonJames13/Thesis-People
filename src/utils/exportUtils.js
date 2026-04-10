@@ -3,7 +3,13 @@ import {
   normalizeRoomType,
   sanitizeRoomCapacity,
   getDefaultRoomCapacity,
+  normalizeDepartment,
+  normalizeProgram,
+  normalizeSemester,
+  PROGRAM_CODES,
 } from "../data/constants";
+
+const VALID_PROGRAM_HINT = PROGRAM_CODES.join(", ");
 
 export const CSV_TYPES = {
   FULL_LIST: "full-list",
@@ -13,7 +19,7 @@ export const CSV_TYPES = {
 };
 
 const DEFAULT_INSTRUCTOR = {
-  department: "TBD",
+  department: null,
   availability: "TBD",
   status: "Active",
 };
@@ -342,12 +348,24 @@ function parseFullListRows(rows, warnings = []) {
         .toUpperCase();
       const section = String(r[3] ?? "").trim();
       const academicYear = String(r[4] ?? "").trim();
-      const semester = String(r[5] ?? "").trim();
-      const program = String(r[6] ?? "")
-        .trim()
-        .toUpperCase();
+      const rawSemester = String(r[5] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
+      const rawProgram = String(r[6] ?? "").trim();
+      const program = normalizeProgram(rawProgram);
       const year = String(r[7] ?? "").trim();
       const statusRaw = String(r[15] ?? "").trim();
+
+      if (!semester) {
+        throw new Error(
+          `Full list row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+        );
+      }
+
+      if (!program) {
+        throw new Error(
+          `Full list row ${rowNumber}: invalid program "${rawProgram}". Use one of: ${VALID_PROGRAM_HINT}.`,
+        );
+      }
 
       if (!statusRaw) {
         addImportWarning(
@@ -418,9 +436,25 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
   return rows
     .map((r, index) => {
       const rowNumber = index + 2;
+      const rawDepartment = String(r[1] ?? "").trim();
+      const department = normalizeDepartment(rawDepartment);
       const availability =
         availabilityIndex >= 0 ? String(r[availabilityIndex] ?? "").trim() : "";
       const status = String(r[statusIndex] ?? "").trim();
+
+      if (rawDepartment && !department) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: unrecognized department "${rawDepartment}"; storing null.`,
+        );
+      }
+
+      if (!rawDepartment) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: blank department; storing null.`,
+        );
+      }
 
       if (!availability && availabilityIndex >= 0) {
         addImportWarning(
@@ -438,7 +472,7 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
 
       return {
         name: String(r[0] ?? "").trim(),
-        department: String(r[1] ?? "").trim() || DEFAULT_INSTRUCTOR.department,
+        department,
         availability,
         status,
       };
@@ -503,12 +537,24 @@ function parseSubjectRows(rows, warnings = []) {
         .toUpperCase();
       const section = String(r[2] ?? "").trim();
       const academicYear = String(r[3] ?? "").trim();
-      const semester = String(r[4] ?? "").trim();
-      const program = String(r[5] ?? "")
-        .trim()
-        .toUpperCase();
+      const rawSemester = String(r[4] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
+      const rawProgram = String(r[5] ?? "").trim();
+      const program = normalizeProgram(rawProgram);
       const year = String(r[6] ?? "").trim();
       const statusRaw = String(r[11] ?? "").trim();
+
+      if (!semester) {
+        throw new Error(
+          `Subject sections row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+        );
+      }
+
+      if (!program) {
+        throw new Error(
+          `Subject sections row ${rowNumber}: invalid program "${rawProgram}". Use one of: ${VALID_PROGRAM_HINT}.`,
+        );
+      }
 
       if (!statusRaw) {
         addImportWarning(
@@ -630,10 +676,6 @@ export function parseImportCsv(csvText, type) {
         time_display: row.time,
         duration: Number(row.duration ?? 0),
         status: normalizeAssignmentStatus(row.status),
-        dedupe_key:
-          String(row.section_id ?? row.sectionId ?? "").trim() ||
-          row.sectionIdentityKey ||
-          buildSectionIdentityKey(row, { includeProgramYear: true }),
       })),
       upsert: {
         table: "schedule_assignments",
@@ -658,7 +700,6 @@ export function parseImportCsv(csvText, type) {
         capacity: sanitizeRoomCapacity(room.type, room.capacity),
         status: room.status || "Available",
         wing: room.wing || null,
-        dedupe_key: normalizeHeader(room.number),
       })),
       upsert: {
         table: "rooms",
@@ -686,14 +727,14 @@ export function parseImportCsv(csvText, type) {
       warnings,
       dbRows: instructors.map((inst) => ({
         name: inst.name,
-        department: inst.department || DEFAULT_INSTRUCTOR.department,
+        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
         availability: inst.availability || null,
         status: inst.status || null,
         dedupe_key: normalizeInstructorName(inst.name),
       })),
       dbRowsWithDefaults: instructors.map((inst) => ({
         name: inst.name,
-        department: inst.department || DEFAULT_INSTRUCTOR.department,
+        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
         availability: inst.availability || DEFAULT_INSTRUCTOR.availability,
         status: inst.status || DEFAULT_INSTRUCTOR.status,
         dedupe_key: normalizeInstructorName(inst.name),
@@ -749,7 +790,7 @@ export function parseImportCsv(csvText, type) {
       upsert: {
         subjects: {
           table: "subjects",
-          conflictTarget: ["code", "program", "year"],
+          conflictTarget: ["code", "program"],
         },
         subject_sections: {
           table: "subject_sections",
