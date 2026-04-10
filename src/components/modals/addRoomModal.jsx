@@ -1,7 +1,7 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
 
-export function AddRoomModal({ onClose, onAdd }) {
+export function AddRoomModal({ onClose, onAdd, existingRooms = [] }) {
   const [number, setNumber] = useState("");
   const [type, setType] = useState("");
   const [capacity, setCapacity] = useState("");
@@ -9,24 +9,43 @@ export function AddRoomModal({ onClose, onAdd }) {
   const [error, setError] = useState("");
 
   const handleSubmit = () => {
+    const trimmed = number.trim();
     const cap = parseInt(capacity);
-    if (!number.trim() || !type || isNaN(cap) || cap <= 0) {
+
+    if (!trimmed || !type || isNaN(cap) || cap <= 0) {
       setError("Please fill in all fields correctly.");
       return;
     }
 
-    if (type === "Computer Lab" && (cap < 30 || cap > 35)) {
-      setError("Computer Lab capacity must be between 30 and 35.");
+    // Validate room name format: L/C/R followed by exactly 3 digits
+    const roomPattern = /^[LCR]\d{3}$/;
+    if (!roomPattern.test(trimmed)) {
+      setError("Room number must follow the format: L101, C111, or R112 (wing letter + 3 digits).");
       return;
     }
 
-    if (type === "Lecture" && (cap < 40 || cap > 45)) {
-      setError("Lecture room capacity must be between 40 and 45.");
+    // Duplicate check
+    const isDuplicate = existingRooms.some(
+      (r) => r.number.toUpperCase() === trimmed.toUpperCase()
+    );
+    if (isDuplicate) {
+      setError(`Room "${trimmed}" already exists.`);
+      return;
+    }
+
+    if (type === "Computer Lab" && (cap < 40 || cap > 45)) {
+      setError("Computer Lab capacity must be between 40 and 45.");
+      return;
+    }
+
+    if (type === "Lecture" && (cap < 50 || cap > 55)) {
+      setError("Lecture room capacity must be between 50 and 55.");
       return;
     }
 
     setError("");
-    onAdd({ number: number.trim(), type, capacity: cap, status });
+    const wing = trimmed[0].toUpperCase();
+    onAdd({ number: trimmed, type, capacity: cap, status, wing });
   };
 
   return (
@@ -39,16 +58,19 @@ export function AddRoomModal({ onClose, onAdd }) {
           <input
             className="search-input"
             type="text"
-            placeholder="Room Number (e.g. Room 104)"
+            placeholder="e.g. L101, C111, R112"
             style={{ width: "100%" }}
             value={number}
-            onChange={(e) => setNumber(e.target.value)}
+            onChange={(e) => setNumber(e.target.value.toUpperCase().trimStart())}
           />
+          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+            Format: <strong>L</strong> = Left Wing &nbsp;·&nbsp; <strong>C</strong> = Center Wing &nbsp;·&nbsp; <strong>R</strong> = Right Wing &nbsp;+&nbsp; 3 digits (e.g. L101, C202, R315)
+          </div>
           <select
             className="search-input"
             style={{ width: "100%" }}
             value={type}
-            onChange={(e) => setType(e.target.value)}
+            onChange={(e) => { setType(e.target.value); setCapacity(""); }}
           >
             <option value="">-- Select Type --</option>
             <option value="Lecture">Lecture</option>
@@ -59,13 +81,13 @@ export function AddRoomModal({ onClose, onAdd }) {
             type="number"
             placeholder={
               type === "Computer Lab"
-                ? "Capacity (30-35)"
+                ? "Capacity (40-45)"
                 : type === "Lecture"
-                  ? "Capacity (40-45)"
+                  ? "Capacity (50-55)"
                   : "Capacity"
             }
-            min={type === "Computer Lab" ? 30 : type === "Lecture" ? 40 : 1}
-            max={type === "Computer Lab" ? 35 : type === "Lecture" ? 45 : 999}
+            min={type === "Computer Lab" ? 40 : type === "Lecture" ? 50 : 1}
+            max={type === "Computer Lab" ? 45 : type === "Lecture" ? 55 : 999}
             style={{ width: "100%" }}
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
@@ -73,8 +95,8 @@ export function AddRoomModal({ onClose, onAdd }) {
           {type && (
             <div style={{ fontSize: 11, color: "var(--text3)" }}>
               {type === "Computer Lab"
-                ? "Lab capacity: min 30, max 35"
-                : "Lecture capacity: min 40, max 45"}
+                ? "Lab capacity: min 40, max 45"
+                : "Lecture capacity: min 50, max 55"}
             </div>
           )}
           <select

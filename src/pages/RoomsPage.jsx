@@ -273,6 +273,7 @@ export default function RoomsPage() {
 
       {showModal && isAdmin && (
         <AddRoomModal
+          existingRooms={rooms}
           onClose={() => setShowModal(false)}
           onAdd={async (room) => {
             const saved = await addRoom(room);

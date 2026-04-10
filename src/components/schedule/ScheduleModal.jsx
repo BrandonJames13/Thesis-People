@@ -126,12 +126,23 @@ export default function ScheduleModal({ onClose }) {
 
   const hasConflict = conflictMsg?.type === "error";
 
+  const selectedRoom = rooms.find((r) => r.number === manualRoom);
+  const isMaintenanceRoom = selectedRoom?.status === "Maintenance";
+
   const handleAddEntry = () => {
     if (!manualCourse || !manualRoom || !manualTime) {
       alert("Please fill in Course, Room, and Start Time.");
       return;
     }
     const duration = manualDurationH + manualDurationM / 60;
+    if (duration <= 0) {
+      alert("Please enter a valid duration (at least 1 minute).");
+      return;
+    }
+    if (isMaintenanceRoom) {
+      alert(`${manualRoom} is under maintenance and cannot be assigned.`);
+      return;
+    }
     setManualEntries((prev) => [
       ...prev,
       {
@@ -158,6 +169,14 @@ export default function ScheduleModal({ onClose }) {
     const toSave = [...manualEntries];
     if (manualCourse && manualRoom && manualTime) {
       const duration = manualDurationH + manualDurationM / 60;
+      if (duration <= 0) {
+        alert("Please enter a valid duration (at least 1 minute).");
+        return;
+      }
+      if (isMaintenanceRoom) {
+        alert(`${manualRoom} is under maintenance and cannot be assigned.`);
+        return;
+      }
       toSave.push({
         courseCode: manualCourse,
         roomName: manualRoom,
@@ -533,9 +552,18 @@ export default function ScheduleModal({ onClose }) {
                 >
                   <option value="">-- Select Room --</option>
                   {rooms.map((r) => (
-                    <option key={r.number} value={r.number}>
+                    <option
+                      key={r.number}
+                      value={r.number}
+                      disabled={r.status === "Maintenance"}
+                      style={
+                        r.status === "Maintenance"
+                          ? { color: "var(--text3)" }
+                          : {}
+                      }
+                    >
                       {r.number} ({r.type} · Cap: {r.capacity})
-                      {r.status === "Maintenance" ? " ⚠ Maintenance" : ""}
+                      {r.status === "Maintenance" ? " — Under Maintenance" : ""}
                     </option>
                   ))}
                 </select>
@@ -765,13 +793,20 @@ export default function ScheduleModal({ onClose }) {
                 <button
                   className="btn btn-primary"
                   onClick={handleSubmitManual}
-                  disabled={hasConflict}
+                  disabled={hasConflict || isMaintenanceRoom}
                   title={
-                    hasConflict ? "Resolve the conflict before saving" : ""
+                    hasConflict
+                      ? "Resolve the conflict before saving"
+                      : isMaintenanceRoom
+                        ? `${manualRoom} is under maintenance`
+                        : ""
                   }
                   style={{
-                    opacity: hasConflict ? 0.45 : 1,
-                    cursor: hasConflict ? "not-allowed" : "pointer",
+                    opacity: hasConflict || isMaintenanceRoom ? 0.45 : 1,
+                    cursor:
+                      hasConflict || isMaintenanceRoom
+                        ? "not-allowed"
+                        : "pointer",
                   }}
                 >
                   ✓ Save Assignment

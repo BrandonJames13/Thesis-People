@@ -1,15 +1,10 @@
 export const initialRooms = [
-  { number: "Room 101", type: "Lecture", capacity: 40, status: "Available" },
-  { number: "Room 102", type: "Lecture", capacity: 35, status: "Occupied" },
-  { number: "Room 103", type: "Lecture", capacity: 45, status: "Occupied" },
-  { number: "Room 201", type: "Lecture", capacity: 50, status: "Occupied" },
-  { number: "Room 302", type: "Lecture", capacity: 40, status: "Available" },
-  { number: "Lab 01", type: "Computer Lab", capacity: 45, status: "Occupied" },
-  { number: "Lab 02", type: "Computer Lab", capacity: 25, status: "Available" },
-  {
-    number: "Lab 03",
-    type: "Computer Lab",
-    capacity: 30,
-    status: "Maintenance",
-  },
+  { number: "L101", type: "Lecture", capacity: 50, status: "Available", wing: "L" },
+  { number: "L102", type: "Lecture", capacity: 52, status: "Occupied", wing: "L" },
+  { number: "L103", type: "Lecture", capacity: 55, status: "Occupied", wing: "L" },
+  { number: "C201", type: "Lecture", capacity: 50, status: "Occupied", wing: "C" },
+  { number: "C202", type: "Lecture", capacity: 53, status: "Available", wing: "C" },
+  { number: "R301", type: "Computer Lab", capacity: 40, status: "Occupied", wing: "R" },
+  { number: "R302", type: "Computer Lab", capacity: 42, status: "Available", wing: "R" },
+  { number: "R303", type: "Computer Lab", capacity: 45, status: "Maintenance", wing: "R" },
 ];
