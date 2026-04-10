@@ -45,7 +45,6 @@ export default function DashboardPage() {
 
   // Dynamic computed values from real data
   const totalSections = subjectSections.length;
-  const totalRooms = rooms.length;
   const totalSubjects = availableSubjects.length;
   const totalAvailableSections = availableSections.length;
   const totalAvailableRooms = availableRooms.length;

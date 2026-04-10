@@ -27,7 +27,6 @@ function loadWeights() {
 export default function AlgorithmPage() {
   const {
     subjectSections,
-    scheduleAssignments,
     assignments,
     availableRooms,
     availableInstructors,

@@ -38,23 +38,6 @@ function getAssignmentInstructorMatch(assignment, instructor) {
   );
 }
 
-function getAssignmentSubjectKey(assignment) {
-  const subjectId = String(
-    assignment?.subject_id ?? assignment?.subjectId ?? "",
-  ).trim();
-  if (subjectId) return `id:${subjectId.toLowerCase()}`;
-
-  const code = String(
-    assignment?.course_code ??
-      assignment?.subject_code ??
-      assignment?.code ??
-      "",
-  )
-    .trim()
-    .toUpperCase();
-  return code ? `code:${code}` : "";
-}
-
 function getAssignmentSectionKey(assignment) {
   const sectionId = String(
     assignment?.section_id ?? assignment?.sectionId ?? "",

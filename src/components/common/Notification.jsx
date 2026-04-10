@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import styles from "./Notification.module.css";
 import { useNotification } from "../../context/NotificationContext";
 
@@ -151,15 +151,9 @@ export default function Notification() {
   const { notification } = useNotification();
   const canvasRef = useRef(null);
   const cleanupRef = useRef(null);
-  const [current, setCurrent] = useState(null);
-  const [fading, setFading] = useState(false);
 
-  // Trigger on id change so rapid successive notifications each animate
   useEffect(() => {
     if (!notification) return;
-
-    setFading(false);
-    setCurrent(notification);
 
     if (cleanupRef.current) cleanupRef.current();
     const canvas = canvasRef.current;
@@ -170,29 +164,26 @@ export default function Notification() {
           : spawnShatter(canvas, notification.type);
     }
 
-    const t1 = setTimeout(() => setFading(true), 3000);
-    const t2 = setTimeout(() => setCurrent(null), 3800);
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      if (cleanupRef.current) cleanupRef.current();
     };
-  }, [notification?.id]);
+  }, [notification]);
 
-  const icon = !current
+  const icon = !notification
     ? ""
-    : current.type === "error"
+    : notification.type === "error"
       ? "⚠"
-      : current.type === "delete"
+      : notification.type === "delete"
         ? "🗑"
         : "✓";
-  const text = current ? current.text.replace(/^⚠\s*/, "") : "";
+  const text = notification ? notification.text.replace(/^⚠\s*/, "") : "";
 
   return (
     <>
       <canvas ref={canvasRef} className={styles.canvas} />
-      {current && (
+      {notification && (
         <div
-          className={`${styles.toast} ${styles[current.type]} ${fading ? styles.hide : styles.show}`}
+          className={`${styles.toast} ${styles[notification.type]} ${styles.show}`}
         >
           <span className={styles.icon}>{icon}</span>
           <span>{text}</span>

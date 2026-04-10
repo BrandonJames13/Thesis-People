@@ -104,10 +104,14 @@ export function AddRoomModal({
             placeholder="e.g. L101, C111, R112"
             style={{ width: "100%" }}
             value={number}
-            onChange={(e) => setNumber(e.target.value.toUpperCase().trimStart())}
+            onChange={(e) =>
+              setNumber(e.target.value.toUpperCase().trimStart())
+            }
           />
           <div style={{ fontSize: 11, color: "var(--text3)" }}>
-            Format: <strong>L</strong> = Left Wing &nbsp;·&nbsp; <strong>C</strong> = Center Wing &nbsp;·&nbsp; <strong>R</strong> = Right Wing &nbsp;+&nbsp; 3 digits (e.g. L101, C202, R315)
+            Format: <strong>L</strong> = Left Wing &nbsp;·&nbsp;{" "}
+            <strong>C</strong> = Center Wing &nbsp;·&nbsp; <strong>R</strong> =
+            Right Wing &nbsp;+&nbsp; 3 digits (e.g. L101, C202, R315)
           </div>
           <select
             className="search-input"
