@@ -2,17 +2,18 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 
 export default function AnalyticsPage() {
-  const { rooms, courses, scheduleAssignments } = useData();
+  const { rooms, subjectSections, scheduleAssignments, assignments } =
+    useData();
   const { detectConflicts } = useConflicts();
 
   const { hard } = detectConflicts();
-  const hasSchedule = scheduleAssignments.length > 0;
+  const hasSchedule = assignments.length > 0;
 
   // Room-by-room utilization: % of time slots occupied per room
   const utilData = rooms
     .map((room) => {
       const assignedToRoom = scheduleAssignments.filter(
-        (c) => c.room === room.number,
+        (c) => c.status === "Assigned" && c.room === room.number,
       ).length;
       const totalSlots = 10; // approx available daily slots
       const pct = Math.min(
@@ -34,10 +35,12 @@ export default function AnalyticsPage() {
   const avgUtil =
     rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
-  const totalCourses = courses.length;
-  const assignedCourses = scheduleAssignments.length;
+  const totalSections = subjectSections.length;
+  const assignedSections = assignments.length;
   const conflictRate =
-    assignedCourses > 0 ? Math.round((hard.length / assignedCourses) * 100) : 0;
+    assignedSections > 0
+      ? Math.round((hard.length / assignedSections) * 100)
+      : 0;
   const conflictFree = 100 - conflictRate;
 
   const qualityData = [
@@ -45,7 +48,7 @@ export default function AnalyticsPage() {
       attr: "Functional Suitability",
       method: "Black Box",
       result: hasSchedule
-        ? `${Math.round((assignedCourses / Math.max(totalCourses, 1)) * 100)}%`
+        ? `${Math.round((assignedSections / Math.max(totalSections, 1)) * 100)}%`
         : "No data yet",
       color: hasSchedule ? "green" : "orange",
     },
@@ -122,18 +125,18 @@ export default function AnalyticsPage() {
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedCourses} assignments`
+              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedSections} section assignments`
               : "Generate a schedule to see data"}
           </div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-label">Courses Scheduled</div>
+          <div className="stat-label">Sections Scheduled</div>
           <div className="stat-value">
-            {hasSchedule ? assignedCourses : "—"}
+            {hasSchedule ? assignedSections : "—"}
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${assignedCourses} of ${totalCourses} total courses`
+              ? `${assignedSections} of ${totalSections} total sections`
               : "No schedule generated yet"}
           </div>
         </div>

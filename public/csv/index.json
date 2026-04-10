@@ -1,24 +1,28 @@
 {
   "files": [
     {
-      "label": "Schedule Sample",
-      "path": "/csv/schedule-sample.csv",
-      "description": "Round-trip schedule format compatible with Export."
+      "type": "full-list",
+      "label": "Full List",
+      "path": "/csv/full-list.csv",
+      "description": "Full subject schedule with section, room, time, duration, instructor, and status."
     },
     {
-      "label": "Faculty List",
-      "path": "/csv/faculty-list.csv",
-      "description": "Faculty records for instructor listing."
-    },
-    {
-      "label": "Rooms List",
+      "type": "rooms",
+      "label": "Rooms",
       "path": "/csv/rooms-list.csv",
       "description": "Room inventory records."
     },
     {
-      "label": "Subjects List",
+      "type": "instructors",
+      "label": "Instructors",
+      "path": "/csv/instructors-list.csv",
+      "description": "Instructor records and availability settings."
+    },
+    {
+      "type": "subjects",
+      "label": "Subject Sections",
       "path": "/csv/subjects-list.csv",
-      "description": "Subject/course records for catalog import."
+      "description": "Subject section records with academic year and semester."
     }
   ]
 }

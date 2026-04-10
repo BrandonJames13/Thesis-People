@@ -18,6 +18,24 @@ function normalizeRole(role) {
   return "faculty";
 }
 
+async function resolveRoleFromDatabase(userId, fallbackRole) {
+  if (!userId) {
+    return fallbackRole;
+  }
+
+  const { data, error } = await supabase
+    .from("users_table")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !data?.role) {
+    return fallbackRole;
+  }
+
+  return normalizeRole(data.role);
+}
+
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -45,20 +63,46 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    let isMounted = true;
+
+    const setHydratedUser = async (rawUser) => {
+      const shaped = shapeUser(rawUser ?? null);
+
+      if (!shaped) {
+        if (isMounted) {
+          setCurrentUser(null);
+        }
+        return;
+      }
+
+      const resolvedRole = await resolveRoleFromDatabase(
+        shaped.id,
+        shaped.role,
+      );
+
+      if (isMounted) {
+        setCurrentUser({
+          ...shaped,
+          role: resolvedRole,
+        });
+      }
+    };
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+      setHydratedUser(session?.user ?? null);
     });
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_, session) => {
-      setCurrentUser(shapeUser(session?.user ?? null)); // ← wrap
+      setHydratedUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
-
-  console.log("AuthContext: currentUser", currentUser);
 
   // * LOGIN FUNCTION
   const login = useCallback(async (email, password) => {

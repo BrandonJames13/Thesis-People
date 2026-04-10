@@ -1,37 +1,125 @@
-export const SCHEDULE_HEADERS = [
-  "Course Code",
-  "Course Title",
-  "Program",
-  "Year",
-  "Enrolled",
-  "Room",
-  "Type Required",
-  "Pattern",
-  "Time",
-  "Duration (hrs)",
-  "Instructor",
-  "Status",
-];
+import { getWingFromRoomInput } from "./roomUtils";
+import {
+  normalizeRoomType,
+  sanitizeRoomCapacity,
+  getDefaultRoomCapacity,
+  normalizeDepartment,
+  normalizeProgram,
+  normalizeSemester,
+  PROGRAM_CODES,
+} from "../data/constants";
 
-const FACULTY_HEADERS = ["Name", "Department", "Availability", "Status"];
-const ROOM_HEADERS = ["Number", "Type", "Capacity", "Status"];
-const SUBJECT_HEADERS = [
-  "Course Code",
-  "Course Title",
-  "Program",
-  "Year",
-  "Enrolled",
-  "Type Required",
-  "Duration (hrs)",
-  "Instructor",
-];
+const VALID_PROGRAM_HINT = PROGRAM_CODES.join(", ");
+
+export const CSV_TYPES = {
+  FULL_LIST: "full-list",
+  ROOMS: "rooms",
+  INSTRUCTORS: "instructors",
+  SUBJECTS: "subjects",
+};
 
 const DEFAULT_INSTRUCTOR = {
-  department: "TBD",
+  department: null,
   availability: "TBD",
-  courses: [],
   status: "Active",
 };
+
+const DEFAULT_ASSIGNMENT_STATUS = "Pending";
+const DEFAULT_SECTION_STATUS_DB = "Not Assigned";
+
+export const CSV_FORMATS = {
+  [CSV_TYPES.FULL_LIST]: {
+    label: "Full List",
+    description:
+      "Schedule assignments with subject, room, time, duration, instructor, and status fields.",
+    templatePath: "/csv/full-list.csv",
+    templateLabel: "Full List Template",
+    filename: "TSU_CCS_Subjects_Full_List_AY2025-2026.csv",
+    headers: [
+      "Section ID",
+      "Subject Code",
+      "Subject Title",
+      "Section",
+      "Academic Year",
+      "Semester",
+      "Program",
+      "Year",
+      "Enrolled",
+      "Type Required",
+      "Room",
+      "Pattern",
+      "Time",
+      "Duration (hrs)",
+      "Instructor",
+      "Status",
+    ],
+    rowKey: (row) => {
+      const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
+      if (sectionId) return `id:${sectionId.toLowerCase()}`;
+      return buildSectionIdentityKey(row, { includeProgramYear: true });
+    },
+  },
+  [CSV_TYPES.ROOMS]: {
+    label: "Rooms",
+    description: "Room inventory records.",
+    templatePath: "/csv/rooms-list.csv",
+    templateLabel: "Rooms Template",
+    filename: "TSU_CCS_Rooms_List_AY2025-2026.csv",
+    headers: ["Room Number", "Room Type", "Capacity", "Status"],
+    rowKey: (row) => normalizeHeader(row?.number),
+  },
+  [CSV_TYPES.INSTRUCTORS]: {
+    label: "Instructors",
+    description: "Instructor records and availability settings.",
+    templatePath: "/csv/instructors-list.csv",
+    templateLabel: "Instructors Template",
+    filename: "TSU_CCS_Instructors_List_AY2025-2026.csv",
+    headers: ["Name", "Department", "Availability", "Status"],
+    rowKey: (row) => normalizeInstructorName(row?.name),
+  },
+  [CSV_TYPES.SUBJECTS]: {
+    label: "Subject Sections",
+    description: "Subject section records with academic year and semester.",
+    templatePath: "/csv/subjects-list.csv",
+    templateLabel: "Subject Sections Template",
+    filename: "TSU_CCS_Subject_Sections_List_AY2025-2026.csv",
+    headers: [
+      "Subject Code",
+      "Subject Title",
+      "Section",
+      "Academic Year",
+      "Semester",
+      "Program",
+      "Year",
+      "Enrolled",
+      "Type Required",
+      "Duration (hrs)",
+      "Instructor",
+      "Status",
+    ],
+    rowKey: (row) =>
+      [
+        row?.code,
+        row?.program,
+        row?.year,
+        row?.section,
+        row?.academicYear,
+        row?.semester,
+      ]
+        .map((value) => normalizeHeader(value))
+        .join("|"),
+  },
+};
+
+export const CSV_TYPE_OPTIONS = Object.entries(CSV_FORMATS).map(
+  ([value, config]) => ({
+    value,
+    label: config.label,
+    description: config.description,
+    templatePath: config.templatePath,
+    templateLabel: config.templateLabel,
+  }),
+);
 
 function normalizeHeader(value) {
   return String(value ?? "")
@@ -45,9 +133,73 @@ function normalizeInstructorName(name) {
     .toLowerCase();
 }
 
+function normalizeSectionIdentity(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function addImportWarning(warnings, message) {
+  if (!Array.isArray(warnings)) return;
+  warnings.push(message);
+}
+
+function normalizeAssignmentStatus(
+  value,
+  fallback = DEFAULT_ASSIGNMENT_STATUS,
+) {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return fallback;
+  if (normalized === "assigned") return "Assigned";
+  if (normalized === "conflict") return "Conflict";
+  if (normalized === "pending" || normalized === "unresolved") return "Pending";
+  return fallback;
+}
+
+export function normalizeSectionStatusForDb(value) {
+  const normalized = normalizeHeader(value);
+  if (!normalized) return DEFAULT_SECTION_STATUS_DB;
+  if (normalized === "assigned") return "Assigned";
+  if (
+    normalized === "pending" ||
+    normalized === "unresolved" ||
+    normalized === "not assigned" ||
+    normalized === "not_assigned"
+  ) {
+    return "Not Assigned";
+  }
+  return DEFAULT_SECTION_STATUS_DB;
+}
+
+export function buildSectionIdentityKey(row, options = {}) {
+  const { includeProgramYear = false } = options;
+  const parts = includeProgramYear
+    ? [
+        row?.code,
+        row?.program,
+        row?.year,
+        row?.section,
+        row?.academicYear,
+        row?.semester,
+      ]
+    : [row?.code, row?.section, row?.academicYear, row?.semester];
+
+  return parts.map((value) => normalizeHeader(value)).join("|");
+}
+
+export function buildSubjectIdentityKey(row) {
+  return [row?.code, row?.program, row?.year]
+    .map((value) => normalizeHeader(value))
+    .join("|");
+}
+
 function toNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function toCsvCell(value) {
+  return `"${String(value ?? "").replace(/"/g, '""')}"`;
 }
 
 function parseCsvText(csvText) {
@@ -108,79 +260,362 @@ function assertHeaderMatch(actualHeaders, expectedHeaders) {
   });
 }
 
-function parseScheduleRows(rows) {
-  return rows.map((r) => {
-    return {
-      code: String(r[0] ?? "")
-        .trim()
-        .toUpperCase(),
-      title: String(r[1] ?? "").trim(),
-      program: String(r[2] ?? "")
-        .trim()
-        .toUpperCase(),
-      year: String(r[3] ?? "").trim(),
-      enrolled: toNumber(r[4], 0),
-      room: String(r[5] ?? "").trim(),
-      roomType: String(r[6] ?? "").trim(),
-      pattern: String(r[7] ?? "").trim(),
-      time: String(r[8] ?? "").trim(),
-      duration: toNumber(r[9], 0),
-      instructor: String(r[10] ?? "")
-        .trim()
-        .replace(/^—$/, ""),
-      status: String(r[11] ?? "").trim() || "Pending",
-    };
+function assertRoomHeaderMatch(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+  const baseHeaders = CSV_FORMATS[CSV_TYPES.ROOMS].headers.map(normalizeHeader);
+
+  const hasBaseHeaders = baseHeaders.every((header, index) => {
+    return normalizedActual[index] === header;
   });
+
+  if (!hasBaseHeaders) return false;
+
+  if (normalizedActual.length === baseHeaders.length) return true;
+  if (normalizedActual.length !== baseHeaders.length + 1) return false;
+
+  return ["wing", "room wing"].includes(normalizedActual[baseHeaders.length]);
 }
 
-function parseFacultyRows(rows) {
-  return rows
-    .map((r) => ({
-      name: String(r[0] ?? "").trim(),
-      department: String(r[1] ?? "").trim() || DEFAULT_INSTRUCTOR.department,
-      availability:
-        String(r[2] ?? "").trim() || DEFAULT_INSTRUCTOR.availability,
-      status: String(r[3] ?? "").trim() || DEFAULT_INSTRUCTOR.status,
-      courses: [],
-    }))
-    .filter((inst) => inst.name);
+function resolveInstructorHeaderIndexes(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+
+  // Required base columns remain fixed for compatibility.
+  if (normalizedActual[0] !== "name" || normalizedActual[1] !== "department") {
+    return null;
+  }
+
+  // Standard template: Name, Department, Availability, Status
+  if (
+    normalizedActual.length >= 4 &&
+    normalizedActual[2] === "availability" &&
+    normalizedActual[3] === "status"
+  ) {
+    return {
+      availabilityIndex: 2,
+      statusIndex: 3,
+      availabilityColumnMissing: false,
+    };
+  }
+
+  // Optional availability column support: Name, Department, Status
+  if (normalizedActual.length >= 3 && normalizedActual[2] === "status") {
+    return {
+      availabilityIndex: -1,
+      statusIndex: 2,
+      availabilityColumnMissing: true,
+    };
+  }
+
+  // Accept an explicitly blank availability header before Status.
+  if (
+    normalizedActual.length >= 4 &&
+    !normalizedActual[2] &&
+    normalizedActual[3] === "status"
+  ) {
+    return {
+      availabilityIndex: -1,
+      statusIndex: 3,
+      availabilityColumnMissing: true,
+    };
+  }
+
+  return null;
 }
 
-function parseRoomRows(rows) {
-  return rows
-    .map((r) => ({
-      number: String(r[0] ?? "").trim(),
-      type: String(r[1] ?? "").trim(),
-      capacity: toNumber(r[2], 0),
-      status: String(r[3] ?? "").trim() || "Available",
-    }))
-    .filter((room) => room.number);
+function assertInstructorHeaderMatch(actualHeaders) {
+  return !!resolveInstructorHeaderIndexes(actualHeaders);
 }
 
-function parseSubjectRows(rows) {
+function getTypeConfig(type) {
+  const config = CSV_FORMATS[type];
+  if (!config) {
+    throw new Error(
+      `Unsupported CSV type. Choose one of: ${Object.values(CSV_TYPES).join(", ")}.`,
+    );
+  }
+  return config;
+}
+
+function parseFullListRows(rows, warnings = []) {
   return rows
-    .map((r) => ({
-      code: String(r[0] ?? "")
+    .map((r, index) => {
+      const rowNumber = index + 2;
+      const rawRoomType = String(r[9] ?? "").trim();
+      const roomType = normalizeRoomType(r[9]);
+      const section_id = String(r[0] ?? "").trim();
+      const code = String(r[1] ?? "")
         .trim()
-        .toUpperCase(),
-      title: String(r[1] ?? "").trim(),
-      program: String(r[2] ?? "")
-        .trim()
-        .toUpperCase(),
-      year: String(r[3] ?? "").trim(),
-      enrolled: toNumber(r[4], 0),
-      roomType: String(r[5] ?? "").trim(),
-      duration: toNumber(r[6], 1.5),
-      instructor: String(r[7] ?? "").trim(),
-      status: "Pending",
-      room: "",
-      time: "",
-      pattern: "",
-    }))
+        .toUpperCase();
+      const section = String(r[3] ?? "").trim();
+      const academicYear = String(r[4] ?? "").trim();
+      const rawSemester = String(r[5] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
+      const rawProgram = String(r[6] ?? "").trim();
+      const program = normalizeProgram(rawProgram);
+      const year = String(r[7] ?? "").trim();
+      const statusRaw = String(r[15] ?? "").trim();
+
+      if (!semester) {
+        throw new Error(
+          `Full list row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+        );
+      }
+
+      if (!program) {
+        throw new Error(
+          `Full list row ${rowNumber}: invalid program "${rawProgram}". Use one of: ${VALID_PROGRAM_HINT}.`,
+        );
+      }
+
+      if (!statusRaw) {
+        addImportWarning(
+          warnings,
+          `Full list row ${rowNumber}: blank status; defaulted to "Pending".`,
+        );
+      }
+
+      if (rawRoomType.toLowerCase() === "lec") {
+        addImportWarning(
+          warnings,
+          `Full list row ${rowNumber}: normalized room type "Lec" to "Lecture".`,
+        );
+      }
+
+      return {
+        section_id,
+        sectionId: section_id,
+        code,
+        title: String(r[2] ?? "").trim(),
+        section,
+        academicYear,
+        semester,
+        program,
+        year,
+        enrolled: toNumber(r[8], 0),
+        roomType,
+        room: String(r[10] ?? "").trim(),
+        pattern: String(r[11] ?? "").trim(),
+        time: String(r[12] ?? "").trim(),
+        duration: toNumber(r[13], 0),
+        instructor: String(r[14] ?? "")
+          .trim()
+          .replace(/^—$/, ""),
+        status: statusRaw,
+        dedupeKey:
+          section_id ||
+          buildSectionIdentityKey(
+            { code, program, year, section, academicYear, semester },
+            { includeProgramYear: true },
+          ),
+        sectionIdentityKey: buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+      };
+    })
     .filter((course) => course.code);
 }
 
-export function parseImportCsv(csvText) {
+function parseFacultyRows(rows, warnings = [], options = {}) {
+  const availabilityIndex =
+    Number.isInteger(options?.availabilityIndex) &&
+    options.availabilityIndex >= 0
+      ? options.availabilityIndex
+      : -1;
+  const statusIndex = Number.isInteger(options?.statusIndex)
+    ? options.statusIndex
+    : 3;
+
+  if (options?.availabilityColumnMissing) {
+    addImportWarning(
+      warnings,
+      "Instructors CSV: availability column missing; importing availability as null.",
+    );
+  }
+
+  return rows
+    .map((r, index) => {
+      const rowNumber = index + 2;
+      const rawDepartment = String(r[1] ?? "").trim();
+      const department = normalizeDepartment(rawDepartment);
+      const availability =
+        availabilityIndex >= 0 ? String(r[availabilityIndex] ?? "").trim() : "";
+      const status = String(r[statusIndex] ?? "").trim();
+
+      if (rawDepartment && !department) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: unrecognized department "${rawDepartment}"; storing null.`,
+        );
+      }
+
+      if (!rawDepartment) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: blank department; storing null.`,
+        );
+      }
+
+      if (!availability && availabilityIndex >= 0) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: blank availability; storing null.`,
+        );
+      }
+
+      if (!status) {
+        addImportWarning(
+          warnings,
+          `Instructors row ${rowNumber}: blank status; storing null.`,
+        );
+      }
+
+      return {
+        name: String(r[0] ?? "").trim(),
+        department,
+        availability,
+        status,
+      };
+    })
+    .filter((inst) => inst.name);
+}
+
+function parseRoomRows(rows, warnings = []) {
+  return rows
+    .map((r, index) => {
+      const rowNumber = index + 2;
+      const number = String(r[0] ?? "").trim();
+      const rawType = String(r[1] ?? "").trim();
+      const type = normalizeRoomType(r[1]);
+      const wingData = getWingFromRoomInput(number, r[4]);
+      const rawCapacity = String(r[2] ?? "").trim();
+      const computedCapacity = rawCapacity
+        ? sanitizeRoomCapacity(type, rawCapacity)
+        : getDefaultRoomCapacity(type);
+
+      if (!rawCapacity) {
+        addImportWarning(
+          warnings,
+          `Rooms row ${rowNumber}: blank capacity; defaulted to ${computedCapacity}.`,
+        );
+      }
+
+      if (!String(r[3] ?? "").trim()) {
+        addImportWarning(
+          warnings,
+          `Rooms row ${rowNumber}: blank status; defaulted to "Available".`,
+        );
+      }
+
+      if (rawType.toLowerCase() === "lec") {
+        addImportWarning(
+          warnings,
+          `Rooms row ${rowNumber}: normalized room type "Lec" to "Lecture".`,
+        );
+      }
+
+      return {
+        number,
+        type,
+        capacity: computedCapacity,
+        status: String(r[3] ?? "").trim() || "Available",
+        wing: wingData.resolvedWing,
+        dedupeKey: normalizeHeader(number),
+      };
+    })
+    .filter((room) => room.number);
+}
+
+function parseSubjectRows(rows, warnings = []) {
+  return rows
+    .map((r, index) => {
+      const rowNumber = index + 2;
+      const rawRoomType = String(r[8] ?? "").trim();
+      const roomType = normalizeRoomType(r[8]);
+      const code = String(r[0] ?? "")
+        .trim()
+        .toUpperCase();
+      const section = String(r[2] ?? "").trim();
+      const academicYear = String(r[3] ?? "").trim();
+      const rawSemester = String(r[4] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
+      const rawProgram = String(r[5] ?? "").trim();
+      const program = normalizeProgram(rawProgram);
+      const year = String(r[6] ?? "").trim();
+      const statusRaw = String(r[11] ?? "").trim();
+
+      if (!semester) {
+        throw new Error(
+          `Subject sections row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+        );
+      }
+
+      if (!program) {
+        throw new Error(
+          `Subject sections row ${rowNumber}: invalid program "${rawProgram}". Use one of: ${VALID_PROGRAM_HINT}.`,
+        );
+      }
+
+      if (!statusRaw) {
+        addImportWarning(
+          warnings,
+          `Subject sections row ${rowNumber}: blank status; defaulted to "Not Assigned".`,
+        );
+      }
+
+      if (rawRoomType.toLowerCase() === "lec") {
+        addImportWarning(
+          warnings,
+          `Subject sections row ${rowNumber}: normalized room type "Lec" to "Lecture".`,
+        );
+      }
+
+      return {
+        code,
+        title: String(r[1] ?? "").trim(),
+        section,
+        academicYear,
+        semester,
+        program,
+        year,
+        enrolled: toNumber(r[7], 0),
+        roomType,
+        duration: toNumber(r[9], 1.5),
+        instructor: String(r[10] ?? "").trim(),
+        status: statusRaw,
+        room: "",
+        time: "",
+        pattern: "",
+        dedupeKey: buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+        sectionIdentityKey: buildSectionIdentityKey(
+          { code, program, year, section, academicYear, semester },
+          { includeProgramYear: true },
+        ),
+        subjectIdentityKey: buildSubjectIdentityKey({ code, program, year }),
+      };
+    })
+    .filter((course) => course.code);
+}
+
+function dedupeByIdentity(records, keyFn) {
+  const seen = new Set();
+  const deduped = [];
+
+  (records ?? []).forEach((record) => {
+    const key = normalizeSectionIdentity(keyFn(record));
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    deduped.push(record);
+  });
+
+  return deduped;
+}
+
+export function parseImportCsv(csvText, type) {
+  const config = type ? getTypeConfig(type) : null;
   const rows = parseCsvText(csvText);
   if (rows.length < 2) {
     throw new Error("CSV must include a header row and at least one record.");
@@ -189,45 +624,189 @@ export function parseImportCsv(csvText) {
   const headers = rows[0];
   const dataRows = rows.slice(1);
 
-  if (assertHeaderMatch(headers, SCHEDULE_HEADERS)) {
-    const courses = parseScheduleRows(dataRows);
+  const typesToCheck = config ? [type] : Object.values(CSV_TYPES);
+  const selectedType = typesToCheck.find((candidate) => {
+    if (candidate === CSV_TYPES.ROOMS) {
+      return assertRoomHeaderMatch(headers);
+    }
+    if (candidate === CSV_TYPES.INSTRUCTORS) {
+      return assertInstructorHeaderMatch(headers);
+    }
+    return assertHeaderMatch(headers, getTypeConfig(candidate).headers);
+  });
+
+  if (!selectedType) {
+    throw new Error(
+      "Unsupported CSV format. Use the matching template for the selected type from public/csv.",
+    );
+  }
+
+  if (config && selectedType !== type) {
+    throw new Error(
+      `Invalid ${config.label.toLowerCase()} CSV header. Use the matching template from public/csv.`,
+    );
+  }
+
+  const warnings = [];
+
+  if (selectedType === CSV_TYPES.FULL_LIST) {
+    const rows = dedupeByIdentity(
+      parseFullListRows(dataRows, warnings),
+      config?.rowKey ?? getTypeConfig(selectedType).rowKey,
+    );
     return {
-      type: "schedule",
-      courses,
-      instructorNames: courses
-        .map((c) => c.instructor)
-        .filter((name) => normalizeInstructorName(name)),
+      type: selectedType,
+      rows,
+      warnings,
+      dbRows: rows.map((row) => ({
+        section_id:
+          String(row.section_id ?? row.sectionId ?? "").trim() || null,
+        course_code: row.code,
+        course_title: row.title,
+        section: row.section,
+        academic_year: row.academicYear,
+        semester: row.semester,
+        program: row.program,
+        year: row.year,
+        enrolled: Number(row.enrolled ?? 0),
+        room_number: row.room,
+        room_type: normalizeRoomType(row.roomType),
+        instructor_name: row.instructor,
+        pattern: row.pattern,
+        time_display: row.time,
+        duration: Number(row.duration ?? 0),
+        status: normalizeAssignmentStatus(row.status),
+      })),
+      upsert: {
+        table: "schedule_assignments",
+        conflictTarget: ["section_id", "academic_year", "semester"],
+      },
+      rowCount: rows.length,
     };
   }
 
-  if (assertHeaderMatch(headers, FACULTY_HEADERS)) {
+  if (selectedType === CSV_TYPES.ROOMS) {
+    const rooms = dedupeByIdentity(
+      parseRoomRows(dataRows, warnings),
+      getTypeConfig(selectedType).rowKey,
+    );
     return {
-      type: "faculty",
-      instructors: parseFacultyRows(dataRows),
+      type: selectedType,
+      rooms,
+      warnings,
+      dbRows: rooms.map((room) => ({
+        number: room.number,
+        type: normalizeRoomType(room.type),
+        capacity: sanitizeRoomCapacity(room.type, room.capacity),
+        status: room.status || "Available",
+        wing: room.wing || null,
+      })),
+      upsert: {
+        table: "rooms",
+        conflictTarget: ["number"],
+      },
+      rowCount: rooms.length,
     };
   }
 
-  if (assertHeaderMatch(headers, ROOM_HEADERS)) {
+  if (selectedType === CSV_TYPES.INSTRUCTORS) {
+    const instructorHeaderConfig = resolveInstructorHeaderIndexes(headers);
+    if (!instructorHeaderConfig) {
+      throw new Error(
+        "Invalid instructors CSV header. Use Name, Department, Availability, Status (or Name, Department, Status).",
+      );
+    }
+
+    const instructors = dedupeByIdentity(
+      parseFacultyRows(dataRows, warnings, instructorHeaderConfig),
+      getTypeConfig(selectedType).rowKey,
+    );
     return {
-      type: "rooms",
-      rooms: parseRoomRows(dataRows),
+      type: selectedType,
+      instructors,
+      warnings,
+      dbRows: instructors.map((inst) => ({
+        name: inst.name,
+        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
+        availability: inst.availability || null,
+        status: inst.status || null,
+        dedupe_key: normalizeInstructorName(inst.name),
+      })),
+      dbRowsWithDefaults: instructors.map((inst) => ({
+        name: inst.name,
+        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
+        availability: inst.availability || DEFAULT_INSTRUCTOR.availability,
+        status: inst.status || DEFAULT_INSTRUCTOR.status,
+        dedupe_key: normalizeInstructorName(inst.name),
+      })),
+      upsert: {
+        table: "instructors",
+        conflictTarget: ["name"],
+      },
+      rowCount: instructors.length,
     };
   }
 
-  if (assertHeaderMatch(headers, SUBJECT_HEADERS)) {
-    const courses = parseSubjectRows(dataRows);
+  if (selectedType === CSV_TYPES.SUBJECTS) {
+    const subjects = dedupeByIdentity(
+      parseSubjectRows(dataRows, warnings),
+      getTypeConfig(selectedType).rowKey,
+    );
+    const dbSubjects = dedupeByIdentity(
+      subjects.map((row) => ({
+        code: row.code,
+        title: row.title,
+        program: row.program,
+        year: row.year,
+        room_type: normalizeRoomType(row.roomType),
+        duration: Number(row.duration ?? 1.5),
+        dedupe_key: buildSubjectIdentityKey(row),
+      })),
+      (row) => row.dedupe_key,
+    );
+
+    const dbSections = subjects.map((row) => ({
+      subject_ref: {
+        code: row.code,
+        program: row.program,
+        year: row.year,
+      },
+      section: row.section,
+      enrolled: Number(row.enrolled ?? 0),
+      status: normalizeSectionStatusForDb(row.status),
+      academic_year: row.academicYear,
+      semester: row.semester,
+      dedupe_key: buildSectionIdentityKey(row, { includeProgramYear: true }),
+    }));
+
     return {
-      type: "subjects",
-      courses,
-      instructorNames: courses
-        .map((c) => c.instructor)
-        .filter((name) => normalizeInstructorName(name)),
+      type: selectedType,
+      subjects,
+      warnings,
+      dbRows: {
+        subjects: dbSubjects,
+        subject_sections: dbSections,
+      },
+      upsert: {
+        subjects: {
+          table: "subjects",
+          conflictTarget: ["code", "program"],
+        },
+        subject_sections: {
+          table: "subject_sections",
+          conflictTarget: [
+            "subject_id",
+            "section",
+            "academic_year",
+            "semester",
+          ],
+        },
+      },
+      rowCount: subjects.length,
     };
   }
 
-  throw new Error(
-    "Unsupported CSV format. Use exported schedule format or Faculty/Rooms/Subjects templates from public/csv.",
-  );
+  throw new Error(`Unsupported CSV type: ${selectedType}`);
 }
 
 function ensureInstructorObject(value) {
@@ -242,7 +821,6 @@ function ensureInstructorObject(value) {
     ...DEFAULT_INSTRUCTOR,
     ...value,
     name: String(value?.name ?? "").trim(),
-    courses: Array.isArray(value?.courses) ? value.courses : [],
   };
 }
 
@@ -250,75 +828,98 @@ export function mergeUniqueInstructors(
   existingInstructors,
   importedInstructors = [],
   instructorNames = [],
-  courses = [],
 ) {
-  const merged = [];
-  const seen = new Set();
-  let addedCount = 0;
+  const merged = dedupeByIdentity(
+    [
+      ...(existingInstructors ?? []).map(ensureInstructorObject),
+      ...(importedInstructors ?? []).map(ensureInstructorObject),
+      ...(instructorNames ?? []).map((name) => ensureInstructorObject(name)),
+    ],
+    (value) => normalizeInstructorName(value?.name),
+  );
 
-  const addIfUnique = (value) => {
-    const inst = ensureInstructorObject(value);
-    const key = normalizeInstructorName(inst.name);
-    if (!key || seen.has(key)) return;
-    seen.add(key);
-    merged.push(inst);
+  const existingCount = (existingInstructors ?? []).length;
+  return {
+    instructors: merged,
+    addedCount: Math.max(0, merged.length - existingCount),
   };
-
-  (existingInstructors ?? []).forEach((inst) => addIfUnique(inst));
-
-  (importedInstructors ?? []).forEach((inst) => {
-    const key = normalizeInstructorName(inst?.name);
-    if (!key || seen.has(key)) return;
-    addedCount += 1;
-    addIfUnique(inst);
-  });
-
-  (instructorNames ?? []).forEach((name) => {
-    const key = normalizeInstructorName(name);
-    if (!key || seen.has(key)) return;
-    addedCount += 1;
-    addIfUnique(name);
-  });
-
-  if ((courses ?? []).length > 0) {
-    merged.forEach((inst) => {
-      const key = normalizeInstructorName(inst.name);
-      inst.courses = courses
-        .filter((course) => normalizeInstructorName(course.instructor) === key)
-        .map((course) => course.code);
-    });
-  }
-
-  return { instructors: merged, addedCount };
 }
 
-export function exportToExcel(scheduleAssignments) {
-  if (scheduleAssignments.length === 0) {
+function serializeFullListRow(row) {
+  return [
+    row.section_id ?? row.sectionId ?? "",
+    row.code ?? "",
+    row.title ?? "",
+    row.section ?? "",
+    row.academicYear ?? "",
+    row.semester ?? "",
+    row.program ?? "",
+    row.year ?? "",
+    row.enrolled ?? "",
+    row.roomType ?? "",
+    row.room ?? "",
+    row.pattern ?? "",
+    row.time ?? "",
+    row.duration ?? "",
+    row.instructor ?? "",
+    row.status ?? "Pending",
+  ];
+}
+
+function serializeRoomRow(row) {
+  return [
+    row.number ?? "",
+    row.type ?? "",
+    row.capacity ?? "",
+    row.status ?? "Available",
+  ];
+}
+
+function serializeInstructorRow(row) {
+  return [
+    row.name ?? "",
+    row.department ?? DEFAULT_INSTRUCTOR.department,
+    row.availability ?? DEFAULT_INSTRUCTOR.availability,
+    row.status ?? DEFAULT_INSTRUCTOR.status,
+  ];
+}
+
+function serializeSubjectRow(row) {
+  return [
+    row.code ?? "",
+    row.title ?? "",
+    row.section ?? "",
+    row.academicYear ?? "",
+    row.semester ?? "",
+    row.program ?? "",
+    row.year ?? "",
+    row.enrolled ?? "",
+    row.roomType ?? "",
+    row.duration ?? "",
+    row.instructor ?? "",
+    row.status ?? "Pending",
+  ];
+}
+
+function serializeRecords(type, data) {
+  if (type === CSV_TYPES.FULL_LIST)
+    return (data ?? []).map(serializeFullListRow);
+  if (type === CSV_TYPES.ROOMS) return (data ?? []).map(serializeRoomRow);
+  if (type === CSV_TYPES.INSTRUCTORS)
+    return (data ?? []).map(serializeInstructorRow);
+  if (type === CSV_TYPES.SUBJECTS) return (data ?? []).map(serializeSubjectRow);
+  throw new Error(`Unsupported CSV type: ${type}`);
+}
+
+export function exportCsv(type, data = []) {
+  const config = getTypeConfig(type);
+  if (!Array.isArray(data) || data.length === 0) {
     return false;
   }
 
-  const headers = SCHEDULE_HEADERS;
-  const rows = scheduleAssignments.map((c) => [
-    c.code,
-    c.title,
-    c.program,
-    c.year,
-    c.enrolled,
-    c.room,
-    c.roomType,
-    c.pattern,
-    c.time,
-    c.duration,
-    c.instructor || "—",
-    c.status,
-  ]);
-
-  const csvContent = [headers, ...rows]
-    .map((row) =>
-      row
-        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
-        .join(","),
-    )
+  const rows = serializeRecords(type, data);
+  const csvContent = [config.headers, ...rows]
+    .map((row) => row.map(toCsvCell).join(","))
     .join("\n");
 
   const blob = new Blob(["\uFEFF" + csvContent], {
@@ -327,9 +928,44 @@ export function exportToExcel(scheduleAssignments) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `TSU_CCS_Schedule_AY2025-2026.csv`;
+  a.download = config.filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+
+  return true;
+}
+
+export function downloadCsvTemplate(type) {
+  const config = getTypeConfig(type);
+  const a = document.createElement("a");
+  a.href = config.templatePath;
+  a.download = config.templatePath.split("/").pop() || config.filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  return true;
+}
+
+export function summarizeImportedRows(payload) {
+  if (!payload) return "No file selected";
+  return `${payload.rowCount ?? 0} ${getTypeConfig(payload.type).label.toLowerCase()} row(s)`;
+}
+
+export function dedupeImportedRecords(type, records = []) {
+  const config = getTypeConfig(type);
+  return dedupeByIdentity(records, config.rowKey);
+}
+
+export function getCsvTypeConfig(type) {
+  return getTypeConfig(type);
+}
+
+export function getCsvTypeOptions() {
+  return CSV_TYPE_OPTIONS;
+}
+
+export function exportToExcel(scheduleAssignments) {
+  return exportCsv(CSV_TYPES.FULL_LIST, scheduleAssignments);
 }

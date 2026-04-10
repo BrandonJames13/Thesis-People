@@ -6,68 +6,578 @@ import {
   useMemo,
   useEffect,
 } from "react";
-import { initialCourses } from "../data/initialCourses";
-import { initialRooms } from "../data/initialRooms";
+import { supabase } from "../lib/supabaseClient";
+import { normalizeRoomType } from "../data/constants";
 
-const STORAGE_KEY = "rss_data_v1";
+const DEFAULT_SECTION = "A";
+const ACTIVE_ACADEMIC_YEAR =
+  import.meta.env.VITE_ACTIVE_ACADEMIC_YEAR ?? "2025-2026";
+const ACTIVE_SEMESTER = import.meta.env.VITE_ACTIVE_SEMESTER ?? "2nd";
 
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+function buildSectionIdentity(subjectCode, section, academicYear, semester) {
+  return [subjectCode, section, academicYear, semester]
+    .map((value) => String(value ?? "").trim())
+    .join("::");
 }
 
-function saveToStorage(data) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    return;
-  }
+function getInstructorLoadKey(record) {
+  const instructorId = String(
+    record?.instructor_id ?? record?.instructorId ?? record?.id ?? "",
+  ).trim();
+  if (instructorId) return `id:${instructorId.toLowerCase()}`;
+
+  const instructorName = String(
+    record?.instructor ?? record?.instructor_name ?? record?.name ?? "",
+  )
+    .trim()
+    .toLowerCase();
+  return instructorName ? `name:${instructorName}` : "";
+}
+
+function cloneSubjects(subjects) {
+  return subjects.map((s) => ({ ...s }));
+}
+
+function cloneSubjectSections(subjectSections) {
+  return subjectSections.map((s) => ({ ...s }));
+}
+
+function cloneRooms(rooms) {
+  return rooms.map((room) => ({ ...room }));
+}
+
+function cloneInstructors(instructors) {
+  return instructors.map((instructor) => ({ ...instructor }));
+}
+
+function normalizeSubjectFromRow(row) {
+  return {
+    code: row.subjectCode ?? row.code ?? "",
+    title: row.title ?? "",
+    program: row.program ?? "",
+    year: row.year ?? "",
+    roomType: row.roomType ?? row.room_type ?? "Lecture",
+  };
+}
+
+function normalizeSectionFromRow(row) {
+  const subjectCode = row.subjectCode ?? row.code ?? "";
+  const section =
+    (row.section ?? DEFAULT_SECTION).toString().trim() || DEFAULT_SECTION;
+  const academicYear = row.academicYear ?? row.academic_year ?? "";
+  const semester = row.semester ?? "";
+  const sectionIdentity =
+    row.sectionIdentity ??
+    row.section_identity ??
+    buildSectionIdentity(subjectCode, section, academicYear, semester);
+  const sectionId = String(row.section_id ?? "").trim() || sectionIdentity;
+
+  return {
+    sectionId,
+    sectionIdentity,
+    subjectCode,
+    section,
+    academicYear,
+    semester,
+    enrolled: Number(row.enrolled ?? 0),
+    status: row.status ?? "Pending",
+    instructor: row.instructor ?? "",
+    room: row.room ?? "",
+    time: row.time ?? "",
+    duration: Number(row.duration ?? 1.5),
+    pattern: row.pattern ?? "",
+    roomType: row.roomType ?? row.room_type,
+  };
+}
+
+function normalizeScheduleAssignment(row) {
+  const subjectCode = row.subjectCode ?? row.code ?? "";
+  const section =
+    (row.section ?? DEFAULT_SECTION).toString().trim() || DEFAULT_SECTION;
+  const academicYear = row.academicYear ?? row.academic_year ?? "";
+  const semester = row.semester ?? "";
+  const sectionIdentity =
+    row.sectionIdentity ??
+    row.section_identity ??
+    buildSectionIdentity(subjectCode, section, academicYear, semester);
+  const sectionId = String(row.section_id ?? "").trim() || sectionIdentity;
+
+  return {
+    ...row,
+    code: subjectCode,
+    subjectCode,
+    section,
+    sectionId,
+    sectionIdentity,
+    academicYear,
+    semester,
+    enrolled: Number(row.enrolled ?? 0),
+    status: row.status ?? "Pending",
+    instructor: row.instructor ?? "",
+    room: row.room ?? "",
+    time: row.time ?? "",
+    duration: Number(row.duration ?? 1.5),
+    pattern: row.pattern ?? "",
+    roomType: row.roomType ?? row.room_type,
+    assignmentId: String(row.assignmentId ?? row.assignment_id ?? "").trim(),
+    assignment_id: String(row.assignment_id ?? "").trim(),
+    section_id: String(row.section_id ?? "").trim(),
+  };
+}
+
+function normalizeScheduleAssignments(rows) {
+  const uniqueRows = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const normalized = normalizeScheduleAssignment(row);
+    const key =
+      String(
+        normalized.assignment_id ?? normalized.assignmentId ?? "",
+      ).trim() ||
+      String(normalized.section_id ?? "").trim() ||
+      normalized.sectionIdentity;
+    if (!key) return;
+    uniqueRows.set(key, normalized);
+  });
+
+  return Array.from(uniqueRows.values());
+}
+
+function normalizeAssignmentFromDbRow(row, lookup) {
+  const subject = lookup.subjectById.get(String(row.subject_id ?? ""));
+  const section = lookup.sectionById.get(String(row.section_id ?? ""));
+  const room = lookup.roomById.get(String(row.room_id ?? ""));
+  const instructor = lookup.instructorById.get(String(row.instructor_id ?? ""));
+
+  return normalizeScheduleAssignment({
+    assignment_id: row.id,
+    assignmentId: row.id,
+    section_id: row.section_id,
+    sectionId: row.section_id,
+    subjectCode:
+      row.course_code ??
+      row.code ??
+      section?.subjectCode ??
+      subject?.code ??
+      "",
+    section: row.section ?? section?.section ?? DEFAULT_SECTION,
+    academic_year:
+      row.academic_year ?? section?.academicYear ?? ACTIVE_ACADEMIC_YEAR,
+    semester: row.semester ?? section?.semester ?? ACTIVE_SEMESTER,
+    enrolled: row.enrolled ?? section?.enrolled ?? 0,
+    status: row.status ?? section?.status ?? "Pending",
+    instructor:
+      row.instructor_name ?? instructor?.name ?? section?.instructor ?? "",
+    room: row.room_number ?? room?.number ?? section?.room ?? "",
+    time: row.time_display ?? section?.time ?? "",
+    duration:
+      Number(row.duration ?? section?.duration ?? subject?.duration ?? 1.5) ||
+      1.5,
+    pattern: row.pattern ?? section?.pattern ?? "",
+    room_type:
+      row.room_type ?? section?.roomType ?? subject?.roomType ?? room?.type,
+    title: row.course_title ?? subject?.title ?? "",
+    program: row.program ?? subject?.program ?? "",
+    year: row.year ?? subject?.year ?? "",
+    instructor_id: row.instructor_id,
+    room_id: row.room_id,
+    subject_id: row.subject_id,
+  });
+}
+
+function buildNormalizedFromCourseRows(rows) {
+  const subjectMap = new Map();
+  const sectionMap = new Map();
+
+  rows.forEach((row) => {
+    const subject = normalizeSubjectFromRow(row);
+    if (!subject.code) return;
+
+    if (!subjectMap.has(subject.code)) {
+      subjectMap.set(subject.code, subject);
+    }
+
+    const section = normalizeSectionFromRow(row);
+    if (!section.sectionId) return;
+    if (!section.subjectCode) {
+      section.subjectCode = subject.code;
+    }
+    sectionMap.set(section.sectionId, section);
+  });
+
+  return {
+    subjects: Array.from(subjectMap.values()),
+    subjectSections: Array.from(sectionMap.values()),
+  };
+}
+
+function denormalizeSectionRow(section, subjectByCode) {
+  const subject = subjectByCode.get(section.subjectCode) ?? null;
+
+  return {
+    code: section.subjectCode,
+    section: section.section ?? DEFAULT_SECTION,
+    sectionId:
+      section.sectionId ??
+      buildSectionIdentity(
+        section.subjectCode,
+        section.section ?? DEFAULT_SECTION,
+        section.academicYear ?? "",
+        section.semester ?? "",
+      ),
+    sectionIdentity:
+      section.sectionIdentity ??
+      buildSectionIdentity(
+        section.subjectCode,
+        section.section ?? DEFAULT_SECTION,
+        section.academicYear ?? "",
+        section.semester ?? "",
+      ),
+    title: subject?.title ?? "",
+    program: subject?.program ?? "",
+    year: subject?.year ?? "",
+    roomType: section.roomType ?? subject?.roomType ?? "Lecture",
+    academicYear: section.academicYear ?? "",
+    semester: section.semester ?? "",
+    enrolled: Number(section.enrolled ?? 0),
+    status: section.status ?? "Pending",
+    instructor: section.instructor ?? "",
+    room: section.room ?? "",
+    time: section.time ?? "",
+    duration: Number(section.duration ?? 1.5),
+    pattern: section.pattern ?? "",
+  };
 }
 
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
-  const saved = loadFromStorage();
+  const [subjects, setSubjects] = useState([]);
+  const [subjectSections, setSubjectSections] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [instructors, setInstructors] = useState([]);
+  const [scheduleAssignments, setScheduleAssignments] = useState([]);
 
-  const [courses, setCourses] = useState(
-    () => saved?.courses ?? initialCourses.map((c) => ({ ...c })),
-  );
-  const [rooms, setRooms] = useState(
-    () => saved?.rooms ?? initialRooms.map((r) => ({ ...r })),
-  );
-  const [instructors, setInstructors] = useState(
-    () => saved?.instructors ?? [],
-  );
-  const [scheduleAssignments, setScheduleAssignments] = useState(
-    () => saved?.scheduleAssignments ?? [],
-  );
+  const bootstrapFromSupabase = useCallback(async () => {
+    const [
+      roomsResult,
+      subjectsResult,
+      sectionsResult,
+      instructorsResult,
+      assignmentsResult,
+    ] = await Promise.all([
+      supabase.from("rooms").select("*").order("number"),
+      supabase
+        .from("subjects")
+        .select("id, code, title, program, year, room_type, duration"),
+      supabase
+        .from("subject_sections")
+        .select(
+          "id, subject_id, section, enrolled, status, academic_year, semester",
+        )
+        .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+        .eq("semester", ACTIVE_SEMESTER),
+      supabase.from("instructors").select("*").order("name"),
+      supabase
+        .from("schedule_assignments")
+        .select("*")
+        .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+        .eq("semester", ACTIVE_SEMESTER),
+    ]);
 
-  // Auto-save whenever any data changes
+    if (roomsResult.error || subjectsResult.error || sectionsResult.error) {
+      setSubjects([]);
+      setSubjectSections([]);
+      setRooms([]);
+      setInstructors([]);
+      setScheduleAssignments([]);
+      return;
+    }
+
+    const roomRows = cloneRooms(roomsResult.data ?? []);
+    const instructorRows = cloneInstructors(instructorsResult.data ?? []);
+    const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
+      normalizeSubjectFromRow(row),
+    );
+
+    const subjectById = new Map(
+      (subjectsResult.data ?? []).map((row) => [String(row.id), row]),
+    );
+
+    const normalizedSections = (sectionsResult.data ?? [])
+      .map((row) => {
+        const subject = subjectById.get(String(row.subject_id));
+        if (!subject) return null;
+
+        return normalizeSectionFromRow({
+          section_id: row.id,
+          subjectCode: subject.code,
+          section: row.section,
+          academic_year: row.academic_year,
+          semester: row.semester,
+          enrolled: row.enrolled,
+          status: row.status === "Not Assigned" ? "Pending" : row.status,
+          duration: Number(subject.duration ?? 1.5),
+          room_type: subject.room_type,
+        });
+      })
+      .filter(Boolean);
+
+    const sectionById = new Map(
+      normalizedSections.map((section) => [String(section.sectionId), section]),
+    );
+    const roomById = new Map(roomRows.map((room) => [String(room.id), room]));
+    const instructorById = new Map(
+      instructorRows.map((instructor) => [String(instructor.id), instructor]),
+    );
+
+    const normalizedAssignments = assignmentsResult.error
+      ? []
+      : normalizeScheduleAssignments(
+          (assignmentsResult.data ?? []).map((row) =>
+            normalizeAssignmentFromDbRow(row, {
+              subjectById,
+              sectionById,
+              roomById,
+              instructorById,
+            }),
+          ),
+        );
+
+    setRooms(roomRows);
+    setSubjects(normalizedSubjects);
+    setSubjectSections(normalizedSections);
+    setInstructors(instructorRows);
+    setScheduleAssignments(normalizedAssignments);
+  }, []);
+
   useEffect(() => {
-    saveToStorage({ courses, rooms, instructors, scheduleAssignments });
-  }, [courses, rooms, instructors, scheduleAssignments]);
+    const timer = setTimeout(() => {
+      bootstrapFromSupabase();
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [bootstrapFromSupabase]);
+
+  const subjectByCode = useMemo(() => {
+    const map = new Map();
+    subjects.forEach((subject) => {
+      map.set(subject.code, subject);
+    });
+    return map;
+  }, [subjects]);
+
+  // Transitional adapter: keep legacy rows available for existing UI consumers.
+  const courses = useMemo(
+    () =>
+      subjectSections.map((section) =>
+        denormalizeSectionRow(section, subjectByCode),
+      ),
+    [subjectSections, subjectByCode],
+  );
+
+  const instructorLoads = useMemo(() => {
+    const loadMap = new Map();
+
+    scheduleAssignments.forEach((assignment) => {
+      if (assignment.status !== "Assigned") return;
+
+      const instructorKey = getInstructorLoadKey(assignment);
+      if (!instructorKey) return;
+
+      const sectionKey =
+        String(assignment.section_id ?? "").trim() ||
+        String(
+          assignment.assignmentId ?? assignment.assignment_id ?? "",
+        ).trim() ||
+        assignment.sectionIdentity;
+      if (!sectionKey) return;
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectKeys: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      if (current.sectionKeys.has(sectionKey)) {
+        loadMap.set(instructorKey, current);
+        return;
+      }
+
+      current.sectionKeys.add(sectionKey);
+
+      const subjectKey = String(assignment.code ?? assignment.subjectCode ?? "")
+        .trim()
+        .toUpperCase();
+      if (subjectKey) {
+        current.subjectKeys.add(subjectKey);
+      }
+
+      const duration = Number(assignment.duration ?? 0) || 0;
+      const roomType = normalizeRoomType(
+        assignment.roomType ?? assignment.room_type,
+      );
+      const isLab = roomType === "Computer Lab";
+      if (isLab) current.labHours += duration;
+      else current.lectureHours += duration;
+
+      loadMap.set(instructorKey, current);
+    });
+
+    const loads = new Map();
+    loadMap.forEach((load, key) => {
+      loads.set(key, {
+        subjectCount: load.subjectKeys.size,
+        sectionCount: load.sectionKeys.size,
+        lectureHours: load.lectureHours,
+        labHours: load.labHours,
+        totalHours: load.lectureHours + load.labHours,
+      });
+    });
+
+    return loads;
+  }, [scheduleAssignments]);
+
+  const getInstructorLoad = useCallback(
+    (instructor) => {
+      const idKey = getInstructorLoadKey(instructor);
+      const nameKey = getInstructorLoadKey({ name: instructor?.name });
+      return (
+        instructorLoads.get(idKey) ??
+        instructorLoads.get(nameKey) ?? {
+          subjectCount: 0,
+          sectionCount: 0,
+          lectureHours: 0,
+          labHours: 0,
+          totalHours: 0,
+        }
+      );
+    },
+    [instructorLoads],
+  );
 
   const assignments = useMemo(
-    () => courses.filter((c) => c.status === "Assigned"),
-    [courses],
+    () => scheduleAssignments.filter((c) => c.status === "Assigned"),
+    [scheduleAssignments],
   );
 
   const conflicts = useMemo(
-    () => courses.filter((c) => c.status === "Conflict"),
-    [courses],
+    () => scheduleAssignments.filter((c) => c.status === "Conflict"),
+    [scheduleAssignments],
   );
 
-  const addCourse = useCallback((course) => {
-    setCourses((prev) => [...prev, course]);
+  const availableRooms = useMemo(
+    () => rooms.filter((room) => room.status !== "Maintenance"),
+    [rooms],
+  );
+
+  const availableInstructors = useMemo(
+    () =>
+      instructors.filter(
+        (instructor) =>
+          String(instructor?.status ?? "")
+            .trim()
+            .toLowerCase() !== "inactive",
+      ),
+    [instructors],
+  );
+
+  const assignedSectionKeys = useMemo(() => {
+    const keys = new Set();
+
+    scheduleAssignments.forEach((assignment) => {
+      if (assignment.status !== "Assigned") return;
+
+      const explicitSectionId = String(
+        assignment.section_id ?? assignment.sectionId ?? "",
+      ).trim();
+      if (explicitSectionId) {
+        keys.add(explicitSectionId);
+      }
+
+      const identity = String(assignment.sectionIdentity ?? "").trim();
+      if (identity) {
+        keys.add(identity);
+      }
+    });
+
+    return keys;
+  }, [scheduleAssignments]);
+
+  const availableSections = useMemo(
+    () =>
+      subjectSections.filter((section) => {
+        const sectionId = String(section.sectionId ?? "").trim();
+        const sectionIdentity = String(section.sectionIdentity ?? "").trim();
+
+        if (sectionId && assignedSectionKeys.has(sectionId)) return false;
+        if (sectionIdentity && assignedSectionKeys.has(sectionIdentity))
+          return false;
+
+        const status = String(section.status ?? "")
+          .trim()
+          .toLowerCase();
+        return !status || status === "pending" || status === "not assigned";
+      }),
+    [subjectSections, assignedSectionKeys],
+  );
+
+  const availableSubjects = useMemo(() => {
+    const availableCodes = new Set(
+      availableSections
+        .map((section) => String(section.subjectCode ?? "").trim())
+        .filter(Boolean),
+    );
+
+    return subjects.filter((subject) => availableCodes.has(subject.code));
+  }, [subjects, availableSections]);
+
+  const addSubject = useCallback((subject) => {
+    const nextSubject = normalizeSubjectFromRow(subject);
+    if (!nextSubject.code) return;
+    setSubjects((prev) => {
+      const exists = prev.some((s) => s.code === nextSubject.code);
+      if (exists) {
+        return prev.map((s) =>
+          s.code === nextSubject.code ? { ...s, ...nextSubject } : s,
+        );
+      }
+      return [...prev, nextSubject];
+    });
   }, []);
 
-  const updateCourses = useCallback((newCourses) => {
-    setCourses(newCourses);
+  const updateSubjects = useCallback((newSubjects) => {
+    setSubjects(cloneSubjects(newSubjects ?? []));
+  }, []);
+
+  const addSubjectSection = useCallback((sectionRow) => {
+    const normalized = normalizeSectionFromRow(sectionRow);
+    if (!normalized.subjectCode) return;
+    setSubjectSections((prev) => [...prev, normalized]);
+  }, []);
+
+  const upsertSubjectSection = useCallback((sectionRow) => {
+    const normalized = normalizeSectionFromRow(sectionRow);
+    if (!normalized.subjectCode) return;
+
+    setSubjectSections((prev) => {
+      const index = prev.findIndex((s) => s.sectionId === normalized.sectionId);
+      if (index < 0) return [...prev, normalized];
+      const next = [...prev];
+      next[index] = { ...next[index], ...normalized };
+      return next;
+    });
+  }, []);
+
+  const updateSubjectSections = useCallback((newSubjectSections) => {
+    setSubjectSections(cloneSubjectSections(newSubjectSections ?? []));
+  }, []);
+
+  const updateSubjectSectionsFromCourseRows = useCallback((newCourseRows) => {
+    const normalized = buildNormalizedFromCourseRows(newCourseRows ?? []);
+    setSubjects(normalized.subjects);
+    setSubjectSections(normalized.subjectSections);
   }, []);
 
   const addRoom = useCallback((room) => {
@@ -79,7 +589,7 @@ export function DataProvider({ children }) {
   }, []);
 
   const updateRooms = useCallback((newRooms) => {
-    setRooms(newRooms);
+    setRooms(cloneRooms(newRooms ?? []));
   }, []);
 
   const addInstructor = useCallback((instructor) => {
@@ -87,78 +597,80 @@ export function DataProvider({ children }) {
   }, []);
 
   const updateInstructors = useCallback((newInstructors) => {
-    setInstructors(newInstructors);
+    setInstructors(cloneInstructors(newInstructors ?? []));
   }, []);
 
   const updateScheduleAssignments = useCallback((newAssignments) => {
-    setScheduleAssignments(newAssignments);
+    setScheduleAssignments(normalizeScheduleAssignments(newAssignments));
   }, []);
 
-  const syncInstructorCourses = useCallback((newScheduleAssignments) => {
-    setInstructors((prev) =>
-      prev.map((inst) => ({
-        ...inst,
-        courses: newScheduleAssignments
-          .filter(
-            (s) =>
-              s.instructor &&
-              s.instructor.trim().toLowerCase() ===
-                inst.name.trim().toLowerCase(),
-          )
-          .map((s) => s.code),
-      })),
-    );
-  }, []);
-
-  // Reset everything back to defaults and clear storage
+  // Reset back to empty state, then refresh from the database.
   const resetAllData = useCallback(() => {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      return;
-    }
-    setCourses(initialCourses.map((c) => ({ ...c })));
-    setRooms(initialRooms.map((r) => ({ ...r })));
+    setSubjects([]);
+    setSubjectSections([]);
+    setRooms([]);
     setInstructors([]);
     setScheduleAssignments([]);
-  }, []);
+    bootstrapFromSupabase();
+  }, [bootstrapFromSupabase]);
 
   const value = useMemo(
     () => ({
+      subjects,
+      subjectSections,
       courses,
-      setCourses,
       rooms,
       instructors,
       scheduleAssignments,
+      availableSubjects,
+      availableSections,
+      availableRooms,
+      availableInstructors,
+      instructorLoads,
+      getInstructorLoad,
       assignments,
       conflicts,
-      addCourse,
-      updateCourses,
+      addSubject,
+      updateSubjects,
+      addSubjectSection,
+      upsertSubjectSection,
+      updateSubjectSections,
+      updateSubjectSectionsFromCourseRows,
       addRoom,
       deleteRoom,
       updateRooms,
       addInstructor,
       updateInstructors,
       updateScheduleAssignments,
-      syncInstructorCourses,
       resetAllData,
     }),
     [
+      subjects,
+      subjectSections,
       courses,
       rooms,
       instructors,
       scheduleAssignments,
+      availableSubjects,
+      availableSections,
+      availableRooms,
+      availableInstructors,
+      instructorLoads,
+      getInstructorLoad,
       assignments,
       conflicts,
-      addCourse,
-      updateCourses,
+      addSubject,
+      updateSubjects,
+      addSubjectSection,
+      upsertSubjectSection,
+      updateSubjectSections,
+      updateSubjectSectionsFromCourseRows,
       addRoom,
       deleteRoom,
       updateRooms,
       addInstructor,
       updateInstructors,
       updateScheduleAssignments,
-      syncInstructorCourses,
       resetAllData,
     ],
   );

@@ -13,17 +13,25 @@ import {
   formatTimeFromMin,
   formatTime,
 } from "../utils/timeUtils";
+import {
+  formatAssignmentLabel,
+  getAssignmentIdentityKey,
+  getAssignmentSectionId,
+} from "../utils/scheduleUtils";
+import { normalizeRoomType } from "../data/constants";
 
 const ConflictContext = createContext();
 
+function getSectionRef(row) {
+  return getAssignmentSectionId(row) || getAssignmentIdentityKey(row);
+}
+
+function getSectionDisplay(row) {
+  return `${formatAssignmentLabel(row)} [${getSectionRef(row)}]`;
+}
+
 export function ConflictProvider({ children }) {
-  const {
-    scheduleAssignments,
-    updateScheduleAssignments,
-    rooms,
-    courses,
-    updateCourses,
-  } = useData();
+  const { scheduleAssignments, updateScheduleAssignments, rooms } = useData();
   const [reallocationLog, setReallocationLog] = useState([]);
   const [dismissedSoftConflicts, setDismissedSoftConflicts] = useState(
     new Set(),
@@ -39,7 +47,14 @@ export function ConflictProvider({ children }) {
         const a = scheduleAssignments[i];
         const b = scheduleAssignments[j];
         if (!coursesOverlap(a, b)) continue;
-        const pairKey = [a.code, b.code].sort().join("|");
+        const pairKey = [
+          getAssignmentIdentityKey(a),
+          getAssignmentIdentityKey(b),
+        ]
+          .sort()
+          .join("|");
+        const aLabel = formatAssignmentLabel(a);
+        const bLabel = formatAssignmentLabel(b);
 
         if (a.room && b.room && a.room === b.room) {
           const id = `DOUBLE_BOOK|${pairKey}`;
@@ -48,15 +63,19 @@ export function ConflictProvider({ children }) {
             const days = sharedDays(a, b);
             const ta = parseCourseTime(a);
             const slot = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
+            const aSection = getSectionDisplay(a);
+            const bSection = getSectionDisplay(b);
             hard.push({
               id,
               type: "DOUBLE_BOOKING",
               severity: "HARD",
               courses: [a, b],
+              primaryAssignmentKey: getAssignmentIdentityKey(a),
+              affectedAssignmentKey: getAssignmentIdentityKey(b),
               room: a.room,
               days,
-              title: `Double Booking — ${a.room} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)}`,
-              desc: `<strong>${a.code}</strong> (${a.title}${a.instructor ? " · " + a.instructor : ""}${a.enrolled ? " · " + a.enrolled + " enrolled" : ""}) and <strong>${b.code}</strong> (${b.title}${b.instructor ? " · " + b.instructor : ""}${b.enrolled ? " · " + b.enrolled + " enrolled" : ""}) are both assigned to ${a.room} at the same time.`,
+              title: `Double Booking — ${a.room} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)} · ${aLabel} vs ${bLabel}`,
+              desc: `<strong>${aSection}</strong> (${a.title}${a.instructor ? " · " + a.instructor : ""}${a.enrolled ? " · " + a.enrolled + " enrolled" : ""}) and <strong>${bSection}</strong> (${b.title}${b.instructor ? " · " + b.instructor : ""}${b.enrolled ? " · " + b.enrolled + " enrolled" : ""}) are both assigned to ${a.room} at the same time.`,
               meta: `TYPE: DOUBLE_BOOKING · SEVERITY: HARD · ROOM: ${a.room} · SLOT: ${slot}`,
             });
           }
@@ -75,14 +94,18 @@ export function ConflictProvider({ children }) {
             const days = sharedDays(a, b);
             const ta = parseCourseTime(a);
             const slot = `${days[0]}-${String(Math.floor(ta.startMin / 60)).padStart(2, "0")}${String(ta.startMin % 60).padStart(2, "0")}`;
+            const aSection = getSectionDisplay(a);
+            const bSection = getSectionDisplay(b);
             hard.push({
               id,
               type: "INSTRUCTOR_CONFLICT",
               severity: "HARD",
               courses: [a, b],
+              primaryAssignmentKey: getAssignmentIdentityKey(a),
+              affectedAssignmentKey: getAssignmentIdentityKey(b),
               days,
-              title: `Instructor Conflict — ${a.instructor} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)}`,
-              desc: `Instructor <strong>${a.instructor}</strong> is simultaneously scheduled for <strong>${a.code}</strong> (${a.room}) and <strong>${b.code}</strong> (${b.room}) on ${days.join("/")} at ${formatTimeFromMin(ta.startMin)}.`,
+              title: `Instructor Conflict — ${a.instructor} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)} · ${aLabel} vs ${bLabel}`,
+              desc: `Instructor <strong>${a.instructor}</strong> is simultaneously scheduled for <strong>${aSection}</strong> (${a.room}) and <strong>${bSection}</strong> (${b.room}) on ${days.join("/")} at ${formatTimeFromMin(ta.startMin)}.`,
               meta: `TYPE: INSTRUCTOR_CONFLICT · SEVERITY: HARD · INSTRUCTOR: ${a.instructor.replace(/[^a-zA-Z]/g, "_").toUpperCase()} · SLOT: ${slot}`,
             });
           }
@@ -94,7 +117,7 @@ export function ConflictProvider({ children }) {
       if (room && course.enrolled > 0) {
         const utilization = course.enrolled / room.capacity;
         if (utilization < 0.6) {
-          const id = `UNDERUTIL|${course.code}`;
+          const id = `UNDERUTIL|${getAssignmentIdentityKey(course)}`;
           if (!dismissedSoftConflicts.has(id)) {
             const pct = Math.round(utilization * 100);
             const betterRoom = rooms.find(
@@ -110,8 +133,9 @@ export function ConflictProvider({ children }) {
               type: "ROOM_UNDERUTILIZATION",
               severity: "SOFT",
               courses: [course],
-              title: `Room Underutilization — ${course.code} in ${course.room} (${room.capacity} seats)`,
-              desc: `<strong>${course.code}</strong> (${course.title} · ${course.enrolled} enrolled) is in ${course.room} (capacity ${room.capacity}) at ${pct}% utilization.${betterRoom ? ` ${betterRoom.number} (${betterRoom.capacity} seats) would be more appropriate.` : ""}`,
+              assignmentKey: getAssignmentIdentityKey(course),
+              title: `Room Underutilization — ${formatAssignmentLabel(course)} in ${course.room} (${room.capacity} seats)`,
+              desc: `<strong>${getSectionDisplay(course)}</strong> (${course.title} · ${course.enrolled} enrolled) is in ${course.room} (capacity ${room.capacity}) at ${pct}% utilization.${betterRoom ? ` ${betterRoom.number} (${betterRoom.capacity} seats) would be more appropriate.` : ""}`,
               meta: `TYPE: ROOM_UNDERUTILIZATION · SEVERITY: SOFT · WEIGHT: 25% · UTILIZATION: ${pct}%`,
               betterRoom: betterRoom || null,
             });
@@ -129,11 +153,19 @@ export function ConflictProvider({ children }) {
       const cf = hard.find((c) => c.id === conflictId);
       if (!cf) return "Conflict already resolved.";
 
-      const courseToMove = cf.courses[1];
-      const neededType =
-        courseToMove.roomType === "Lab" ? "Computer Lab" : "Lecture";
+      const courseToMoveKey =
+        cf.affectedAssignmentKey ?? getAssignmentIdentityKey(cf.courses?.[1]);
+      const courseToMove = scheduleAssignments.find(
+        (assignment) =>
+          getAssignmentIdentityKey(assignment) === courseToMoveKey,
+      );
+      if (!courseToMove) return "Conflict row no longer exists.";
+
+      const neededType = normalizeRoomType(courseToMove.roomType);
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
-      const target = newAssignments.find((s) => s.code === courseToMove.code);
+      const target = newAssignments.find(
+        (s) => getAssignmentIdentityKey(s) === courseToMoveKey,
+      );
       if (!target) return null;
 
       const freeRoom = rooms.find(
@@ -144,9 +176,9 @@ export function ConflictProvider({ children }) {
           r.capacity >= (courseToMove.enrolled || 0) &&
           !newAssignments.some(
             (s) =>
-              s.code !== courseToMove.code &&
+              getAssignmentIdentityKey(s) !== courseToMoveKey &&
               s.room === r.number &&
-              coursesOverlap(s, courseToMove),
+              coursesOverlap(s, target),
           ),
       );
 
@@ -154,10 +186,15 @@ export function ConflictProvider({ children }) {
       if (freeRoom) {
         const oldRoom = target.room;
         target.room = freeRoom.number;
+        const targetLabel = formatAssignmentLabel(target);
+        const sectionRef = getSectionRef(target);
         setReallocationLog((prev) => [
           ...prev,
           {
-            code: target.code,
+            code: `${targetLabel} [${sectionRef}]`,
+            sectionLabel: targetLabel,
+            assignmentKey: courseToMoveKey,
+            sectionId: sectionRef,
             from: `${oldRoom} · ${target.time}`,
             to: `${freeRoom.number} · ${target.time}`,
             type: cf.type,
@@ -165,7 +202,7 @@ export function ConflictProvider({ children }) {
               cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
           },
         ]);
-        message = `${target.code} reallocated to ${freeRoom.number} ✓`;
+        message = `${targetLabel} reallocated to ${freeRoom.number} ✓`;
       } else {
         const slots = [
           "08:00",
@@ -185,7 +222,7 @@ export function ConflictProvider({ children }) {
           };
           const hasConflict = newAssignments.some(
             (s) =>
-              s.code !== target.code &&
+              getAssignmentIdentityKey(s) !== courseToMoveKey &&
               (s.room === target.room ||
                 (s.instructor && s.instructor === target.instructor)) &&
               coursesOverlap(s, testCourse),
@@ -193,10 +230,15 @@ export function ConflictProvider({ children }) {
           if (!hasConflict) {
             const oldTime = target.time;
             target.time = testCourse.time;
+            const targetLabel = formatAssignmentLabel(target);
+            const sectionRef = getSectionRef(target);
             setReallocationLog((prev) => [
               ...prev,
               {
-                code: target.code,
+                code: `${targetLabel} [${sectionRef}]`,
+                sectionLabel: targetLabel,
+                assignmentKey: courseToMoveKey,
+                sectionId: sectionRef,
                 from: `${target.room} · ${oldTime}`,
                 to: `${target.room} · ${target.time}`,
                 type: cf.type,
@@ -204,7 +246,7 @@ export function ConflictProvider({ children }) {
                   cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
               },
             ]);
-            message = `${target.code} rescheduled to ${target.time} ✓`;
+            message = `${targetLabel} rescheduled to ${target.time} ✓`;
             moved = true;
             break;
           }
@@ -212,24 +254,10 @@ export function ConflictProvider({ children }) {
         if (!moved) message = "Could not auto-resolve — try Manual Override.";
       }
 
-      // Update courses to reflect room/time changes
-      const newCourses = courses.map((c) => {
-        const updated = newAssignments.find((s) => s.code === c.code);
-        return updated ? { ...c, room: updated.room, time: updated.time } : c;
-      });
-
       updateScheduleAssignments(newAssignments);
-      updateCourses(newCourses);
       return message;
     },
-    [
-      detectConflicts,
-      scheduleAssignments,
-      rooms,
-      courses,
-      updateScheduleAssignments,
-      updateCourses,
-    ],
+    [detectConflicts, scheduleAssignments, rooms, updateScheduleAssignments],
   );
 
   const autoResolveAll = useCallback(() => {
@@ -257,19 +285,25 @@ export function ConflictProvider({ children }) {
       if (!cf?.betterRoom) return null;
 
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
-      const target = newAssignments.find((s) => s.code === cf.courses[0].code);
+      const targetKey =
+        cf.assignmentKey ?? getAssignmentIdentityKey(cf.courses[0]);
+      const target = newAssignments.find(
+        (s) => getAssignmentIdentityKey(s) === targetKey,
+      );
       if (!target) return null;
 
       const oldRoom = target.room;
       target.room = cf.betterRoom.number;
-      const newCourses = courses.map((c) =>
-        c.code === target.code ? { ...c, room: cf.betterRoom.number } : c,
-      );
+
+      const targetLabel = formatAssignmentLabel(target);
 
       setReallocationLog((prev) => [
         ...prev,
         {
-          code: target.code,
+          code: `${targetLabel} [${getSectionRef(target)}]`,
+          sectionLabel: targetLabel,
+          assignmentKey: targetKey,
+          sectionId: getSectionRef(target),
           from: `${oldRoom} · ${target.time}`,
           to: `${cf.betterRoom.number} · ${target.time}`,
           type: "ROOM_UNDERUTILIZATION",
@@ -278,16 +312,9 @@ export function ConflictProvider({ children }) {
       ]);
 
       updateScheduleAssignments(newAssignments);
-      updateCourses(newCourses);
-      return `${target.code} moved to ${cf.betterRoom.number} ✓`;
+      return `${targetLabel} moved to ${cf.betterRoom.number} ✓`;
     },
-    [
-      detectConflicts,
-      scheduleAssignments,
-      courses,
-      updateScheduleAssignments,
-      updateCourses,
-    ],
+    [detectConflicts, scheduleAssignments, updateScheduleAssignments],
   );
 
   const dismissSoftConflict = useCallback((conflictId) => {

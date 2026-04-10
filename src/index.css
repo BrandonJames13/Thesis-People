@@ -498,6 +498,8 @@ tr:hover td {
   transition: filter 0.15s;
   cursor: default;
   height: 56px;
+  max-width: 0;
+  overflow: hidden;
 }
 .sched-td:hover {
   filter: brightness(1.15);
@@ -522,13 +524,16 @@ tr:hover td {
   background: rgba(248, 81, 73, 0.14);
   border-color: rgba(248, 81, 73, 0.4) !important;
 }
-.sched-course {
+.sched-section {
   font-weight: 700;
   color: var(--text);
   font-size: 11px;
   line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.sched-course.conflict-text {
+.sched-section.conflict-text {
   color: var(--red);
 }
 .sched-room {
@@ -536,6 +541,9 @@ tr:hover td {
   font-family: var(--mono);
   font-size: 10px;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sched-prof {
   color: var(--text3);
@@ -545,10 +553,22 @@ tr:hover td {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.sched-time-window {
+  font-size: 10px;
+  color: var(--text2);
+  margin-top: 2px;
+  font-family: var(--mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sched-dur {
   font-size: 10px;
   opacity: 0.6;
   margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .schedule-empty-state {
   text-align: center;

@@ -4,6 +4,11 @@ import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
+import {
+  getRoomCapacityLimit,
+  normalizeRoomType,
+  sanitizeRoomCapacity,
+} from "../data/constants";
 
 const WINGS = [
   { code: "L", label: "Left Wing (L)" },
@@ -22,6 +27,7 @@ export default function RoomsPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [wingFilter, setWingFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [editingRoom, setEditingRoom] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
   const fetchRooms = useCallback(async () => {
@@ -37,7 +43,16 @@ export default function RoomsPage() {
         return;
       }
 
-      setRooms(data ?? []);
+      setRooms(
+        (data ?? []).map((room) => {
+          const normalizedType = normalizeRoomType(room.type);
+          return {
+            ...room,
+            type: normalizedType,
+            capacity: sanitizeRoomCapacity(normalizedType, room.capacity),
+          };
+        }),
+      );
     } finally {
       setLoading(false);
     }
@@ -53,9 +68,23 @@ export default function RoomsPage() {
       return false;
     }
 
+    const normalizedType = normalizeRoomType(room.type);
+    const normalizedCapacity = sanitizeRoomCapacity(
+      normalizedType,
+      room.capacity,
+    );
+
+    const payload = {
+      number: room.number,
+      type: normalizedType,
+      capacity: normalizedCapacity,
+      status: room.status,
+      wing: room.wing ?? null,
+    };
+
     const { data, error } = await supabase
       .from("rooms")
-      .insert([room])
+      .insert([payload])
       .select();
 
     if (error) {
@@ -65,6 +94,63 @@ export default function RoomsPage() {
 
     setRooms((current) => [...current, ...(data ?? [])]);
     return true;
+  }
+
+  async function editRoom(id, room) {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return false;
+    }
+
+    const normalizedType = normalizeRoomType(room.type);
+    const normalizedCapacity = sanitizeRoomCapacity(
+      normalizedType,
+      room.capacity,
+    );
+
+    const payload = {
+      number: room.number,
+      type: normalizedType,
+      capacity: normalizedCapacity,
+      status: room.status,
+      wing: room.wing ?? null,
+    };
+
+    const { data, error } = await supabase
+      .from("rooms")
+      .update(payload)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) {
+      showNotification(`⚠ ${error.message}`);
+      return false;
+    }
+
+    setRooms((current) =>
+      current.map((roomItem) =>
+        roomItem.id === id ? (data ?? { ...roomItem, ...payload }) : roomItem,
+      ),
+    );
+    return true;
+  }
+
+  function openAddModal() {
+    if (!isAdmin) return;
+    setEditingRoom(null);
+    setShowModal(true);
+  }
+
+  function openEditModal(room) {
+    if (!isAdmin) return;
+    setEditingRoom(room);
+    setShowModal(true);
+  }
+
+  function closeRoomModal() {
+    setShowModal(false);
+    setEditingRoom(null);
   }
 
   async function handleDeleteConfirm() {
@@ -96,7 +182,8 @@ export default function RoomsPage() {
     const matchSearch = room.number
       .toLowerCase()
       .includes(search.toLowerCase());
-    const matchType = !typeFilter || room.type === typeFilter;
+    const matchType =
+      !typeFilter || normalizeRoomType(room.type) === typeFilter;
     const matchStatus = !statusFilter || room.status === statusFilter;
     const matchWing = !wingFilter || room.wing === wingFilter;
     return matchSearch && matchType && matchStatus && matchWing;
@@ -173,10 +260,7 @@ export default function RoomsPage() {
             <option>Maintenance</option>
           </select>
           {isAdmin && (
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowModal(true)}
-            >
+            <button className="btn btn-primary" onClick={openAddModal}>
               + Add Room
             </button>
           )}
@@ -216,24 +300,43 @@ export default function RoomsPage() {
                   >
                     <div className="room-number">{room.number}</div>
                     {isAdmin && (
-                      <button
-                        onClick={() => setDeleteTarget(room)}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--text3)",
-                          cursor: "pointer",
-                          fontSize: 16,
-                          lineHeight: 1,
-                          padding: 0,
-                        }}
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                          onClick={() => openEditModal(room)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text3)",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                          title="Edit"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(room)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            color: "var(--text3)",
+                            cursor: "pointer",
+                            fontSize: 16,
+                            lineHeight: 1,
+                            padding: 0,
+                          }}
+                          title="Delete"
+                        >
+                          ✕
+                        </button>
+                      </div>
                     )}
                   </div>
-                  <div className="room-type">{room.type}</div>
+                  <div className="room-type">
+                    {normalizeRoomType(room.type)}
+                  </div>
                   {room.wing && (
                     <div
                       style={{
@@ -254,15 +357,35 @@ export default function RoomsPage() {
                     <span style={{ fontSize: 11, color: "var(--text3)" }}>
                       Cap:
                     </span>
-                    <div className="cap-bar">
-                      <div
-                        className="cap-fill"
-                        style={{
-                          width: `${Math.round((room.capacity / 50) * 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <span className="monospace">{room.capacity}</span>
+                    {(() => {
+                      const normalizedType = normalizeRoomType(room.type);
+                      const { max } = getRoomCapacityLimit(normalizedType);
+                      const safeCapacity = sanitizeRoomCapacity(
+                        normalizedType,
+                        room.capacity,
+                      );
+                      const percent = Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          Math.round((safeCapacity / Math.max(max, 1)) * 100),
+                        ),
+                      );
+
+                      return (
+                        <>
+                          <div className="cap-bar">
+                            <div
+                              className="cap-fill"
+                              style={{
+                                width: `${percent}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="monospace">{safeCapacity}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -273,14 +396,23 @@ export default function RoomsPage() {
 
       {showModal && isAdmin && (
         <AddRoomModal
-          existingRooms={rooms}
-          onClose={() => setShowModal(false)}
-          onAdd={async (room) => {
-            const saved = await addRoom(room);
+          key={editingRoom?.id ?? "add-room"}
+          onClose={closeRoomModal}
+          mode={editingRoom ? "edit" : "add"}
+          initialRoom={editingRoom}
+          onSubmit={async (room) => {
+            if (editingRoom) {
+              const saved = await editRoom(editingRoom.id, room);
+              if (!saved) return;
+              closeRoomModal();
+              showNotification("Room updated successfully!");
+              return;
+            }
 
+            const saved = await addRoom(room);
             if (!saved) return;
 
-            setShowModal(false);
+            closeRoomModal();
             showNotification("Room added successfully!");
           }}
         />

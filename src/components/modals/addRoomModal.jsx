@@ -1,58 +1,101 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
+import { getWingFromRoomInput } from "../../utils/roomUtils";
+import {
+  getDefaultRoomCapacity,
+  getRoomCapacityLimit,
+  isRoomCapacityValid,
+  normalizeRoomType,
+  ROOM_TYPE_LABELS,
+} from "../../data/constants";
 
-export function AddRoomModal({ onClose, onAdd, existingRooms = [] }) {
-  const [number, setNumber] = useState("");
-  const [type, setType] = useState("");
-  const [capacity, setCapacity] = useState("");
-  const [status, setStatus] = useState("Available");
+const WING_OPTIONS = [
+  { value: "", label: "Auto (infer from room number)" },
+  { value: "L", label: "Left Wing (L)" },
+  { value: "C", label: "Center Wing (C)" },
+  { value: "R", label: "Right Wing (R)" },
+];
+
+export function AddRoomModal({
+  onClose,
+  onSubmit,
+  initialRoom = null,
+  mode = "add",
+}) {
+  const initialType = normalizeRoomType(initialRoom?.type ?? "", "");
+  const [number, setNumber] = useState(initialRoom?.number ?? "");
+  const [type, setType] = useState(initialType);
+  const [capacity, setCapacity] = useState(
+    initialRoom?.capacity != null
+      ? String(initialRoom.capacity)
+      : initialType
+        ? String(getDefaultRoomCapacity(initialType))
+        : "",
+  );
+  const [status, setStatus] = useState(initialRoom?.status ?? "Available");
+  const [wing, setWing] = useState(initialRoom?.wing ?? "");
   const [error, setError] = useState("");
 
-  const handleSubmit = () => {
-    const trimmed = number.trim();
-    const cap = parseInt(capacity);
+  const selectedRoomType = normalizeRoomType(type, "");
+  const capacityLimit = selectedRoomType
+    ? getRoomCapacityLimit(selectedRoomType)
+    : null;
 
-    if (!trimmed || !type || isNaN(cap) || cap <= 0) {
+  const handleSubmit = () => {
+    const trimmedNumber = number.trim();
+    const normalizedType = normalizeRoomType(type, "");
+    const trimmedCapacity = String(capacity ?? "").trim();
+
+    if (!trimmedNumber || !normalizedType) {
       setError("Please fill in all fields correctly.");
       return;
     }
 
-    // Validate room name format: L/C/R followed by exactly 3 digits
-    const roomPattern = /^[LCR]\d{3}$/;
-    if (!roomPattern.test(trimmed)) {
-      setError("Room number must follow the format: L101, C111, or R112 (wing letter + 3 digits).");
+    const cap = trimmedCapacity
+      ? parseInt(trimmedCapacity, 10)
+      : getDefaultRoomCapacity(normalizedType);
+
+    if (trimmedCapacity && (isNaN(cap) || cap <= 0)) {
+      setError("Capacity must be a positive number.");
       return;
     }
 
-    // Duplicate check
-    const isDuplicate = existingRooms.some(
-      (r) => r.number.toUpperCase() === trimmed.toUpperCase()
+    const { max } = getRoomCapacityLimit(normalizedType);
+    if (!isRoomCapacityValid(normalizedType, cap)) {
+      setError(`${normalizedType} capacity must be between 1 and ${max}.`);
+      return;
+    }
+
+    const { providedWing, inferredWing, resolvedWing } = getWingFromRoomInput(
+      trimmedNumber,
+      wing,
     );
-    if (isDuplicate) {
-      setError(`Room "${trimmed}" already exists.`);
-      return;
-    }
 
-    if (type === "Computer Lab" && (cap < 40 || cap > 45)) {
-      setError("Computer Lab capacity must be between 40 and 45.");
-      return;
-    }
-
-    if (type === "Lecture" && (cap < 50 || cap > 55)) {
-      setError("Lecture room capacity must be between 50 and 55.");
+    if (providedWing && inferredWing && providedWing !== inferredWing) {
+      setError(
+        `Wing mismatch: room number suggests ${inferredWing}, but selected wing is ${providedWing}.`,
+      );
       return;
     }
 
     setError("");
-    const wing = trimmed[0].toUpperCase();
-    onAdd({ number: trimmed, type, capacity: cap, status, wing });
+    onSubmit({
+      number: trimmedNumber,
+      type: normalizedType,
+      capacity: cap,
+      status,
+      wing: resolvedWing,
+    });
   };
+
+  const modalTitle = mode === "edit" ? "✎ Edit Room" : "+ Add New Room";
+  const submitLabel = mode === "edit" ? "Save Changes" : "+ Add Room";
 
   return (
     <Modal isOpen={true} onClose={onClose} size="sm">
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>
-          + Add New Room
+          {modalTitle}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <input
@@ -70,33 +113,39 @@ export function AddRoomModal({ onClose, onAdd, existingRooms = [] }) {
             className="search-input"
             style={{ width: "100%" }}
             value={type}
-            onChange={(e) => { setType(e.target.value); setCapacity(""); }}
+            onChange={(e) => {
+              const nextType = normalizeRoomType(e.target.value, "");
+              setType(nextType);
+              if (!nextType) return;
+              setCapacity((current) => {
+                const parsed = Number(current);
+                if (Number.isFinite(parsed) && parsed > 0) return current;
+                return String(getDefaultRoomCapacity(nextType));
+              });
+            }}
           >
             <option value="">-- Select Type --</option>
-            <option value="Lecture">Lecture</option>
-            <option value="Computer Lab">Computer Lab</option>
+            {ROOM_TYPE_LABELS.map((roomType) => (
+              <option key={roomType} value={roomType}>
+                {roomType}
+              </option>
+            ))}
           </select>
           <input
             className="search-input"
             type="number"
             placeholder={
-              type === "Computer Lab"
-                ? "Capacity (40-45)"
-                : type === "Lecture"
-                  ? "Capacity (50-55)"
-                  : "Capacity"
+              capacityLimit ? `Capacity (1-${capacityLimit.max})` : "Capacity"
             }
-            min={type === "Computer Lab" ? 40 : type === "Lecture" ? 50 : 1}
-            max={type === "Computer Lab" ? 45 : type === "Lecture" ? 55 : 999}
+            min={1}
+            max={capacityLimit?.max ?? 999}
             style={{ width: "100%" }}
             value={capacity}
             onChange={(e) => setCapacity(e.target.value)}
           />
-          {type && (
+          {selectedRoomType && capacityLimit && (
             <div style={{ fontSize: 11, color: "var(--text3)" }}>
-              {type === "Computer Lab"
-                ? "Lab capacity: min 40, max 45"
-                : "Lecture capacity: min 50, max 55"}
+              {`${selectedRoomType} capacity: max ${capacityLimit.max}`}
             </div>
           )}
           <select
@@ -109,6 +158,22 @@ export function AddRoomModal({ onClose, onAdd, existingRooms = [] }) {
             <option value="Occupied">Occupied</option>
             <option value="Maintenance">Maintenance</option>
           </select>
+          <select
+            className="search-input"
+            style={{ width: "100%" }}
+            value={wing}
+            onChange={(e) => setWing(e.target.value)}
+          >
+            {WING_OPTIONS.map((option) => (
+              <option key={option.value || "auto"} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+            Wing is optional. Leave as Auto to infer from formatted numbers like
+            L120, C211, or R222.
+          </div>
           {error && (
             <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
           )}
@@ -126,7 +191,7 @@ export function AddRoomModal({ onClose, onAdd, existingRooms = [] }) {
             Cancel
           </button>
           <button className="btn btn-primary" onClick={handleSubmit}>
-            + Add Room
+            {submitLabel}
           </button>
         </div>
       </div>

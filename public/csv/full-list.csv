@@ -1,0 +1,5 @@
+"Section ID","Subject Code","Subject Title","Section","Academic Year","Semester","Program","Year","Enrolled","Type Required","Room","Pattern","Time","Duration (hrs)","Instructor","Status"
+"SEC-CS101-A","CS101","Intro to Computer Science","A","2025-2026","1st","BSCS","1st","42","Lecture","Room 101","MWF","08:00 - 09:30","1.5","Dela Cruz, J.","Assigned"
+"SEC-CS202-B","CS202","Object-Oriented Programming","B","2025-2026","1st","CS","2nd","38","Lab","Lab 01","TTH","10:00 - 11:30","1.5","Lim, K.","Assigned"
+"SEC-IT301-A","IT301","Computer Networks","A","2025-2026","1st","TSM","3rd","30","Lab","","MWF","13:00 - 14:30","1.5","Cruz, P.","Pending"
+"SEC-IS301-A","IS301","Systems Analysis & Design","A","2025-2026","1st","WMA","3rd","32","Lecture","Room 201","TTH","14:30 - 16:00","1.5","Garcia, L.","Assigned"

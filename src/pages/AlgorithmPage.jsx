@@ -25,7 +25,15 @@ function loadWeights() {
 }
 
 export default function AlgorithmPage() {
-  const { courses, scheduleAssignments } = useData();
+  const {
+    subjectSections,
+    scheduleAssignments,
+    assignments,
+    availableRooms,
+    availableInstructors,
+    availableSubjects,
+    availableSections,
+  } = useData();
   const { detectConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
@@ -33,15 +41,14 @@ export default function AlgorithmPage() {
   const [weights, setWeights] = useState(loadWeights);
 
   const { hard } = detectConflicts();
-  const assignedCount = scheduleAssignments.length;
-  const totalCourses = courses.length;
+  const assignedCount = assignments.length;
+  const totalSections = subjectSections.length;
   const conflictRate =
     assignedCount > 0
       ? ((hard.length / assignedCount) * 100).toFixed(1)
       : "0.0";
-  const occupiedRooms = new Set(
-    scheduleAssignments.map((c) => c.room).filter(Boolean),
-  ).size;
+  const occupiedRooms = new Set(assignments.map((c) => c.room).filter(Boolean))
+    .size;
 
   const totalWeight =
     weights.timePreference +
@@ -100,7 +107,8 @@ export default function AlgorithmPage() {
           <div className="section-title">Algorithm Configuration</div>
           <div className="section-subtitle">
             Constraint-Based Greedy · Tier 1 (Hard) + Tier 2 (Soft) ·
-            Transparent &amp; customizable
+            Transparent &amp; customizable · Uses all available
+            rooms/instructors/subjects/sections
           </div>
         </div>
         <button
@@ -131,9 +139,15 @@ export default function AlgorithmPage() {
             </thead>
             <tbody>
               {[
-                ["No Double Booking", "Room ≠ 2 courses at same slot"],
+                [
+                  "No Double Booking",
+                  "Room ≠ 2 section assignments at same slot",
+                ],
                 ["Room Capacity", "Capacity ≥ Enrollment count"],
-                ["Instructor Conflict", "Faculty ≠ 2 courses simultaneously"],
+                [
+                  "Instructor Conflict",
+                  "Faculty ≠ 2 section assignments simultaneously",
+                ],
                 ["Time Slot Validity", "Within TSU academic calendar"],
               ].map(([name, rule]) => (
                 <tr key={name}>
@@ -280,6 +294,19 @@ export default function AlgorithmPage() {
               ⚡ Performance Benchmarks vs. Target
             </div>
           </div>
+          <div
+            style={{
+              padding: "10px 14px",
+              borderBottom: "1px solid var(--border)",
+              fontSize: 11,
+              color: "var(--text3)",
+              fontFamily: "var(--mono)",
+            }}
+          >
+            AVAILABLE INPUTS · Rooms: {availableRooms.length} · Instructors:{" "}
+            {availableInstructors.length} · Subjects: {availableSubjects.length}{" "}
+            · Sections: {availableSections.length}
+          </div>
           <table>
             <thead>
               <tr>
@@ -291,7 +318,7 @@ export default function AlgorithmPage() {
             <tbody>
               {[
                 [
-                  `Schedule Generation (${totalCourses} courses)`,
+                  `Schedule Generation (${totalSections} sections)`,
                   "< 10s",
                   assignedCount > 0 ? "< 10s ✓" : "Not run",
                   assignedCount > 0 ? "green" : "orange",
@@ -316,9 +343,14 @@ export default function AlgorithmPage() {
                   "Rooms Utilized",
                   "> 80%",
                   assignedCount > 0
-                    ? `${Math.round((occupiedRooms / Math.max(1, new Set(scheduleAssignments.map((c) => c.room).filter(Boolean)).size + 1)) * 100)}%`
+                    ? `${Math.round((occupiedRooms / Math.max(1, availableRooms.length)) * 100)}%`
                     : "—",
-                  "orange",
+                  assignedCount > 0 &&
+                  Math.round(
+                    (occupiedRooms / Math.max(1, availableRooms.length)) * 100,
+                  ) >= 80
+                    ? "green"
+                    : "orange",
                 ],
                 [
                   "Admin Time per Semester",
