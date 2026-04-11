@@ -12,6 +12,7 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+// Update buildInstructorPayload to include new fields
 function buildInstructorPayload(instructor) {
   const status = String(instructor?.status ?? "").trim();
   return {
@@ -19,6 +20,9 @@ function buildInstructorPayload(instructor) {
     department: instructor?.department || null,
     availability: String(instructor?.availability ?? "").trim() || null,
     status: status || null,
+    employment_status: instructor?.employment_status ?? [],
+    max_units: instructor?.max_units ?? null,
+    allow_night_class: instructor?.allow_night_class ?? false,
   };
 }
 
@@ -324,12 +328,15 @@ export default function FacultyPage() {
 
       <div className="card">
         <table>
-          <thead>
+         <thead>
             <tr>
               <th>Instructor</th>
+              <th>Employment</th>
               <th>Scheduled Load</th>
+              <th>Max Units</th>
               <th>Department</th>
               <th>Availability</th>
+              <th>Night Class</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -337,7 +344,7 @@ export default function FacultyPage() {
           <tbody>
             {instructors.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-table">
+                <td colSpan={9} className="empty-table">
                   No instructors yet. Click <strong>"Add Instructor"</strong>
                   to add one.
                 </td>
@@ -345,37 +352,59 @@ export default function FacultyPage() {
             ) : (
               instructors.map((inst) => (
                 <tr key={inst.id}>
+                  <td><strong>{inst.name}</strong></td>
+
+                  {/* Employment Status — render as pills */}
                   <td>
-                    <strong>{inst.name}</strong>
+                    {(inst.employment_status ?? []).length > 0 ? (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {inst.employment_status.map((es) => (
+                          <span key={es} className="pill pill-blue" style={{ fontSize: 10 }}>
+                            {es}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>
+                    )}
                   </td>
+
+                  {/* Scheduled Load */}
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
                       const counts = getInstructorLoad(inst);
-                      if (
-                        counts.subjectCount === 0 &&
-                        counts.sectionCount === 0
-                      ) {
-                        return (
-                          <span style={{ color: "var(--text3)" }}>
-                            No scheduled sections
-                          </span>
-                        );
+                      if (counts.subjectCount === 0 && counts.sectionCount === 0) {
+                        return <span style={{ color: "var(--text3)" }}>No scheduled sections</span>;
                       }
-
                       return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
+
+                  {/* Max Units */}
+                  <td className="monospace" style={{ fontSize: 12 }}>
+                    {inst.max_units != null ? inst.max_units : (
+                      <span style={{ color: "var(--text3)" }}>—</span>
+                    )}
+                  </td>
+
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
+
+                  {/* Night Class */}
+                  <td>
+                    <span className={`pill pill-${inst.allow_night_class ? "green" : "orange"}`}>
+                      {inst.allow_night_class ? "Yes" : "No"}
+                    </span>
+                  </td>
+
+                  {/* Status */}
                   <td>
                     {(() => {
                       const statusLabel = String(inst.status ?? "").trim();
                       const pillTone =
-                        statusLabel.toLowerCase() === "active"
-                          ? "green"
-                          : statusLabel
-                            ? "red"
-                            : "orange";
+                        statusLabel.toLowerCase() === "active" ? "green"
+                        : statusLabel ? "red"
+                        : "orange";
                       return (
                         <span className={`pill pill-${pillTone}`}>
                           {statusLabel || "Unspecified"}
@@ -383,15 +412,14 @@ export default function FacultyPage() {
                       );
                     })()}
                   </td>
+
+                  {/* Actions */}
                   <td>
                     {isAdmin && (
                       <div style={{ display: "flex", gap: 6 }}>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => {
-                            setEditInstructor(inst);
-                            setShowModal(true);
-                          }}
+                          onClick={() => { setEditInstructor(inst); setShowModal(true); }}
                         >
                           Edit
                         </button>
@@ -399,11 +427,8 @@ export default function FacultyPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             exportInstructorSchedule(inst, scheduleAssignments);
-                            showNotification(
-                              `Schedule exported for ${inst.name}.`,
-                            );
+                            showNotification(`Schedule exported for ${inst.name}.`);
                           }}
-                          title="Export this instructor's schedule"
                         >
                           Export
                         </button>
