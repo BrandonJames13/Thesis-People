@@ -499,6 +499,165 @@ export default function ImportModal({ isOpen, onClose }) {
     );
   };
 
+  const importSchedule = async (payload) => {
+    const dbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+
+    if (dbRows.length === 0) {
+      throw new Error("No schedule assignment rows were parsed for import.");
+    }
+
+    // Fetch all courses codes, room numbers, and instructor names to resolve lookups
+    const courseCodes = Array.from(
+      new Set(dbRows.map((row) => row?.course_code).filter(Boolean)),
+    );
+    const roomNumbers = Array.from(
+      new Set(dbRows.map((row) => row?.room_number).filter(Boolean)),
+    );
+    const instructorNames = Array.from(
+      new Set(dbRows.map((row) => row?.instructor_name).filter(Boolean)),
+    );
+
+    // Query for existing data to resolve foreign keys
+    // Note: .in() handles empty arrays gracefully, but we build queries safely
+    const subjectPromise =
+      courseCodes.length > 0
+        ? supabase
+            .from("subjects")
+            .select("id, code, program, year")
+            .in("code", courseCodes)
+        : Promise.resolve({ data: [], error: null });
+
+    const roomPromise =
+      roomNumbers.length > 0
+        ? supabase.from("rooms").select("id, number").in("number", roomNumbers)
+        : Promise.resolve({ data: [], error: null });
+
+    const instructorPromise =
+      instructorNames.length > 0
+        ? supabase
+            .from("instructors")
+            .select("id, name")
+            .in("name", instructorNames)
+        : Promise.resolve({ data: [], error: null });
+
+    const [subjectRows, roomRows, instructorRows, subjectSectionRows] =
+      await Promise.all([
+        subjectPromise,
+        roomPromise,
+        instructorPromise,
+        supabase
+          .from("subject_sections")
+          .select("id, subject_id, section, academic_year, semester"),
+      ]);
+
+    // Handle query errors
+    if (
+      subjectRows.error ||
+      roomRows.error ||
+      instructorRows.error ||
+      subjectSectionRows.error
+    ) {
+      const failedTable = subjectRows.error
+        ? "subjects"
+        : roomRows.error
+          ? "rooms"
+          : instructorRows.error
+            ? "instructors"
+            : "subject_sections";
+
+      throw toNormalizedError(
+        subjectRows.error ||
+          roomRows.error ||
+          instructorRows.error ||
+          subjectSectionRows.error,
+        `Unable to load existing ${failedTable} for schedule import.`,
+        {
+          operation: "read",
+          table: failedTable,
+        },
+      );
+    }
+
+    // Build lookup maps
+    const subjectByCode = new Map(
+      (subjectRows.data ?? []).map((row) => [
+        normalizeLookupKey(row.code),
+        row,
+      ]),
+    );
+
+    const roomByNumber = new Map(
+      (roomRows.data ?? []).map((row) => [normalizeLookupKey(row.number), row]),
+    );
+
+    const instructorByName = new Map(
+      (instructorRows.data ?? []).map((row) => [
+        normalizeLookupKey(row.name),
+        row,
+      ]),
+    );
+
+    // Build section lookup by composite key: (subject_id, section, academic_year, semester)
+    const sectionByCompositeKey = new Map(
+      (subjectSectionRows.data ?? []).map((row) => [
+        `${normalizeLookupKey(row.subject_id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academic_year)}|${normalizeLookupKey(row.semester)}`,
+        row,
+      ]),
+    );
+
+    // Transform dbRows into schedule_assignments upsert rows
+    const scheduleUpsertRows = dbRows
+      .map((row) => {
+        const subject = subjectByCode.get(normalizeLookupKey(row.course_code));
+        if (!subject) {
+          return null; // Skip rows where subject cannot be resolved
+        }
+
+        const section = sectionByCompositeKey.get(
+          `${normalizeLookupKey(subject.id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academic_year)}|${normalizeLookupKey(row.semester)}`,
+        );
+        if (!section) {
+          return null; // Skip rows where section cannot be resolved
+        }
+
+        const room = row.room_number
+          ? roomByNumber.get(normalizeLookupKey(row.room_number))
+          : null;
+
+        const instructor = row.instructor_name
+          ? instructorByName.get(normalizeLookupKey(row.instructor_name))
+          : null;
+
+        return {
+          section_id: section.id,
+          subject_id: subject.id,
+          room_id: room?.id ?? null,
+          instructor_id: instructor?.id ?? null,
+          course_code: row.course_code,
+          section: row.section,
+          academic_year: row.academic_year,
+          semester: row.semester,
+          pattern: row.pattern,
+          time_display: row.time_display,
+          status: row.status,
+        };
+      })
+      .filter(Boolean);
+
+    if (scheduleUpsertRows.length === 0) {
+      throw new Error(
+        "No schedule assignments could be matched to existing subject sections, rooms, or instructors. Ensure subjects, sections, rooms, and instructors exist before importing schedule assignments.",
+      );
+    }
+
+    await upsertRows(
+      "schedule_assignments",
+      scheduleUpsertRows,
+      "section_id,academic_year,semester",
+      "Unable to import schedule assignments.",
+    );
+  };
+
   const importFullList = async (payload) => {
     const sourceRows = Array.isArray(payload?.rows) ? payload.rows : [];
     const scheduleDbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
@@ -738,6 +897,8 @@ export default function ImportModal({ isOpen, onClose }) {
         await importRooms(parsed);
       } else if (parsed.type === CSV_TYPES.INSTRUCTORS) {
         await importInstructors(parsed);
+      } else if (parsed.type === CSV_TYPES.SCHEDULE) {
+        await importSchedule(parsed);
       } else {
         throw new Error(`Unsupported import type: ${parsed.type}`);
       }
