@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
@@ -90,8 +90,10 @@ export default function CoursesPage() {
       }
 
       const sectionMap = (sectionRows ?? []).reduce((acc, row) => {
-        if (!acc[row.subject_id]) acc[row.subject_id] = [];
-        acc[row.subject_id].push(row);
+        const subjectId = String(row.subject_id ?? "").trim();
+        if (!subjectId) return acc;
+        if (!acc[subjectId]) acc[subjectId] = [];
+        acc[subjectId].push(row);
         return acc;
       }, {});
 
@@ -119,6 +121,20 @@ export default function CoursesPage() {
   useEffect(() => {
     fetchSubjects();
   }, [fetchSubjects]);
+
+  const subjectCatalogRows = useMemo(() => {
+    return subjects.map((subject) => {
+      const subjectId = String(subject.id ?? "").trim();
+      const sections = sectionsBySubjectId[subjectId] ?? [];
+      const instructorIds = instructorIdsBySubjectId[subjectId] ?? [];
+
+      return {
+        ...subject,
+        sections,
+        instructorIds,
+      };
+    });
+  }, [subjects, sectionsBySubjectId, instructorIdsBySubjectId]);
 
   // ============================================================
   // SHARED RPC HELPER
@@ -241,18 +257,22 @@ export default function CoursesPage() {
 
   // --- Filtering & Pagination ---
   const uniquePrograms = [
-    ...new Set(subjects.map((s) => s.program).filter(Boolean)),
+    ...new Set(subjectCatalogRows.map((s) => s.program).filter(Boolean)),
   ].sort();
   const uniqueYears = [
-    ...new Set(subjects.map((s) => s.year).filter(Boolean)),
+    ...new Set(subjectCatalogRows.map((s) => s.year).filter(Boolean)),
   ].sort();
 
-  const filtered = subjects.filter((s) => {
+  const filtered = subjectCatalogRows.filter((s) => {
     const q = search.trim().toLowerCase();
+    const sectionTokens = (s.sections ?? []).map((sectionRow) =>
+      String(sectionRow.section ?? "").toLowerCase(),
+    );
     const matchSearch =
       !q ||
       s.code.toLowerCase().includes(q) ||
-      s.title.toLowerCase().includes(q);
+      s.title.toLowerCase().includes(q) ||
+      sectionTokens.some((sectionCode) => sectionCode.includes(q));
     const matchProgram = !programFilter || s.program === programFilter;
     const matchYear = !yearFilter || s.year === yearFilter;
     return matchSearch && matchProgram && matchYear;
@@ -265,9 +285,7 @@ export default function CoursesPage() {
     safePage * PAGE_SIZE,
   );
 
-  const deleteTargetSectionCount = deleteTarget
-    ? (sectionsBySubjectId[deleteTarget.id]?.length ?? 0)
-    : 0;
+  const deleteTargetSectionCount = deleteTarget?.sections?.length ?? 0;
 
   return (
     <div className="page-container">
@@ -360,7 +378,7 @@ export default function CoursesPage() {
             </tr>
           </thead>
           <tbody>
-            {subjects.length === 0 ? (
+            {subjectCatalogRows.length === 0 ? (
               <tr>
                 <td colSpan="8" className="empty-table">
                   There are no subjects yet. Click{" "}
@@ -374,22 +392,31 @@ export default function CoursesPage() {
                 </td>
               </tr>
             ) : (
-              paginated.map((subject) => (
-                <tr key={subject.id}>
-                  <td>{subject.code}</td>
-                  <td>{subject.title}</td>
-                  <td>{subject.program}</td>
-                  <td>{subject.year}</td>
-                  <td>{subject.room_type}</td>
-                  <td>{sectionsBySubjectId[subject.id]?.length ?? 0}</td>
-                  <td>{instructorIdsBySubjectId[subject.id]?.length ?? 0}</td>
+              paginated.map((subjectRow) => (
+                <tr key={subjectRow.id}>
+                  <td>{subjectRow.code}</td>
+                  <td>{subjectRow.title}</td>
+                  <td>{subjectRow.program}</td>
+                  <td>{subjectRow.year}</td>
+                  <td>{subjectRow.room_type}</td>
+                  <td>
+                    {subjectRow.sections.length > 0
+                      ? subjectRow.sections
+                          .map(
+                            (sectionRow) =>
+                              `${sectionRow.section} (${sectionRow.enrolled})`,
+                          )
+                          .join(", ")
+                      : "0"}
+                  </td>
+                  <td>{subjectRow.instructorIds.length}</td>
                   <td className="actions">
                     {isAdmin && (
                       <>
                         <button
                           className="btn btn-secondary"
                           onClick={() => {
-                            setEditSubject(subject);
+                            setEditSubject(subjectRow);
                             setShowModal(true);
                           }}
                         >
@@ -397,7 +424,7 @@ export default function CoursesPage() {
                         </button>
                         <button
                           className="btn btn-danger"
-                          onClick={() => setDeleteTarget(subject)}
+                          onClick={() => setDeleteTarget(subjectRow)}
                         >
                           Delete
                         </button>
@@ -505,15 +532,11 @@ export default function CoursesPage() {
 
       {showModal && isAdmin && (
         <CourseModal
-          subjects={subjects}
+          subjects={subjectCatalogRows}
           existing={editSubject}
-          existingSections={
-            editSubject ? (sectionsBySubjectId[editSubject.id] ?? []) : []
-          }
+          existingSections={editSubject?.sections ?? []}
           instructors={instructors}
-          existingInstructorIds={
-            editSubject ? (instructorIdsBySubjectId[editSubject.id] ?? []) : []
-          }
+          existingInstructorIds={editSubject?.instructorIds ?? []}
           currentAcademicYear={CURRENT_ACADEMIC_YEAR}
           currentSemester={CURRENT_SEMESTER}
           onClose={() => setShowModal(false)}
