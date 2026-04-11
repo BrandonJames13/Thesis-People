@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
+import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
 import {
@@ -21,6 +22,17 @@ const PAGE_SIZE = 12;
 export default function RoomsPage() {
   const { isAdmin } = useAuth();
   const { showNotification } = useNotification();
+
+  const notifyDbError = useCallback(
+    (error, operation, entity = "room") => {
+      const { userMessage } = buildDatabaseErrorMessage(error, {
+        operation,
+        entity,
+      });
+      showNotification(`⚠ ${userMessage}`);
+    },
+    [showNotification],
+  );
 
   const [rooms, setRooms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -42,7 +54,7 @@ export default function RoomsPage() {
 
       if (error) {
         console.error(error);
-        showNotification(`⚠ ${error.message}`);
+        notifyDbError(error, "load", "rooms");
         return;
       }
 
@@ -59,7 +71,7 @@ export default function RoomsPage() {
     } finally {
       setLoading(false);
     }
-  }, [showNotification]);
+  }, [notifyDbError]);
 
   useEffect(() => {
     fetchRooms();
@@ -91,7 +103,7 @@ export default function RoomsPage() {
       .select();
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "create");
       return false;
     }
 
@@ -127,7 +139,7 @@ export default function RoomsPage() {
       .single();
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "update");
       return false;
     }
 
@@ -170,7 +182,7 @@ export default function RoomsPage() {
       .eq("id", deleteTarget.id);
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "delete");
       return;
     }
 

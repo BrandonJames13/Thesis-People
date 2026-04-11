@@ -1,19 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@supabase/supabase-js";
+import { adminSupabase } from "../lib/adminSupabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
+import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import Modal from "../components/common/Modal";
 import ConfirmModal from "../components/common/ConfirmModal";
-
-const adminSupabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY,
-);
 
 export default function UserManagementPage() {
   const { currentUser } = useAuth();
   const { showNotification } = useNotification();
   const isAdmin = currentUser?.role === "admin";
+
+  const notifyDbError = useCallback(
+    (error, operation, entity = "user") => {
+      const { userMessage } = buildDatabaseErrorMessage(error, {
+        operation,
+        entity,
+      });
+      showNotification(`⚠ ${userMessage}`);
+    },
+    [showNotification],
+  );
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,13 +38,13 @@ export default function UserManagementPage() {
     setLoading(true);
     const { data, error } = await adminSupabase.auth.admin.listUsers();
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "load", "users");
       setLoading(false);
       return;
     }
     setUsers(data.users || []);
     setLoading(false);
-  }, [showNotification]);
+  }, [notifyDbError]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -47,7 +54,7 @@ export default function UserManagementPage() {
       if (!isMounted) return;
 
       if (error) {
-        showNotification(`⚠ ${error.message}`);
+        notifyDbError(error, "load", "users");
         setLoading(false);
         return;
       }
@@ -59,7 +66,7 @@ export default function UserManagementPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAdmin, showNotification]);
+  }, [isAdmin, notifyDbError]);
 
   if (!isAdmin) {
     return (
@@ -82,7 +89,7 @@ export default function UserManagementPage() {
       deleteTarget.id,
     );
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "delete", "user");
     } else {
       setUsers(users.filter((u) => u.id !== deleteTarget.id));
       showNotification(`User ${deleteTarget.email} deleted.`);
@@ -102,7 +109,7 @@ export default function UserManagementPage() {
       updates,
     );
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "update", "user");
     } else {
       setUsers(
         users.map((u) =>
@@ -474,7 +481,11 @@ function AddUserModal({ onClose, onSuccess }) {
     });
     setLoading(false);
     if (err) {
-      setError(err.message);
+      const { userMessage } = buildDatabaseErrorMessage(err, {
+        operation: "create",
+        entity: "user",
+      });
+      setError(userMessage);
     } else {
       onSuccess();
     }

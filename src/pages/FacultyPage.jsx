@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useData } from "../context/DataContext";
 import { useNotification } from "../context/NotificationContext";
+import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { InstructorModal } from "../components/modals/InstructorModal";
 
@@ -203,6 +204,17 @@ export default function FacultyPage() {
   const { scheduleAssignments, getInstructorLoad } = useData();
   const { showNotification } = useNotification();
 
+  const notifyDbError = useCallback(
+    (error, operation, entity = "instructor") => {
+      const { userMessage } = buildDatabaseErrorMessage(error, {
+        operation,
+        entity,
+      });
+      showNotification(`⚠ ${userMessage}`);
+    },
+    [showNotification],
+  );
+
   const [instructors, setInstructors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -224,7 +236,7 @@ export default function FacultyPage() {
 
       if (error) {
         console.error(error);
-        showNotification(`⚠ ${error.message}`);
+        notifyDbError(error, "load", "instructors");
         return;
       }
 
@@ -232,7 +244,7 @@ export default function FacultyPage() {
     } finally {
       setLoading(false);
     }
-  }, [showNotification]);
+  }, [notifyDbError]);
 
   useEffect(() => {
     fetchInstructors();
@@ -251,7 +263,7 @@ export default function FacultyPage() {
       .select();
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "create");
       return false;
     }
 
@@ -273,7 +285,7 @@ export default function FacultyPage() {
       .select();
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "update");
       return false;
     }
 
@@ -297,7 +309,7 @@ export default function FacultyPage() {
       .eq("id", deleteTarget.id);
 
     if (error) {
-      showNotification(`⚠ ${error.message}`);
+      notifyDbError(error, "delete");
       return;
     }
 
@@ -416,7 +428,7 @@ export default function FacultyPage() {
 
       <div className="card">
         <table>
-         <thead>
+          <thead>
             <tr>
               <th>Instructor</th>
               <th>Employment</th>
@@ -440,27 +452,44 @@ export default function FacultyPage() {
             ) : (
               paginated.map((inst) => (
                 <tr key={inst.id}>
-                  <td><strong>{inst.name}</strong></td>
+                  <td>
+                    <strong>{inst.name}</strong>
+                  </td>
 
                   {/* Employment Status — render as pills */}
                   <td>
                     {(inst.employment_status ?? []).length > 0 ? (
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      <div
+                        style={{ display: "flex", gap: 4, flexWrap: "wrap" }}
+                      >
                         {inst.employment_status.map((es) => (
-                          <span key={es} className="pill pill-blue" style={{ fontSize: 10 }}>
+                          <span
+                            key={es}
+                            className="pill pill-blue"
+                            style={{ fontSize: 10 }}
+                          >
                             {es}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>
+                      <span style={{ color: "var(--text3)", fontSize: 12 }}>
+                        —
+                      </span>
                     )}
                   </td>
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
                       const counts = getInstructorLoad(inst);
-                      if (counts.subjectCount === 0 && counts.sectionCount === 0) {
-                        return <span style={{ color: "var(--text3)" }}>No scheduled sections</span>;
+                      if (
+                        counts.subjectCount === 0 &&
+                        counts.sectionCount === 0
+                      ) {
+                        return (
+                          <span style={{ color: "var(--text3)" }}>
+                            No scheduled sections
+                          </span>
+                        );
                       }
                       return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
@@ -471,9 +500,11 @@ export default function FacultyPage() {
                     {(() => {
                       const statusLabel = String(inst.status ?? "").trim();
                       const pillTone =
-                        statusLabel.toLowerCase() === "active" ? "green"
-                        : statusLabel ? "red"
-                        : "orange";
+                        statusLabel.toLowerCase() === "active"
+                          ? "green"
+                          : statusLabel
+                            ? "red"
+                            : "orange";
                       return (
                         <span className={`pill pill-${pillTone}`}>
                           {statusLabel || "Unspecified"}
@@ -486,7 +517,10 @@ export default function FacultyPage() {
                       <div style={{ display: "flex", gap: 6 }}>
                         <button
                           className="btn btn-secondary"
-                          onClick={() => { setEditInstructor(inst); setShowModal(true); }}
+                          onClick={() => {
+                            setEditInstructor(inst);
+                            setShowModal(true);
+                          }}
                         >
                           Edit
                         </button>
@@ -494,7 +528,9 @@ export default function FacultyPage() {
                           className="btn btn-secondary"
                           onClick={() => {
                             exportInstructorSchedule(inst, scheduleAssignments);
-                            showNotification(`Schedule exported for ${inst.name}.`);
+                            showNotification(
+                              `Schedule exported for ${inst.name}.`,
+                            );
                           }}
                         >
                           Export

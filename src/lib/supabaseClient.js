@@ -3,13 +3,20 @@
  * Helper to initialize the Supabase client.
  */
 
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
+import {
+  getRequiredSupabaseEnv,
+  requireSupabaseEnvVars,
+  validateSupabaseUrl,
+} from "./supabaseEnv";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const REQUIRED_ENV_VARS = ["VITE_SUPABASE_URL", "VITE_SUPABASE_ANON_KEY"];
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables");
-}
+requireSupabaseEnvVars(REQUIRED_ENV_VARS, "Supabase");
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+const supabaseUrl = getRequiredSupabaseEnv("VITE_SUPABASE_URL");
+const supabaseAnonKey = getRequiredSupabaseEnv("VITE_SUPABASE_ANON_KEY");
+
+validateSupabaseUrl(supabaseUrl);
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

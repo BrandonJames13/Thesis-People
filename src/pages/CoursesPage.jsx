@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
+import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import { CourseModal } from "../components/modals/courseModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
@@ -12,6 +13,17 @@ const PAGE_SIZE = 15;
 export default function CoursesPage() {
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
+
+  const notifyDbError = useCallback(
+    (error, operation, entity = "subject") => {
+      const { userMessage } = buildDatabaseErrorMessage(error, {
+        operation,
+        entity,
+      });
+      showNotification(`⚠ ${userMessage}`);
+    },
+    [showNotification],
+  );
 
   const [subjects, setSubjects] = useState([]);
   const [sectionsBySubjectId, setSectionsBySubjectId] = useState({});
@@ -123,9 +135,7 @@ export default function CoursesPage() {
 
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) {
-      showNotification(
-        `⚠ Could not refresh auth session: ${refreshError.message}`,
-      );
+      notifyDbError(refreshError, "refresh", "session");
       return false;
     }
 
@@ -176,17 +186,7 @@ export default function CoursesPage() {
 
     // Supabase-level error (network, auth, RLS)
     if (error) {
-      const isRls = `${error.message ?? ""} ${error.details ?? ""}`
-        .toLowerCase()
-        .includes("row-level security");
-
-      if (isRls) {
-        showNotification(
-          `⚠ Permission denied (RLS). Verify ${operation} policy for admin users.`,
-        );
-      } else {
-        showNotification(`⚠ ${error.message}`);
-      }
+      notifyDbError(error, operation.toLowerCase());
 
       return false;
     }

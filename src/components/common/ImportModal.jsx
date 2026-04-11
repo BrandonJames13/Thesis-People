@@ -9,6 +9,15 @@ import {
 } from "../../data/constants";
 import { getWingFromRoomInput } from "../../utils/roomUtils";
 import {
+  buildDatabaseErrorMessage,
+  isCheckViolation,
+  isForeignKeyViolation,
+  isNotNullViolation,
+  isRlsViolation,
+  isUniqueViolation,
+  normalizePostgresError,
+} from "../../utils/errorUtils";
+import {
   buildSectionIdentityKey,
   buildSubjectIdentityKey,
   CSV_TYPE_OPTIONS,
@@ -151,51 +160,35 @@ export default function ImportModal({ isOpen, onClose }) {
     }
   };
 
-  const normalizeDbError = (err, fallback) => {
-    if (!err) return fallback;
-    const parts = [err.message, err.details, err.hint].filter(Boolean);
-    return parts.join(" | ") || fallback;
-  };
+  const toNormalizedError = (err, fallbackMessage, context = {}) => {
+    const normalized = normalizePostgresError(err, fallbackMessage);
+    const { userMessage } = buildDatabaseErrorMessage(err, {
+      fallbackMessage,
+      ...context,
+    });
 
-  const isRlsViolation = (err) => {
-    if (!err) return false;
-    const code = String(err.code ?? "").trim();
-    if (code === "42501") return true;
-    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
-    return message.includes("row-level security policy");
-  };
-
-  const getRlsTableFromError = (err) => {
-    const text = `${err?.message ?? ""} ${err?.details ?? ""}`;
-    const match = text.match(/for table\s+"([^"]+)"/i);
-    return match?.[1] ? String(match[1]).trim() : "this table";
+    const wrappedError = new Error(userMessage || normalized.message);
+    wrappedError.code = normalized.code;
+    wrappedError.details = normalized.details;
+    wrappedError.hint = normalized.hint;
+    wrappedError.constraint = normalized.constraint;
+    wrappedError.column = normalized.column;
+    wrappedError.table = normalized.table;
+    return wrappedError;
   };
 
   const buildRlsError = (err, tableName = null, action = "write") => {
-    const resolvedTable = tableName || getRlsTableFromError(err);
-    return new Error(
-      `Permission denied by Row Level Security while trying to ${action} ${resolvedTable}. Ask an admin to update RLS policies or use an authorized account. Recommended fix: run supabase/snippets/fix_import_rls.sql in Supabase SQL Editor.`,
+    const rlsError = toNormalizedError(
+      err,
+      "Permission denied by row-level security.",
+      {
+        operation: action,
+        table: tableName,
+      },
     );
-  };
 
-  const isNotNullViolation = (err) => {
-    if (!err) return false;
-    const code = String(err.code ?? "").trim();
-    if (code === "23502") return true;
-    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
-    return (
-      message.includes("null value") && message.includes("violates not-null")
-    );
-  };
-
-  const isUniqueViolation = (err) => {
-    if (!err) return false;
-    const code = String(err.code ?? "").trim();
-    if (code === "23505") return true;
-    const message = `${err.message ?? ""} ${err.details ?? ""}`.toLowerCase();
-    return (
-      message.includes("duplicate key value") && message.includes("unique")
-    );
+    rlsError.message = `${rlsError.message} Ask an admin to update RLS policies or use an authorized account. Recommended fix: run supabase/snippets/fix_import_rls.sql in Supabase SQL Editor.`;
+    return rlsError;
   };
 
   const isSubjectsCodeProgramUniqueViolation = (err) => {
@@ -249,44 +242,38 @@ export default function ImportModal({ isOpen, onClose }) {
         return retryData ?? [];
       }
 
-      const normalizedRetryError = new Error(
-        normalizeDbError(
-          retryError,
-          "Unable to import subjects. Duplicate subject code+program rows conflicted with existing records.",
-        ),
+      const normalizedRetryError = toNormalizedError(
+        retryError,
+        "Unable to import subjects. Duplicate subject code+program rows conflicted with existing records.",
+        {
+          operation: "write",
+          table,
+        },
       );
-      normalizedRetryError.code = retryError.code;
-      normalizedRetryError.details = retryError.details;
-      normalizedRetryError.hint = retryError.hint;
       throw normalizedRetryError;
     }
 
     if (error) {
       if (isRlsViolation(error)) {
-        const normalizedRlsError = buildRlsError(error, table, "write");
-        normalizedRlsError.code = error.code;
-        normalizedRlsError.details = error.details;
-        normalizedRlsError.hint = error.hint;
-        throw normalizedRlsError;
+        throw buildRlsError(error, table, "write");
       }
 
       if (table === "subjects" && isSubjectsCodeProgramUniqueViolation(error)) {
-        const normalizedSubjectsError = new Error(
+        const normalizedSubjectsError = toNormalizedError(
+          error,
           "Unable to import subjects. Duplicate Subject Code + Program records were detected. Keep only one row per code/program in the import batch.",
+          {
+            operation: "write",
+            table,
+          },
         );
-        normalizedSubjectsError.code = error.code;
-        normalizedSubjectsError.details = error.details;
-        normalizedSubjectsError.hint = error.hint;
         throw normalizedSubjectsError;
       }
 
-      const normalizedError = new Error(
-        normalizeDbError(error, fallbackMessage),
-      );
-      normalizedError.code = error.code;
-      normalizedError.details = error.details;
-      normalizedError.hint = error.hint;
-      throw normalizedError;
+      throw toNormalizedError(error, fallbackMessage, {
+        operation: "write",
+        table,
+      });
     }
 
     return data ?? [];
@@ -312,20 +299,13 @@ export default function ImportModal({ isOpen, onClose }) {
 
     if (error) {
       if (isRlsViolation(error)) {
-        const normalizedRlsError = buildRlsError(error, table, "read");
-        normalizedRlsError.code = error.code;
-        normalizedRlsError.details = error.details;
-        normalizedRlsError.hint = error.hint;
-        throw normalizedRlsError;
+        throw buildRlsError(error, table, "read");
       }
 
-      const normalizedError = new Error(
-        normalizeDbError(error, `Unable to load existing ${table}.`),
-      );
-      normalizedError.code = error.code;
-      normalizedError.details = error.details;
-      normalizedError.hint = error.hint;
-      throw normalizedError;
+      throw toNormalizedError(error, `Unable to load existing ${table}.`, {
+        operation: "read",
+        table,
+      });
     }
 
     return data ?? [];
@@ -402,17 +382,16 @@ export default function ImportModal({ isOpen, onClose }) {
         const { error: updateError } = await op;
         if (updateError) {
           if (isRlsViolation(updateError)) {
-            const normalizedRlsError = buildRlsError(
-              updateError,
-              "instructors",
-              "update",
-            );
-            normalizedRlsError.code = updateError.code;
-            normalizedRlsError.details = updateError.details;
-            normalizedRlsError.hint = updateError.hint;
-            throw normalizedRlsError;
+            throw buildRlsError(updateError, "instructors", "update");
           }
-          throw updateError;
+          throw toNormalizedError(
+            updateError,
+            "Unable to update instructors.",
+            {
+              operation: "update",
+              table: "instructors",
+            },
+          );
         }
       }
     };
@@ -424,7 +403,10 @@ export default function ImportModal({ isOpen, onClose }) {
         if (isRlsViolation(err)) {
           throw buildRlsError(err, "instructors", "write");
         }
-        throw new Error(normalizeDbError(err, "Unable to import instructors."));
+        throw toNormalizedError(err, "Unable to import instructors.", {
+          operation: "write",
+          table: "instructors",
+        });
       }
       await importRows(defaultRows);
     }
@@ -468,11 +450,13 @@ export default function ImportModal({ isOpen, onClose }) {
       .in("code", codes);
 
     if (subjectIndexError) {
-      throw new Error(
-        normalizeDbError(
-          subjectIndexError,
-          "Unable to map imported sections to subjects.",
-        ),
+      throw toNormalizedError(
+        subjectIndexError,
+        "Unable to map imported sections to subjects.",
+        {
+          operation: "read",
+          table: "subjects",
+        },
       );
     }
 
@@ -767,6 +751,12 @@ export default function ImportModal({ isOpen, onClose }) {
       if (isRlsViolation(err)) {
         const rlsError = buildRlsError(err, null, "write");
         setError(rlsError.message);
+      } else if (isForeignKeyViolation(err) || isCheckViolation(err)) {
+        const { userMessage } = buildDatabaseErrorMessage(err, {
+          operation: "import",
+          entity: "data",
+        });
+        setError(userMessage || "Unable to import CSV data.");
       } else {
         setError(err.message || "Unable to import CSV data.");
       }
