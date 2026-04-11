@@ -3,6 +3,7 @@ import {
   normalizeRoomType,
   sanitizeRoomCapacity,
   getDefaultRoomCapacity,
+  isValidRoomNumber,
   normalizeDepartment,
   normalizeProgram,
   normalizeSemester,
@@ -342,6 +343,8 @@ function parseFullListRows(rows, warnings = []) {
       const rowNumber = index + 2;
       const rawRoomType = String(r[9] ?? "").trim();
       const roomType = normalizeRoomType(r[9]);
+      const rawRoom = String(r[10] ?? "").trim();
+      const room = rawRoom.toUpperCase();
       const section_id = String(r[0] ?? "").trim();
       const code = String(r[1] ?? "")
         .trim()
@@ -381,6 +384,13 @@ function parseFullListRows(rows, warnings = []) {
         );
       }
 
+      if (room && !isValidRoomNumber(room)) {
+        addImportWarning(
+          warnings,
+          `Full list row ${rowNumber}: room number "${room}" does not match expected format [LCR]###. Please verify.`,
+        );
+      }
+
       return {
         section_id,
         sectionId: section_id,
@@ -393,7 +403,7 @@ function parseFullListRows(rows, warnings = []) {
         year,
         enrolled: toNumber(r[8], 0),
         roomType,
-        room: String(r[10] ?? "").trim(),
+        room: room || null,
         pattern: String(r[11] ?? "").trim(),
         time: String(r[12] ?? "").trim(),
         duration: toNumber(r[13], 0),
@@ -484,7 +494,8 @@ function parseRoomRows(rows, warnings = []) {
   return rows
     .map((r, index) => {
       const rowNumber = index + 2;
-      const number = String(r[0] ?? "").trim();
+      const rawNumber = String(r[0] ?? "").trim();
+      const number = rawNumber.toUpperCase();
       const rawType = String(r[1] ?? "").trim();
       const type = normalizeRoomType(r[1]);
       const wingData = getWingFromRoomInput(number, r[4]);
@@ -492,6 +503,20 @@ function parseRoomRows(rows, warnings = []) {
       const computedCapacity = rawCapacity
         ? sanitizeRoomCapacity(type, rawCapacity)
         : getDefaultRoomCapacity(type);
+
+      if (!number) {
+        addImportWarning(
+          warnings,
+          `Rooms row ${rowNumber}: blank room number; skipped.`,
+        );
+      }
+
+      if (!isValidRoomNumber(number)) {
+        addImportWarning(
+          warnings,
+          `Rooms row ${rowNumber}: room number "${number}" does not match expected format [LCR]###. Please verify.`,
+        );
+      }
 
       if (!rawCapacity) {
         addImportWarning(

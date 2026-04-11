@@ -1,3 +1,10 @@
+import {
+  isValidRoomNumber,
+  ROOM_TYPE_LABELS,
+  ROOM_STATUSES,
+  getRoomCapacityLimit,
+} from "../data/constants";
+
 const WING_CODES = {
   L: "L",
   C: "C",
@@ -73,4 +80,72 @@ export function getWingFromRoomInput(roomNumber, providedWing) {
     inferredWing: inferred,
     resolvedWing: normalizedProvided || inferred || null,
   };
+}
+
+/**
+ * Validates a room payload against all schema constraints.
+ * Returns an error message string if validation fails, null if valid.
+ *
+ * @param {Object} payload - The room data object
+ * @param {string} payload.number - Room number (e.g., "L101")
+ * @param {string} payload.type - Room type (should be "Lecture" or "Computer Lab")
+ * @param {number} payload.capacity - Room capacity
+ * @param {string} payload.status - Room status
+ * @param {string|null} payload.wing - Wing code (nullable)
+ * @returns {string|null} Error message if invalid, null if valid
+ */
+export function validateRoomPayload(payload) {
+  if (!payload) return "Invalid payload: payload is required.";
+
+  const { number, type, capacity, status, wing } = payload;
+
+  // Validate number
+  if (!number || typeof number !== "string") {
+    return "Room number is required.";
+  }
+  if (!isValidRoomNumber(number)) {
+    return `Room number must match pattern [LCR]### (e.g., L101, C202, R315).`;
+  }
+
+  // Validate type
+  if (!type || typeof type !== "string") {
+    return "Room type is required.";
+  }
+  if (!ROOM_TYPE_LABELS.includes(type)) {
+    return `Room type must be one of: ${ROOM_TYPE_LABELS.join(", ")}. Got: "${type}"`;
+  }
+
+  // Validate capacity
+  if (capacity === undefined || capacity === null) {
+    return "Capacity is required.";
+  }
+  const parsedCapacity = Number(capacity);
+  if (!Number.isFinite(parsedCapacity)) {
+    return "Capacity must be a valid number.";
+  }
+  if (parsedCapacity <= 0) {
+    return "Capacity must be greater than 0.";
+  }
+  const { max } = getRoomCapacityLimit(type);
+  if (parsedCapacity > max) {
+    return `${type} capacity cannot exceed ${max}. Got: ${parsedCapacity}`;
+  }
+
+  // Validate status
+  if (!status || typeof status !== "string") {
+    return "Status is required.";
+  }
+  if (!ROOM_STATUSES.includes(status)) {
+    return `Status must be one of: ${ROOM_STATUSES.join(", ")}. Got: "${status}"`;
+  }
+
+  // Validate wing (nullable, but if provided must be valid)
+  if (wing !== null && wing !== undefined && wing !== "") {
+    const wingStr = String(wing);
+    if (!["L", "C", "R"].includes(wingStr)) {
+      return `Wing must be one of: L, C, R (or null). Got: "${wingStr}"`;
+    }
+  }
+
+  return null; // Valid
 }

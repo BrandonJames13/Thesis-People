@@ -1,6 +1,9 @@
 import { useState } from "react";
 import Modal from "../common/Modal";
-import { getWingFromRoomInput } from "../../utils/roomUtils";
+import {
+  getWingFromRoomInput,
+  validateRoomPayload,
+} from "../../utils/roomUtils";
 import {
   getDefaultRoomCapacity,
   getRoomCapacityLimit,
@@ -42,30 +45,28 @@ export function AddRoomModal({
     : null;
 
   const handleSubmit = () => {
-    const trimmedNumber = number.trim();
+    const trimmedNumber = number.trim().toUpperCase();
     const normalizedType = normalizeRoomType(type, "");
     const trimmedCapacity = String(capacity ?? "").trim();
 
+    // Validate basic required fields
     if (!trimmedNumber || !normalizedType) {
       setError("Please fill in all fields correctly.");
       return;
     }
 
+    // Parse capacity: use provided value or default to type max
     const cap = trimmedCapacity
       ? parseInt(trimmedCapacity, 10)
       : getDefaultRoomCapacity(normalizedType);
 
+    // Check for NaN or invalid capacity
     if (trimmedCapacity && (isNaN(cap) || cap <= 0)) {
       setError("Capacity must be a positive number.");
       return;
     }
 
-    const { max } = getRoomCapacityLimit(normalizedType);
-    if (!isRoomCapacityValid(normalizedType, cap)) {
-      setError(`${normalizedType} capacity must be between 1 and ${max}.`);
-      return;
-    }
-
+    // Get wing data and check for conflicts
     const { providedWing, inferredWing, resolvedWing } = getWingFromRoomInput(
       trimmedNumber,
       wing,
@@ -78,14 +79,24 @@ export function AddRoomModal({
       return;
     }
 
-    setError("");
-    onSubmit({
+    // Build final payload
+    const payload = {
       number: trimmedNumber,
       type: normalizedType,
       capacity: cap,
       status,
       wing: resolvedWing,
-    });
+    };
+
+    // Validate payload using centralized validation
+    const validationError = validateRoomPayload(payload);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setError("");
+    onSubmit(payload);
   };
 
   const modalTitle = mode === "edit" ? "✎ Edit Room" : "+ Add New Room";

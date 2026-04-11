@@ -134,6 +134,10 @@ export const ROOM_CAPACITY_LIMITS = {
   },
 };
 
+export const ROOM_NUMBER_PATTERN = /^[LCR]\d{3}$/;
+
+export const ROOM_STATUSES = ["Available", "Occupied", "Maintenance"];
+
 export function normalizeRoomType(value, fallback = DEFAULT_ROOM_TYPE) {
   const normalized = String(value ?? "")
     .trim()
@@ -220,4 +224,11 @@ export function sanitizeRoomCapacity(roomType, capacity) {
   }
 
   return Math.min(Math.floor(parsed), max);
+}
+
+export function isValidRoomNumber(number) {
+  const trimmed = String(number ?? "")
+    .trim()
+    .toUpperCase();
+  return ROOM_NUMBER_PATTERN.test(trimmed);
 }

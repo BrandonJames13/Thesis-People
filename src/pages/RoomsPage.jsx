@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
+import { validateRoomPayload } from "../utils/roomUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
 import {
@@ -97,6 +98,13 @@ export default function RoomsPage() {
       wing: room.wing ?? null,
     };
 
+    // Validate payload before DB submission
+    const validationError = validateRoomPayload(payload);
+    if (validationError) {
+      showNotification(`⚠ Validation error: ${validationError}`);
+      return false;
+    }
+
     const { data, error } = await supabase
       .from("rooms")
       .insert([payload])
@@ -130,6 +138,13 @@ export default function RoomsPage() {
       status: room.status,
       wing: room.wing ?? null,
     };
+
+    // Validate payload before DB submission
+    const validationError = validateRoomPayload(payload);
+    if (validationError) {
+      showNotification(`⚠ Validation error: ${validationError}`);
+      return false;
+    }
 
     const { data, error } = await supabase
       .from("rooms")
