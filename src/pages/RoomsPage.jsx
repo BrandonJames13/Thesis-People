@@ -16,6 +16,8 @@ const WINGS = [
   { code: "C", label: "Center Wing (C)" },
 ];
 
+const PAGE_SIZE = 12;
+
 export default function RoomsPage() {
   const { isAdmin } = useAuth();
   const { showNotification } = useNotification();
@@ -29,6 +31,7 @@ export default function RoomsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [page, setPage] = useState(1);
 
   const fetchRooms = useCallback(async () => {
     try {
@@ -189,6 +192,13 @@ export default function RoomsPage() {
     return matchSearch && matchType && matchStatus && matchWing;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
   if (loading) {
     return <div className="page-container">Loading rooms...</div>;
   }
@@ -211,17 +221,21 @@ export default function RoomsPage() {
             type="text"
             placeholder="Search rooms…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
           />
           <select
             className="search-input"
             style={{ width: 140 }}
             value={typeFilter || "All Types"}
-            onChange={(e) =>
+            onChange={(e) => {
               setTypeFilter(
                 e.target.value === "All Types" ? "" : e.target.value,
-              )
-            }
+              );
+              setPage(1);
+            }}
           >
             <option>All Types</option>
             <option>Lecture</option>
@@ -231,11 +245,12 @@ export default function RoomsPage() {
             className="search-input"
             style={{ width: 140 }}
             value={wingFilter || "All Wings"}
-            onChange={(e) =>
+            onChange={(e) => {
               setWingFilter(
                 e.target.value === "All Wings" ? "" : e.target.value,
-              )
-            }
+              );
+              setPage(1);
+            }}
           >
             <option>All Wings</option>
             {WINGS.map((w) => (
@@ -248,11 +263,12 @@ export default function RoomsPage() {
             className="search-input"
             style={{ width: 140 }}
             value={statusFilter || "All Status"}
-            onChange={(e) =>
+            onChange={(e) => {
               setStatusFilter(
                 e.target.value === "All Status" ? "" : e.target.value,
-              )
-            }
+              );
+              setPage(1);
+            }}
           >
             <option>All Status</option>
             <option>Available</option>
@@ -269,7 +285,7 @@ export default function RoomsPage() {
 
       <div className="card">
         <div className="rooms-grid">
-          {filtered.length === 0 ? (
+          {paginated.length === 0 ? (
             <div
               style={{
                 gridColumn: "1 / -1",
@@ -282,7 +298,7 @@ export default function RoomsPage() {
               No rooms match your search.
             </div>
           ) : (
-            filtered.map((room) => {
+            paginated.map((room) => {
               const statusColor =
                 room.status === "Available"
                   ? "green"
@@ -392,6 +408,98 @@ export default function RoomsPage() {
             })
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 16px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–
+              {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+              {filtered.length} rooms
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(1)}
+                disabled={safePage === 1}
+              >
+                «
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+              >
+                ‹
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+                )
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push("...");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      style={{
+                        padding: "4px 6px",
+                        fontSize: 12,
+                        color: "var(--text3)",
+                      }}
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      className={
+                        p === safePage ? "btn btn-primary" : "btn btn-secondary"
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        minWidth: 32,
+                      }}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                ›
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(totalPages)}
+                disabled={safePage === totalPages}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showModal && isAdmin && (

@@ -7,6 +7,7 @@ import ConfirmModal from "../components/common/ConfirmModal";
 
 const CURRENT_ACADEMIC_YEAR = "2025-2026";
 const CURRENT_SEMESTER = "2nd";
+const PAGE_SIZE = 15;
 
 export default function CoursesPage() {
   const { showNotification } = useNotification();
@@ -20,6 +21,12 @@ export default function CoursesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editSubject, setEditSubject] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+
+  // Search & pagination
+  const [search, setSearch] = useState("");
+  const [programFilter, setProgramFilter] = useState("");
+  const [yearFilter, setYearFilter] = useState("");
+  const [page, setPage] = useState(1);
 
   // ============================================================
   // FETCH
@@ -38,11 +45,15 @@ export default function CoursesPage() {
           .order("code"),
         supabase
           .from("subject_sections")
-          .select("id, subject_id, section, enrolled, status, academic_year, semester")
+          .select(
+            "id, subject_id, section, enrolled, status, academic_year, semester",
+          )
           .eq("academic_year", CURRENT_ACADEMIC_YEAR)
           .eq("semester", CURRENT_SEMESTER),
         supabase.from("instructors").select("id, name").order("name"),
-        supabase.from("instructor_subjects").select("subject_id, instructor_id"),
+        supabase
+          .from("instructor_subjects")
+          .select("subject_id, instructor_id"),
       ]);
 
       if (subjectError) {
@@ -54,12 +65,15 @@ export default function CoursesPage() {
       if (sectionError) {
         console.warn("Section load failed", sectionError);
         showNotification(
-          `⚠ Subject sections could not be loaded for ${CURRENT_ACADEMIC_YEAR} ${CURRENT_SEMESTER}. Showing subject catalog only.`
+          `⚠ Subject sections could not be loaded for ${CURRENT_ACADEMIC_YEAR} ${CURRENT_SEMESTER}. Showing subject catalog only.`,
         );
       }
 
       if (instructorError || instructorSubjectError) {
-        console.warn("Instructor load failed", { instructorError, instructorSubjectError });
+        console.warn("Instructor load failed", {
+          instructorError,
+          instructorSubjectError,
+        });
         showNotification("⚠ Instructor assignments could not be fully loaded.");
       }
 
@@ -74,7 +88,8 @@ export default function CoursesPage() {
         const instructorId = String(row.instructor_id ?? "").trim();
         if (!subjectId || !instructorId) return acc;
         if (!acc[subjectId]) acc[subjectId] = [];
-        if (!acc[subjectId].includes(instructorId)) acc[subjectId].push(instructorId);
+        if (!acc[subjectId].includes(instructorId))
+          acc[subjectId].push(instructorId);
         return acc;
       }, {});
 
@@ -82,7 +97,7 @@ export default function CoursesPage() {
       setSectionsBySubjectId(sectionError ? {} : sectionMap);
       setInstructors(instructorRows ?? []);
       setInstructorIdsBySubjectId(
-        instructorError || instructorSubjectError ? {} : instructorMap
+        instructorError || instructorSubjectError ? {} : instructorMap,
       );
     } finally {
       setLoading(false);
@@ -96,7 +111,11 @@ export default function CoursesPage() {
   // ============================================================
   // SHARED RPC HELPER
   // ============================================================
-  async function callManageSubject(operation, subjectPayload = {}, existingSubjectId = null) {
+  async function callManageSubject(
+    operation,
+    subjectPayload = {},
+    existingSubjectId = null,
+  ) {
     if (!isAdmin) {
       showNotification("Admin access required for this action.");
       return false;
@@ -104,13 +123,17 @@ export default function CoursesPage() {
 
     const { error: refreshError } = await supabase.auth.refreshSession();
     if (refreshError) {
-      showNotification(`⚠ Could not refresh auth session: ${refreshError.message}`);
+      showNotification(
+        `⚠ Could not refresh auth session: ${refreshError.message}`,
+      );
       return false;
     }
 
     const normalizedSections = (subjectPayload?.sections ?? [])
       .map((s) => ({
-        section: String(s?.section ?? "").trim().toUpperCase(),
+        section: String(s?.section ?? "")
+          .trim()
+          .toUpperCase(),
         enrolled: Math.max(1, Number(s?.enrolled ?? 1)),
         status: s?.status === "Assigned" ? "Assigned" : "Not Assigned",
       }))
@@ -120,8 +143,8 @@ export default function CoursesPage() {
       new Set(
         (subjectPayload?.instructorIds ?? [])
           .map((id) => String(id ?? "").trim())
-          .filter(Boolean)
-      )
+          .filter(Boolean),
+      ),
     );
 
     // Client-side duplicate section check
@@ -137,18 +160,18 @@ export default function CoursesPage() {
     }
 
     const { data, error } = await supabase.rpc("manage_subject", {
-      p_operation:      operation,
-      p_subject_id:     existingSubjectId ?? null,
-      p_code:           subjectPayload?.code ?? null,
-      p_title:          subjectPayload?.title ?? null,
-      p_program:        subjectPayload?.program ?? null,
-      p_year:           subjectPayload?.year ?? null,
-      p_room_type:      subjectPayload?.room_type ?? null,
-      p_duration:       subjectPayload?.duration ?? 1.5,
-      p_sections:       normalizedSections,
+      p_operation: operation,
+      p_subject_id: existingSubjectId ?? null,
+      p_code: subjectPayload?.code ?? null,
+      p_title: subjectPayload?.title ?? null,
+      p_program: subjectPayload?.program ?? null,
+      p_year: subjectPayload?.year ?? null,
+      p_room_type: subjectPayload?.room_type ?? null,
+      p_duration: subjectPayload?.duration ?? 1.5,
+      p_sections: normalizedSections,
       p_instructor_ids: desiredInstructorIds,
-      p_academic_year:  CURRENT_ACADEMIC_YEAR,
-      p_semester:       CURRENT_SEMESTER,
+      p_academic_year: CURRENT_ACADEMIC_YEAR,
+      p_semester: CURRENT_SEMESTER,
     });
 
     // Supabase-level error (network, auth, RLS)
@@ -158,7 +181,9 @@ export default function CoursesPage() {
         .includes("row-level security");
 
       if (isRls) {
-        showNotification(`⚠ Permission denied (RLS). Verify ${operation} policy for admin users.`);
+        showNotification(
+          `⚠ Permission denied (RLS). Verify ${operation} policy for admin users.`,
+        );
       } else {
         showNotification(`⚠ ${error.message}`);
       }
@@ -181,7 +206,11 @@ export default function CoursesPage() {
   // ============================================================
   async function handleSave(subjectPayload) {
     const operation = editSubject ? "UPDATE" : "INSERT";
-    const ok = await callManageSubject(operation, subjectPayload, editSubject?.id ?? null);
+    const ok = await callManageSubject(
+      operation,
+      subjectPayload,
+      editSubject?.id ?? null,
+    );
 
     if (ok) {
       showNotification(editSubject ? "Subject updated." : "Subject added.");
@@ -197,7 +226,7 @@ export default function CoursesPage() {
 
     if (ok) {
       showNotification(
-        `Subject ${deleteTarget.code} deleted. ${sectionCount} section(s) removed.`
+        `Subject ${deleteTarget.code} deleted. ${sectionCount} section(s) removed.`,
       );
       setDeleteTarget(null);
     }
@@ -210,6 +239,32 @@ export default function CoursesPage() {
     return <div className="page-container">Loading subjects...</div>;
   }
 
+  // --- Filtering & Pagination ---
+  const uniquePrograms = [
+    ...new Set(subjects.map((s) => s.program).filter(Boolean)),
+  ].sort();
+  const uniqueYears = [
+    ...new Set(subjects.map((s) => s.year).filter(Boolean)),
+  ].sort();
+
+  const filtered = subjects.filter((s) => {
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      s.code.toLowerCase().includes(q) ||
+      s.title.toLowerCase().includes(q);
+    const matchProgram = !programFilter || s.program === programFilter;
+    const matchYear = !yearFilter || s.year === yearFilter;
+    return matchSearch && matchProgram && matchYear;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
   const deleteTargetSectionCount = deleteTarget
     ? (sectionsBySubjectId[deleteTarget.id]?.length ?? 0)
     : 0;
@@ -221,17 +276,73 @@ export default function CoursesPage() {
           <div className="section-title">Subject Catalog</div>
           <div className="section-subtitle">AY 2025–2026</div>
         </div>
-        {isAdmin && (
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setEditSubject(null);
-              setShowModal(true);
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search code or title…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            style={{ width: 220 }}
+          />
+          <select
+            className="search-input"
+            style={{ width: 130 }}
+            value={programFilter || "All Programs"}
+            onChange={(e) => {
+              setProgramFilter(
+                e.target.value === "All Programs" ? "" : e.target.value,
+              );
+              setPage(1);
             }}
           >
-            + Add Subject
-          </button>
-        )}
+            <option>All Programs</option>
+            {uniquePrograms.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
+          <select
+            className="search-input"
+            style={{ width: 120 }}
+            value={yearFilter || "All Years"}
+            onChange={(e) => {
+              setYearFilter(
+                e.target.value === "All Years" ? "" : e.target.value,
+              );
+              setPage(1);
+            }}
+          >
+            <option>All Years</option>
+            {uniqueYears.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setEditSubject(null);
+                setShowModal(true);
+              }}
+            >
+              + Add Subject
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -252,11 +363,18 @@ export default function CoursesPage() {
             {subjects.length === 0 ? (
               <tr>
                 <td colSpan="8" className="empty-table">
-                  There are no subjects yet. Click <strong>"Add Subject"</strong> to add one.
+                  There are no subjects yet. Click{" "}
+                  <strong>"Add Subject"</strong> to add one.
+                </td>
+              </tr>
+            ) : paginated.length === 0 ? (
+              <tr>
+                <td colSpan="8" className="empty-table">
+                  No subjects match your search.
                 </td>
               </tr>
             ) : (
-              subjects.map((subject) => (
+              paginated.map((subject) => (
                 <tr key={subject.id}>
                   <td>{subject.code}</td>
                   <td>{subject.title}</td>
@@ -291,6 +409,98 @@ export default function CoursesPage() {
             )}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 16px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–
+              {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+              {filtered.length} subjects
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(1)}
+                disabled={safePage === 1}
+              >
+                «
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+              >
+                ‹
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+                )
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push("...");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      style={{
+                        padding: "4px 6px",
+                        fontSize: 12,
+                        color: "var(--text3)",
+                      }}
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      className={
+                        p === safePage ? "btn btn-primary" : "btn btn-secondary"
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        minWidth: 32,
+                      }}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                ›
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(totalPages)}
+                disabled={safePage === totalPages}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showModal && isAdmin && (

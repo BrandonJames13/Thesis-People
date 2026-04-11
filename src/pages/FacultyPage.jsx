@@ -6,6 +6,8 @@ import { useNotification } from "../context/NotificationContext";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { InstructorModal } from "../components/modals/InstructorModal";
 
+const PAGE_SIZE = 10;
+
 function normalizeText(value) {
   return String(value ?? "")
     .trim()
@@ -207,6 +209,12 @@ export default function FacultyPage() {
   const [editInstructor, setEditInstructor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
+  // Search & pagination
+  const [search, setSearch] = useState("");
+  const [deptFilter, setDeptFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [page, setPage] = useState(1);
+
   const fetchInstructors = useCallback(async () => {
     try {
       const { data, error } = await supabase
@@ -300,6 +308,40 @@ export default function FacultyPage() {
     setDeleteTarget(null);
   }
 
+  // --- Filtering ---
+  const filtered = instructors.filter((inst) => {
+    const q = search.trim().toLowerCase();
+    const matchSearch =
+      !q ||
+      inst.name.toLowerCase().includes(q) ||
+      (inst.department ?? "").toLowerCase().includes(q);
+    const matchDept = !deptFilter || inst.department === deptFilter;
+    const matchStatus =
+      !statusFilter ||
+      String(inst.status ?? "").toLowerCase() === statusFilter.toLowerCase();
+    return matchSearch && matchDept && matchStatus;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  const handleSearch = (val) => {
+    setSearch(val);
+    setPage(1);
+  };
+  const handleDeptFilter = (val) => {
+    setDeptFilter(val);
+    setPage(1);
+  };
+  const handleStatusFilter = (val) => {
+    setStatusFilter(val);
+    setPage(1);
+  };
+
   if (loading) {
     return <div className="page-container">Loading instructors...</div>;
   }
@@ -310,20 +352,66 @@ export default function FacultyPage() {
         <div>
           <div className="section-title">Faculty Management</div>
           <div className="section-subtitle">
-            Teaching load & availability tracking
+            Teaching load &amp; availability tracking
           </div>
         </div>
-        {isAdmin && (
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setEditInstructor(null);
-              setShowModal(true);
-            }}
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search by name or dept…"
+            value={search}
+            onChange={(e) => handleSearch(e.target.value)}
+            style={{ width: 220 }}
+          />
+          <select
+            className="search-input"
+            style={{ width: 130 }}
+            value={deptFilter || "All Depts"}
+            onChange={(e) =>
+              handleDeptFilter(
+                e.target.value === "All Depts" ? "" : e.target.value,
+              )
+            }
           >
-            + Add Instructor
-          </button>
-        )}
+            <option>All Depts</option>
+            <option value="CS">CS</option>
+            <option value="IT">IT</option>
+            <option value="IS">IS</option>
+          </select>
+          <select
+            className="search-input"
+            style={{ width: 130 }}
+            value={statusFilter || "All Status"}
+            onChange={(e) =>
+              handleStatusFilter(
+                e.target.value === "All Status" ? "" : e.target.value,
+              )
+            }
+          >
+            <option>All Status</option>
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+          {isAdmin && (
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                setEditInstructor(null);
+                setShowModal(true);
+              }}
+            >
+              + Add Instructor
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card">
@@ -342,15 +430,15 @@ export default function FacultyPage() {
             </tr>
           </thead>
           <tbody>
-            {instructors.length === 0 ? (
+            {paginated.length === 0 ? (
               <tr>
-                <td colSpan={9} className="empty-table">
+                <td colSpan={6} className="empty-table">
                   No instructors yet. Click <strong>"Add Instructor"</strong>
                   to add one.
                 </td>
               </tr>
             ) : (
-              instructors.map((inst) => (
+              paginated.map((inst) => (
                 <tr key={inst.id}>
                   <td><strong>{inst.name}</strong></td>
 
@@ -368,8 +456,6 @@ export default function FacultyPage() {
                       <span style={{ color: "var(--text3)", fontSize: 12 }}>—</span>
                     )}
                   </td>
-
-                  {/* Scheduled Load */}
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
                       const counts = getInstructorLoad(inst);
@@ -379,25 +465,8 @@ export default function FacultyPage() {
                       return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
-
-                  {/* Max Units */}
-                  <td className="monospace" style={{ fontSize: 12 }}>
-                    {inst.max_units != null ? inst.max_units : (
-                      <span style={{ color: "var(--text3)" }}>—</span>
-                    )}
-                  </td>
-
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
-
-                  {/* Night Class */}
-                  <td>
-                    <span className={`pill pill-${inst.allow_night_class ? "green" : "orange"}`}>
-                      {inst.allow_night_class ? "Yes" : "No"}
-                    </span>
-                  </td>
-
-                  {/* Status */}
                   <td>
                     {(() => {
                       const statusLabel = String(inst.status ?? "").trim();
@@ -412,8 +481,6 @@ export default function FacultyPage() {
                       );
                     })()}
                   </td>
-
-                  {/* Actions */}
                   <td>
                     {isAdmin && (
                       <div style={{ display: "flex", gap: 6 }}>
@@ -446,6 +513,98 @@ export default function FacultyPage() {
             )}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 16px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–
+              {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+              {filtered.length} instructors
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(1)}
+                disabled={safePage === 1}
+              >
+                «
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+              >
+                ‹
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+                )
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push("...");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      style={{
+                        padding: "4px 6px",
+                        fontSize: 12,
+                        color: "var(--text3)",
+                      }}
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      className={
+                        p === safePage ? "btn btn-primary" : "btn btn-secondary"
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        minWidth: 32,
+                      }}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                ›
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(totalPages)}
+                disabled={safePage === totalPages}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showModal && isAdmin && (
@@ -471,9 +630,9 @@ export default function FacultyPage() {
 
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="?? Delete Instructor"
+        title="🗑 Delete Instructor"
         message={`Are you sure you want to delete ${deleteTarget?.name}? This cannot be undone.`}
-        confirmLabel="?? Yes, Delete"
+        confirmLabel="🗑 Yes, Delete"
         danger
         onConfirm={handleDeleteConfirm}
         onClose={() => setDeleteTarget(null)}

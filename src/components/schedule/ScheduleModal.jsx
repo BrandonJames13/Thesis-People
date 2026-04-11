@@ -61,11 +61,14 @@ export default function ScheduleModal({ onClose }) {
       ]),
     );
 
-    return availableSections.map((section) => {
+    const rows = [];
+
+    availableSections.forEach((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
       const sectionKey = getAssignmentIdentityKey(section);
       const importedAssignment = assignmentByKey.get(sectionKey) ?? {};
-      return {
+
+      const baseRow = {
         ...section,
         code: section.subjectCode,
         section: section.section,
@@ -73,7 +76,6 @@ export default function ScheduleModal({ onClose }) {
         title: subject.title ?? "",
         program: subject.program ?? "",
         year: subject.year ?? "",
-        roomType: section.roomType ?? subject.roomType ?? "Lecture",
         duration:
           Number(
             section.duration ?? importedAssignment.duration ?? subject.duration,
@@ -82,7 +84,44 @@ export default function ScheduleModal({ onClose }) {
         pattern: section.pattern || importedAssignment.pattern || "",
         instructor: section.instructor || importedAssignment.instructor || "",
       };
+
+      const roomType = section.roomType ?? subject.roomType ?? "Lecture";
+
+      // Detect subjects that carry BOTH Lec and Lab components encoded in the
+      // subject code (e.g. "DIGDESIG N Lab" / "DIGDESIG N Lec" are already
+      // separate rows). Additionally, some imports store a single row with a
+      // combined room_type like "Lec/Lab". Split those into two entries so
+      // each gets assigned to the correct room type independently.
+      const combinedRoomType = String(roomType).toLowerCase();
+      if (
+        combinedRoomType === "lec/lab" ||
+        combinedRoomType === "lecture/lab" ||
+        combinedRoomType === "lec & lab"
+      ) {
+        // Lecture component
+        rows.push({
+          ...baseRow,
+          roomType: "Lecture",
+          sectionId: `${section.sectionId}__LEC`,
+          sectionIdentity: `${section.sectionIdentity ?? section.sectionId}__LEC`,
+          title: `${baseRow.title} (Lec)`,
+          _splitComponent: "Lec",
+        });
+        // Lab component — typically uses computer lab room
+        rows.push({
+          ...baseRow,
+          roomType: "Computer Lab",
+          sectionId: `${section.sectionId}__LAB`,
+          sectionIdentity: `${section.sectionIdentity ?? section.sectionId}__LAB`,
+          title: `${baseRow.title} (Lab)`,
+          _splitComponent: "Lab",
+        });
+      } else {
+        rows.push({ ...baseRow, roomType });
+      }
     });
+
+    return rows;
   }, [availableSubjects, availableSections, scheduleAssignments]);
 
   const sectionRowsByIdentity = useMemo(
@@ -357,7 +396,6 @@ export default function ScheduleModal({ onClose }) {
           </button>
         </div>
 
-        {/* AUTO MODE */}
         {mode === "auto" && (
           <div
             style={{
@@ -375,14 +413,24 @@ export default function ScheduleModal({ onClose }) {
                 padding: "14px 16px",
                 fontSize: 12,
                 color: "var(--text2)",
-                lineHeight: 1.6,
+                lineHeight: 1.7,
               }}
             >
-              ⚙ The algorithm will assign rooms and time slots to all{" "}
-              <strong>Pending</strong> subject/sections automatically using the
-              Constraint-Based Greedy method and each section's imported
-              duration.
+              <strong>⚙ Smart Room Assignment Mode</strong>
+              <br />
+              The algorithm reads each section's{" "}
+              <strong>imported time, day, and meeting pattern</strong> from the
+              database and finds the best available room automatically.
+              <br />
+              If a room conflict is detected at the imported schedule, it will
+              try <strong>alternative meeting patterns</strong> at the same time
+              before scanning the full window. Sections that cannot be placed
+              are flagged as{" "}
+              <span style={{ color: "var(--red)" }}>Conflicts</span> for manual
+              review.
             </div>
+
+            {/* Fallback window — used only when a section has no imported time */}
             <div
               style={{
                 display: "grid",
@@ -400,7 +448,16 @@ export default function ScheduleModal({ onClose }) {
                     display: "block",
                   }}
                 >
-                  Start Time (Earliest Slot)
+                  Fallback Window Start
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      color: "var(--text3)",
+                      marginLeft: 4,
+                    }}
+                  >
+                    (sections with no imported time)
+                  </span>
                 </label>
                 <select
                   value={autoStart}
@@ -425,7 +482,7 @@ export default function ScheduleModal({ onClose }) {
                     display: "block",
                   }}
                 >
-                  End Time (Latest Slot)
+                  Fallback Window End
                 </label>
                 <select
                   value={autoEnd}
@@ -450,7 +507,16 @@ export default function ScheduleModal({ onClose }) {
                     display: "block",
                   }}
                 >
-                  Meeting Pattern
+                  Fallback Pattern
+                  <span
+                    style={{
+                      fontWeight: 400,
+                      color: "var(--text3)",
+                      marginLeft: 4,
+                    }}
+                  >
+                    (used when no imported pattern)
+                  </span>
                 </label>
                 <select
                   value={autoPattern}
@@ -467,6 +533,7 @@ export default function ScheduleModal({ onClose }) {
                 </select>
               </div>
             </div>
+
             <div>
               <label
                 style={{
@@ -477,7 +544,10 @@ export default function ScheduleModal({ onClose }) {
                   display: "block",
                 }}
               >
-                Active Days
+                Active Days{" "}
+                <span style={{ fontWeight: 400, color: "var(--text3)" }}>
+                  (patterns using inactive days will be skipped)
+                </span>
               </label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {["MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
@@ -505,6 +575,7 @@ export default function ScheduleModal({ onClose }) {
                 ))}
               </div>
             </div>
+
             <div
               style={{
                 display: "flex",
