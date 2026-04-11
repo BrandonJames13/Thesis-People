@@ -17,6 +17,7 @@ export const CSV_TYPES = {
   ROOMS: "rooms",
   INSTRUCTORS: "instructors",
   SUBJECTS: "subjects",
+  SCHEDULE: "schedule",
 };
 
 const DEFAULT_INSTRUCTOR = {
@@ -107,6 +108,29 @@ export const CSV_FORMATS = {
         row?.academicYear,
         row?.semester,
       ]
+        .map((value) => normalizeHeader(value))
+        .join("|"),
+  },
+  [CSV_TYPES.SCHEDULE]: {
+    label: "Schedule Assignments",
+    description:
+      "Schedule assignment records with section, room, instructor, and time details.",
+    templatePath: "/csv/schedule-sample.csv",
+    templateLabel: "Schedule Template",
+    filename: "TSU_CCS_Schedule_Assignments_AY2025-2026.csv",
+    headers: [
+      "Course Code",
+      "Section",
+      "Academic Year",
+      "Semester",
+      "Room",
+      "Pattern",
+      "Time",
+      "Instructor",
+      "Status",
+    ],
+    rowKey: (row) =>
+      [row?.code, row?.section, row?.academicYear, row?.semester, row?.room]
         .map((value) => normalizeHeader(value))
         .join("|"),
   },
@@ -327,6 +351,18 @@ function assertInstructorHeaderMatch(actualHeaders) {
   return !!resolveInstructorHeaderIndexes(actualHeaders);
 }
 
+function assertScheduleHeaderMatch(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+  const expectedHeaders =
+    CSV_FORMATS[CSV_TYPES.SCHEDULE].headers.map(normalizeHeader);
+
+  if (normalizedActual.length !== expectedHeaders.length) return false;
+
+  return expectedHeaders.every((header, index) => {
+    return normalizedActual[index] === header;
+  });
+}
+
 function getTypeConfig(type) {
   const config = CSV_FORMATS[type];
   if (!config) {
@@ -426,6 +462,13 @@ function parseFullListRows(rows, warnings = []) {
     .filter((course) => course.code);
 }
 
+/**
+ * Parse instructor/faculty CSV rows into normalized contact objects.
+ * @param {Array<Array<string>>} rows - CSV data rows (excluding header)
+ * @param {Array<string>} warnings - Warnings array to populate
+ * @param {Object} options - { availabilityIndex, statusIndex, availabilityColumnMissing }
+ * @returns {Array<Object>} Instructor objects with: name, department (or null), availability (or null), status (or null)
+ */
 function parseFacultyRows(rows, warnings = [], options = {}) {
   const availabilityIndex =
     Number.isInteger(options?.availabilityIndex) &&
@@ -447,10 +490,14 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
     .map((r, index) => {
       const rowNumber = index + 2;
       const rawDepartment = String(r[1] ?? "").trim();
-      const department = normalizeDepartment(rawDepartment);
-      const availability =
-        availabilityIndex >= 0 ? String(r[availabilityIndex] ?? "").trim() : "";
-      const status = String(r[statusIndex] ?? "").trim();
+      const department = normalizeDepartment(rawDepartment) || null;
+      const rawAvailability =
+        availabilityIndex >= 0
+          ? String(r[availabilityIndex] ?? "").trim()
+          : null;
+      const availability = rawAvailability || null;
+      const rawStatus = String(r[statusIndex] ?? "").trim();
+      const status = rawStatus || null;
 
       if (rawDepartment && !department) {
         addImportWarning(
@@ -466,14 +513,14 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
         );
       }
 
-      if (!availability && availabilityIndex >= 0) {
+      if (!rawAvailability && availabilityIndex >= 0) {
         addImportWarning(
           warnings,
           `Instructors row ${rowNumber}: blank availability; storing null.`,
         );
       }
 
-      if (!status) {
+      if (!rawStatus) {
         addImportWarning(
           warnings,
           `Instructors row ${rowNumber}: blank status; storing null.`,
@@ -625,6 +672,71 @@ function parseSubjectRows(rows, warnings = []) {
     .filter((course) => course.code);
 }
 
+/**
+ * Parse schedule assignment CSV rows into normalized assignment objects.
+ * @param {Array<Array<string>>} rows - CSV data rows (excluding header)
+ * @param {Array<string>} warnings - Warnings array to populate
+ * @returns {Array<Object>} Schedule assignment objects ready for DB insert:
+ *   { code, section, academicYear, semester, room, pattern, time, instructor, status, dedupeKey }
+ */
+function parseScheduleRows(rows, warnings = []) {
+  return rows
+    .map((r, index) => {
+      const rowNumber = index + 2;
+      const code = String(r[0] ?? "")
+        .trim()
+        .toUpperCase();
+      const section = String(r[1] ?? "").trim();
+      const academicYear = String(r[2] ?? "").trim();
+      const rawSemester = String(r[3] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
+      const room =
+        String(r[4] ?? "")
+          .trim()
+          .toUpperCase() || null;
+      const pattern = String(r[5] ?? "").trim();
+      const time = String(r[6] ?? "").trim();
+      const instructor = String(r[7] ?? "").trim();
+      const statusRaw = String(r[8] ?? "").trim();
+
+      if (!semester) {
+        throw new Error(
+          `Schedule row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+        );
+      }
+
+      if (!statusRaw) {
+        addImportWarning(
+          warnings,
+          `Schedule row ${rowNumber}: blank status; defaulted to "Pending".`,
+        );
+      }
+
+      if (room && !isValidRoomNumber(room)) {
+        addImportWarning(
+          warnings,
+          `Schedule row ${rowNumber}: room number "${room}" does not match expected format [LCR]###. Please verify.`,
+        );
+      }
+
+      return {
+        code,
+        section,
+        academicYear,
+        semester,
+        room,
+        pattern,
+        time,
+        instructor,
+        status: statusRaw,
+        dedupeKey: [code, section, academicYear, semester, room]
+          .map((value) => normalizeHeader(value))
+          .join("|"),
+      };
+    })
+    .filter((assignment) => assignment.code);
+}
+
 function dedupeByIdentity(records, keyFn) {
   const seen = new Set();
   const deduped = [];
@@ -657,6 +769,9 @@ export function parseImportCsv(csvText, type) {
     if (candidate === CSV_TYPES.INSTRUCTORS) {
       return assertInstructorHeaderMatch(headers);
     }
+    if (candidate === CSV_TYPES.SCHEDULE) {
+      return assertScheduleHeaderMatch(headers);
+    }
     return assertHeaderMatch(headers, getTypeConfig(candidate).headers);
   });
 
@@ -679,6 +794,18 @@ export function parseImportCsv(csvText, type) {
       parseFullListRows(dataRows, warnings),
       config?.rowKey ?? getTypeConfig(selectedType).rowKey,
     );
+
+    /**
+     * FULL_LIST payload: Complete schedule assignments with embedded subject, room, and instructor data.
+     * Maps to schedule_assignments table with normalized values:
+     * - course_code, section: from CSV
+     * - academic_year, semester, program, year: validated against constraint enums
+     * - room_number, room_type: room identifier and normalized type ("Lecture" or "Computer Lab")
+     * - instructor_name: instructor identifier (references instructors table by name)
+     * - pattern, time_display: schedule details
+     * - status: normalized via normalizeAssignmentStatus (default: "Pending")
+     * Note: section_id, subject_id, room_id, instructor_id are resolved during import workflow
+     */
     return {
       type: selectedType,
       rows,
@@ -715,6 +842,16 @@ export function parseImportCsv(csvText, type) {
       parseRoomRows(dataRows, warnings),
       getTypeConfig(selectedType).rowKey,
     );
+
+    /**
+     * ROOMS payload: Room inventory records for rooms table.
+     * dbRows: room objects with schema-compatible fields:
+     * - number: unique room identifier (e.g., "L101", "C205")
+     * - type: normalized room type ("Lecture" or "Computer Lab") via normalizeRoomType
+     * - capacity: sanitized numeric value with type-based limits
+     * - status: room status ("Available", "Occupied", "Maintenance") defaulting to "Available" if blank
+     * - wing: optional wing/building identifier extracted from room context
+     */
     return {
       type: selectedType,
       rooms,
@@ -746,22 +883,31 @@ export function parseImportCsv(csvText, type) {
       parseFacultyRows(dataRows, warnings, instructorHeaderConfig),
       getTypeConfig(selectedType).rowKey,
     );
+
+    /**
+     * INSTRUCTORS payload: Schema-compatible DB write format.
+     * dbRows: instructor objects with explicit NULL for blank fields (name, department, availability, status)
+     * dbRowsWithDefaults: Same as dbRows BUT used ONLY on constraint error recovery (fallback retry path)
+     * - availability: null (from CSV) → tries NULL first; on failure → "TBD"
+     * - status: null (from CSV) → tries NULL first; on failure → "Active"
+     * - department: always null if not recognized
+     */
     return {
       type: selectedType,
       instructors,
       warnings,
       dbRows: instructors.map((inst) => ({
         name: inst.name,
-        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
-        availability: inst.availability || null,
-        status: inst.status || null,
+        department: inst.department,
+        availability: inst.availability,
+        status: inst.status,
         dedupe_key: normalizeInstructorName(inst.name),
       })),
       dbRowsWithDefaults: instructors.map((inst) => ({
         name: inst.name,
-        department: inst.department ?? DEFAULT_INSTRUCTOR.department,
-        availability: inst.availability || DEFAULT_INSTRUCTOR.availability,
-        status: inst.status || DEFAULT_INSTRUCTOR.status,
+        department: inst.department,
+        availability: inst.availability ?? DEFAULT_INSTRUCTOR.availability,
+        status: inst.status ?? DEFAULT_INSTRUCTOR.status,
         dedupe_key: normalizeInstructorName(inst.name),
       })),
       upsert: {
@@ -804,6 +950,20 @@ export function parseImportCsv(csvText, type) {
       dedupe_key: buildSectionIdentityKey(row, { includeProgramYear: true }),
     }));
 
+    /**
+     * SUBJECTS payload: Subject and subject_sections combined for atomic upsert.
+     * dbRows.subjects: subject records for subjects table:
+     *   - code, title: subject identifier and name
+     *   - program, year: subject classification (validated against enums)
+     *   - room_type: normalized via normalizeRoomType ("Lecture" or "Computer Lab")
+     *   - duration: hours per session (default: 1.5)
+     * dbRows.subject_sections: section records for subject_sections table:
+     *   - subject_ref: { code, program, year } for foreign key resolution
+     *   - section: section identifier
+     *   - enrolled: number of students (must be > 0)
+     *   - status: "Assigned" or "Not Assigned" (normalized)
+     *   - academic_year, semester: enrollment period
+     */
     return {
       type: selectedType,
       subjects,
@@ -828,6 +988,47 @@ export function parseImportCsv(csvText, type) {
         },
       },
       rowCount: subjects.length,
+    };
+  }
+
+  if (selectedType === CSV_TYPES.SCHEDULE) {
+    const schedules = dedupeByIdentity(
+      parseScheduleRows(dataRows, warnings),
+      getTypeConfig(selectedType).rowKey,
+    );
+
+    /**
+     * SCHEDULE payload: Schema-compatible DB write format for schedule_assignments.
+     * dbRows: schedule assignment objects mapped to schedule_assignments table schema
+     * - course_code: from CSV course code
+     * - section: from CSV section
+     * - academic_year, semester: from CSV
+     * - room_number: from CSV room (or null)
+     * - instructor_name: from CSV instructor
+     * - pattern, time_display: from CSV
+     * - status: normalized via normalizeAssignmentStatus (default: "Pending")
+     * Note: section_id, subject_id, room_id, instructor_id are resolved during import workflow
+     */
+    return {
+      type: selectedType,
+      schedules,
+      warnings,
+      dbRows: schedules.map((row) => ({
+        course_code: row.code,
+        section: row.section,
+        academic_year: row.academicYear,
+        semester: row.semester,
+        room_number: row.room,
+        instructor_name: row.instructor,
+        pattern: row.pattern,
+        time_display: row.time,
+        status: normalizeAssignmentStatus(row.status),
+      })),
+      upsert: {
+        table: "schedule_assignments",
+        conflictTarget: ["section_id", "academic_year", "semester"],
+      },
+      rowCount: schedules.length,
     };
   }
 
