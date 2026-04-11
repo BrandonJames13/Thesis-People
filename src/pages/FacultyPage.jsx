@@ -15,6 +15,24 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
+function getAssignedSubjectCount(instructor, instructorSubjects) {
+  if (!instructor || !Array.isArray(instructorSubjects)) return 0;
+
+  const instructorId = String(instructor?.id ?? "").trim();
+  if (!instructorId) {
+    // Fallback: match by name
+    const instructorName = normalizeText(instructor?.name);
+    return instructorSubjects.filter(
+      (is) =>
+        normalizeText(is?.instructor_name ?? is?.name ?? "") === instructorName,
+    ).length;
+  }
+
+  return instructorSubjects.filter(
+    (is) => String(is?.instructor_id ?? "").trim() === instructorId,
+  ).length;
+}
+
 // Update buildInstructorPayload to include new fields
 function buildInstructorPayload(instructor) {
   const status = String(instructor?.status ?? "").trim();
@@ -201,7 +219,8 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
 
 export default function FacultyPage() {
   const { isAdmin } = useAuth();
-  const { scheduleAssignments, getInstructorLoad } = useData();
+  const { scheduleAssignments, getInstructorLoad, instructorSubjects } =
+    useData();
   const { showNotification } = useNotification();
 
   const notifyDbError = useCallback(
@@ -480,9 +499,13 @@ export default function FacultyPage() {
                   </td>
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
+                      const assignedSubjectCount = getAssignedSubjectCount(
+                        inst,
+                        instructorSubjects,
+                      );
                       const counts = getInstructorLoad(inst);
                       if (
-                        counts.subjectCount === 0 &&
+                        assignedSubjectCount === 0 &&
                         counts.sectionCount === 0
                       ) {
                         return (
@@ -491,7 +514,7 @@ export default function FacultyPage() {
                           </span>
                         );
                       }
-                      return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
+                      return `${assignedSubjectCount} subject${assignedSubjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
                   <td>{inst.department || "TBD"}</td>
