@@ -18,6 +18,8 @@ export default function ScheduleModal({ onClose }) {
     availableSubjects,
     availableSections,
     availableRooms,
+    availableInstructors,
+    instructorSubjects,
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
@@ -129,8 +131,95 @@ export default function ScheduleModal({ onClose }) {
     [sectionRows],
   );
 
+  const instructorNameById = useMemo(() => {
+    const map = new Map();
+
+    availableInstructors.forEach((instructor) => {
+      const id = String(instructor?.id ?? "").trim();
+      const name = String(instructor?.name ?? "").trim();
+      if (!id || !name) return;
+      map.set(id, name);
+    });
+
+    return map;
+  }, [availableInstructors]);
+
+  const instructorIdByName = useMemo(() => {
+    const map = new Map();
+
+    availableInstructors.forEach((instructor) => {
+      const id = String(instructor?.id ?? "").trim();
+      const nameKey = String(instructor?.name ?? "")
+        .trim()
+        .toLowerCase();
+      if (!id || !nameKey) return;
+      if (!map.has(nameKey)) {
+        map.set(nameKey, id);
+      }
+    });
+
+    return map;
+  }, [availableInstructors]);
+
+  const eligibleInstructorIdsBySubjectId = useMemo(() => {
+    const map = new Map();
+
+    instructorSubjects.forEach((row) => {
+      const subjectId = String(row?.subjectId ?? "").trim();
+      const instructorId = String(row?.instructorId ?? "").trim();
+      if (!subjectId || !instructorId) return;
+
+      const ids = map.get(subjectId) ?? new Set();
+      ids.add(instructorId);
+      map.set(subjectId, ids);
+    });
+
+    return map;
+  }, [instructorSubjects]);
+
   const selectedManualSection =
     sectionRowsByIdentity.get(manualSectionKey) || null;
+
+  const eligibleInstructorIds = useMemo(() => {
+    const subjectId = String(selectedManualSection?.subjectId ?? "").trim();
+    if (!subjectId) return new Set();
+
+    return new Set(
+      instructorSubjects
+        .filter((row) => String(row.subjectId ?? "").trim() === subjectId)
+        .map((row) => String(row.instructorId ?? "").trim())
+        .filter(Boolean),
+    );
+  }, [instructorSubjects, selectedManualSection]);
+
+  const eligibleInstructors = useMemo(() => {
+    if (eligibleInstructorIds.size === 0) return availableInstructors;
+
+    return availableInstructors.filter((instructor) =>
+      eligibleInstructorIds.has(String(instructor?.id ?? "").trim()),
+    );
+  }, [availableInstructors, eligibleInstructorIds]);
+
+  const manualInstructorOptions = useMemo(() => {
+    const options = eligibleInstructors
+      .map((instructor) => ({
+        id: String(instructor?.id ?? "").trim(),
+        name: String(instructor?.name ?? "").trim(),
+      }))
+      .filter((option) => option.id && option.name);
+
+    if (
+      manualInstructor &&
+      !options.some((option) => option.id === manualInstructor)
+    ) {
+      const fallbackName = instructorNameById.get(manualInstructor);
+      if (fallbackName) {
+        return [{ id: manualInstructor, name: fallbackName }, ...options];
+      }
+    }
+
+    return options;
+  }, [eligibleInstructors, instructorNameById, manualInstructor]);
 
   useEffect(() => {
     if (!selectedManualSection) return;
@@ -160,12 +249,45 @@ export default function ScheduleModal({ onClose }) {
       setManualRoom(existingAssignment.room);
     }
 
-    if (existingAssignment?.instructor) {
-      setManualInstructor(existingAssignment.instructor);
-    } else if (selectedManualSection?.instructor) {
-      setManualInstructor(selectedManualSection.instructor);
+    const existingInstructorId = String(
+      existingAssignment?.instructor_id ??
+        existingAssignment?.instructorId ??
+        "",
+    ).trim();
+    if (existingInstructorId) {
+      setManualInstructor(existingInstructorId);
+      return;
     }
-  }, [selectedManualSection, scheduleAssignments]);
+
+    const existingInstructorName = String(existingAssignment?.instructor ?? "")
+      .trim()
+      .toLowerCase();
+    if (existingInstructorName) {
+      const matchedId = instructorIdByName.get(existingInstructorName);
+      setManualInstructor(matchedId ?? "");
+      return;
+    }
+
+    const sectionInstructorName = String(
+      selectedManualSection?.instructor ?? "",
+    )
+      .trim()
+      .toLowerCase();
+    if (sectionInstructorName) {
+      const matchedId = instructorIdByName.get(sectionInstructorName);
+      setManualInstructor(matchedId ?? "");
+    }
+  }, [instructorIdByName, selectedManualSection, scheduleAssignments]);
+
+  useEffect(() => {
+    if (!manualInstructor) return;
+    if (manualInstructorOptions.length === 0) return;
+    if (
+      manualInstructorOptions.some((option) => option.id === manualInstructor)
+    )
+      return;
+    setManualInstructor("");
+  }, [manualInstructor, manualInstructorOptions]);
 
   const toggleDay = (day) => {
     setActiveDays((prev) =>
@@ -255,6 +377,9 @@ export default function ScheduleModal({ onClose }) {
     }
     const duration = manualDurationH + manualDurationM / 60;
 
+    const selectedInstructorName =
+      instructorNameById.get(manualInstructor) ?? "";
+
     const assignmentKey = getAssignmentIdentityKey(selectedManualSection);
     setManualEntries((prev) => [
       ...prev,
@@ -262,7 +387,8 @@ export default function ScheduleModal({ onClose }) {
         assignmentKey,
         subjectSectionLabel: formatAssignmentLabel(selectedManualSection),
         roomName: manualRoom,
-        instructor: manualInstructor,
+        instructor: selectedInstructorName,
+        instructorId: manualInstructor,
         startTime: manualTime,
         endTime: getEndTime(manualTime, duration),
         duration,
@@ -291,7 +417,8 @@ export default function ScheduleModal({ onClose }) {
         assignmentKey: getAssignmentIdentityKey(selectedManualSection),
         subjectSectionLabel: formatAssignmentLabel(selectedManualSection),
         roomName: manualRoom,
-        instructor: manualInstructor,
+        instructor: instructorNameById.get(manualInstructor) ?? "",
+        instructorId: manualInstructor,
         startTime: manualTime,
         endTime: getEndTime(manualTime, duration),
         duration,
@@ -301,6 +428,35 @@ export default function ScheduleModal({ onClose }) {
     if (toSave.length === 0) {
       alert("Please fill in at least one assignment.");
       return;
+    }
+
+    // Hard-save validation: selected instructor must be eligible for section subject.
+    for (const entry of toSave) {
+      const selectedInstructorId = String(entry?.instructorId ?? "").trim();
+      if (!selectedInstructorId) continue;
+
+      const sectionRow = sectionRowsByIdentity.get(entry.assignmentKey);
+      if (!sectionRow) {
+        showNotification(
+          `⚠ Unable to validate instructor for ${entry.subjectSectionLabel}. Please reselect the section.`,
+        );
+        return;
+      }
+
+      const subjectId = String(sectionRow?.subjectId ?? "").trim();
+      if (!subjectId) continue;
+
+      const eligibleIds = eligibleInstructorIdsBySubjectId.get(subjectId);
+      if (!eligibleIds || eligibleIds.size === 0) continue;
+
+      if (!eligibleIds.has(selectedInstructorId)) {
+        const selectedInstructorName =
+          instructorNameById.get(selectedInstructorId) ?? "Selected instructor";
+        showNotification(
+          `⚠ ${selectedInstructorName} is not eligible for ${entry.subjectSectionLabel}.`,
+        );
+        return;
+      }
     }
 
     const result = applyManualAssignments({
@@ -679,14 +835,19 @@ export default function ScheduleModal({ onClose }) {
                 >
                   Instructor
                 </label>
-                <input
-                  type="text"
+                <select
                   value={manualInstructor}
                   onChange={(e) => setManualInstructor(e.target.value)}
                   className="search-input"
-                  placeholder="e.g. Dela Cruz, J."
                   style={{ width: "100%", boxSizing: "border-box" }}
-                />
+                >
+                  <option value="">-- Select Instructor --</option>
+                  {manualInstructorOptions.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label

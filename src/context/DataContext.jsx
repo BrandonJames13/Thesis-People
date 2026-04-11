@@ -68,6 +68,7 @@ function normalizeSubjectFromRow(row) {
 
 function normalizeSectionFromRow(row) {
   const subjectCode = row.subjectCode ?? row.code ?? "";
+  const subjectId = String(row.subject_id ?? row.subjectId ?? "").trim();
   const section =
     (row.section ?? DEFAULT_SECTION).toString().trim() || DEFAULT_SECTION;
   const academicYear = row.academicYear ?? row.academic_year ?? "";
@@ -81,6 +82,7 @@ function normalizeSectionFromRow(row) {
   return {
     sectionId,
     sectionIdentity,
+    subjectId,
     subjectCode,
     section,
     academicYear,
@@ -317,6 +319,7 @@ export function DataProvider({ children }) {
 
         return normalizeSectionFromRow({
           section_id: row.id,
+          subject_id: row.subject_id,
           subjectCode: subject.code,
           section: row.section,
           academic_year: row.academic_year,
