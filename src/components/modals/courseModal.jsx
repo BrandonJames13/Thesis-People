@@ -1,13 +1,20 @@
 import { useMemo, useState } from "react";
 import Modal from "../common/Modal";
-import { PROGRAM_CODES } from "../../data/constants";
+import {
+  PROGRAM_CODES,
+  ROOM_TYPE_LABELS,
+  ROOM_CAPACITY_LIMITS,
+} from "../../data/constants";
 
+// Normalize section label to uppercase single letter
 function normalizeSectionLabel(value) {
   return String(value ?? "")
     .trim()
     .toUpperCase();
 }
 
+// Build section draft row with explicit fields mapping
+// Sections are always linked to a specific academic_year and semester (passed via props)
 function buildSectionDraft(section, currentAcademicYear, currentSemester) {
   return {
     id: String(section?.id ?? "").trim() || null,
@@ -19,6 +26,17 @@ function buildSectionDraft(section, currentAcademicYear, currentSemester) {
     ).trim(),
     semester: String(section?.semester ?? currentSemester).trim(),
   };
+}
+
+// Validate enrolled count against room type capacity limits (advisory, not strict enforcement)
+function validateEnrolledForRoomType(enrolled, roomType) {
+  if (!roomType) return null;
+  const limit = ROOM_CAPACITY_LIMITS[roomType]?.max;
+  if (!limit) return null;
+  if (enrolled > limit) {
+    return `${roomType} capacity is ${limit} students max; ${enrolled} exceeds limit.`;
+  }
+  return null;
 }
 
 export function CourseModal({
@@ -108,14 +126,35 @@ export function CourseModal({
   };
 
   const handleSubmit = () => {
+    // Validate subject metadata
     const c = code.trim().toUpperCase();
     const t = title.trim();
 
     if (!c || !t || !program || !year || !roomType) {
-      setFormError("Please fill all fields correctly.");
+      setFormError("Please fill all required subject fields.");
       return;
     }
 
+    // Constraint: program must be in PROGRAM_CODES
+    if (!PROGRAM_CODES.includes(program)) {
+      setFormError(`Invalid program: ${program} is not recognized.`);
+      return;
+    }
+
+    // Constraint: room_type must be in ROOM_TYPE_LABELS
+    if (!ROOM_TYPE_LABELS.includes(roomType)) {
+      setFormError(`Invalid room type: ${roomType} is not valid.`);
+      return;
+    }
+
+    // Constraint: year must be one of the standard academic years
+    const validYears = ["1st", "2nd", "3rd", "4th"];
+    if (!validYears.includes(year)) {
+      setFormError(`Invalid year: ${year} is not valid.`);
+      return;
+    }
+
+    // Constraint: subject identity must be unique (code + program + year)
     const duplicateSubject = subjects.find(
       (x) =>
         x.code === c &&
@@ -129,6 +168,7 @@ export function CourseModal({
       return;
     }
 
+    // Normalize and validate section rows
     const normalizedSections = sections
       .map((row) => ({
         id: row.id,
@@ -145,8 +185,34 @@ export function CourseModal({
       return;
     }
 
+    // Validate section constraints
     const seenSectionKeys = new Set();
     for (const row of normalizedSections) {
+      // Constraint: section must be non-empty after normalization
+      if (!row.section) {
+        setFormError(
+          "All sections must have a letter designation (A, B, C, etc.).",
+        );
+        return;
+      }
+
+      // Constraint: enrolled must be numeric and > 0
+      if (!Number.isFinite(row.enrolled) || row.enrolled <= 0) {
+        setFormError(`Section ${row.section} must have enrolled count >= 1.`);
+        return;
+      }
+
+      // Advisory: warn if enrolled exceeds room type capacity
+      const capacityWarning = validateEnrolledForRoomType(
+        row.enrolled,
+        roomType,
+      );
+      if (capacityWarning) {
+        setFormError(`⚠ ${capacityWarning} Proceed with caution.`);
+        return;
+      }
+
+      // Constraint: section + academic_year + semester must be unique
       const key = `${row.section}|${row.academic_year}|${row.semester}`;
       if (seenSectionKeys.has(key)) {
         setFormError(
@@ -156,14 +222,14 @@ export function CourseModal({
       }
       seenSectionKeys.add(key);
 
-      if (!Number.isFinite(row.enrolled) || row.enrolled <= 0) {
-        setFormError(
-          `Section ${row.section} must have enrolled count above 0.`,
-        );
+      // Constraint: status must be one of the valid values
+      if (!["Assigned", "Not Assigned"].includes(row.status)) {
+        setFormError(`Invalid status for section ${row.section}.`);
         return;
       }
     }
 
+    // Normalize and validate instructor IDs
     const normalizedInstructorIds = Array.from(
       new Set(
         selectedInstructorIds
@@ -172,6 +238,8 @@ export function CourseModal({
       ),
     );
 
+    // Build final payload: subject metadata + sections + instructor links
+    // This maps directly to manage_subject RPC parameters
     onSave({
       code: c,
       title: t,
@@ -199,8 +267,14 @@ export function CourseModal({
         </div>
 
         <div style={{ fontSize: 12, color: "var(--text3)" }}>
-          Subject metadata and section/instructor assignments are saved
-          together.
+          <strong>Subject Metadata</strong>: Define the subject's code, title,
+          program, year, and room type (these are shared across all sections).
+          <br />
+          <strong>Section Assignments</strong>: Add individual sections for AY{" "}
+          {currentAcademicYear} {currentSemester} with enrollment and status.
+          <br />
+          <strong>Instructor Assignments</strong>: Link instructors to this
+          subject (applies across all sections).
         </div>
 
         <div
@@ -290,8 +364,16 @@ export function CourseModal({
               alignItems: "center",
             }}
           >
-            <div style={{ fontWeight: 600, fontSize: 13 }}>
-              Section Assignments
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 13 }}>
+                Section Assignments
+              </div>
+              <div
+                style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}
+              >
+                All sections below are for AY {currentAcademicYear},{" "}
+                {currentSemester} semester
+              </div>
             </div>
             <button
               className="btn btn-secondary"
@@ -323,13 +405,15 @@ export function CourseModal({
                 />
               </div>
               <div>
-                <label style={labelStyle}>Enrolled</label>
+                <label style={labelStyle}>Enrolled (min 1)</label>
                 <input
                   className="search-input"
                   value={sectionRow.enrolled}
                   onChange={(e) =>
                     updateSectionRow(index, "enrolled", e.target.value)
                   }
+                  type="number"
+                  min="1"
                 />
               </div>
               <div>
