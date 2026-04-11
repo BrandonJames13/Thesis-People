@@ -54,13 +54,23 @@ export function InstructorModal({ existing, onClose, onSave }) {
       return;
     }
 
+    let parsedMaxUnits = null;
+    if (maxUnits !== "") {
+      const parsed = Number(maxUnits);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        setFormError("Max units must be a whole number of at least 1.");
+        return;
+      }
+      parsedMaxUnits = parsed;
+    }
+
     onSave({
       name: name.trim(),
       department: dept || null,
       availability: availability.trim() || null,
       status: String(status ?? "").trim() || null,
       employment_status: employmentStatus,
-      max_units: maxUnits !== "" ? Number(maxUnits) : null,
+      max_units: parsedMaxUnits,
       allow_night_class: allowNightClass,
     });
   };
