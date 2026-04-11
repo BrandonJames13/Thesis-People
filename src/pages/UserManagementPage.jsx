@@ -21,6 +21,12 @@ export default function UserManagementPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
 
+  // Search & pagination
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     const { data, error } = await adminSupabase.auth.admin.listUsers();
@@ -134,6 +140,22 @@ export default function UserManagementPage() {
     );
   }
 
+  const filtered = users.filter((user) => {
+    const q = search.trim().toLowerCase();
+    const name = getName(user).toLowerCase();
+    const email = (user.email ?? "").toLowerCase();
+    const matchSearch = !q || name.includes(q) || email.includes(q);
+    const matchRole = !roleFilter || getRole(user) === roleFilter;
+    return matchSearch && matchRole;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
   return (
     <div className="page-container">
       <div className="section-header">
@@ -143,12 +165,40 @@ export default function UserManagementPage() {
             Admin-only · Manage system accounts and roles
           </div>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowAddModal(true)}
-        >
-          + Add User
-        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search name or email…"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+            style={{ width: 220 }}
+          />
+          <select
+            className="search-input"
+            style={{ width: 130 }}
+            value={roleFilter || "All Roles"}
+            onChange={(e) => {
+              setRoleFilter(
+                e.target.value === "All Roles" ? "" : e.target.value,
+              );
+              setPage(1);
+            }}
+          >
+            <option>All Roles</option>
+            <option value="admin">Admin</option>
+            <option value="faculty">Faculty</option>
+          </select>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowAddModal(true)}
+          >
+            + Add User
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -177,8 +227,21 @@ export default function UserManagementPage() {
                   No users found.
                 </td>
               </tr>
+            ) : paginated.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={6}
+                  style={{
+                    textAlign: "center",
+                    padding: 40,
+                    color: "var(--text3)",
+                  }}
+                >
+                  No users match your search.
+                </td>
+              </tr>
             ) : (
-              users.map((user) => {
+              paginated.map((user) => {
                 const role = getRole(user);
                 const isCurrentUser = user.email === currentUser?.email;
                 return (
@@ -256,6 +319,98 @@ export default function UserManagementPage() {
             )}
           </tbody>
         </table>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "12px 16px",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            <span style={{ fontSize: 12, color: "var(--text3)" }}>
+              Showing {(safePage - 1) * PAGE_SIZE + 1}–
+              {Math.min(safePage * PAGE_SIZE, filtered.length)} of{" "}
+              {filtered.length} users
+            </span>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(1)}
+                disabled={safePage === 1}
+              >
+                «
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+              >
+                ‹
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(
+                  (p) =>
+                    p === 1 || p === totalPages || Math.abs(p - safePage) <= 1,
+                )
+                .reduce((acc, p, i, arr) => {
+                  if (i > 0 && p - arr[i - 1] > 1) acc.push("...");
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === "..." ? (
+                    <span
+                      key={`ellipsis-${i}`}
+                      style={{
+                        padding: "4px 6px",
+                        fontSize: 12,
+                        color: "var(--text3)",
+                      }}
+                    >
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={p}
+                      className={
+                        p === safePage ? "btn btn-primary" : "btn btn-secondary"
+                      }
+                      style={{
+                        padding: "4px 10px",
+                        fontSize: 12,
+                        minWidth: 32,
+                      }}
+                      onClick={() => setPage(p)}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+              >
+                ›
+              </button>
+              <button
+                className="btn btn-secondary"
+                style={{ padding: "4px 10px", fontSize: 12 }}
+                onClick={() => setPage(totalPages)}
+                disabled={safePage === totalPages}
+              >
+                »
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showAddModal && (

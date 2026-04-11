@@ -85,17 +85,25 @@ export default function AlgorithmPage() {
       key: "timePreference",
       name: "⏰ Instructor Time Preference",
       color: "var(--accent2)",
+      desc: "Teachers have preferred times they like to teach. A higher number means the system tries harder to give each teacher a schedule that fits their preferred hours.",
     },
-    { key: "roomType", name: "🏫 Room Type Matching", color: "var(--green)" },
+    {
+      key: "roomType",
+      name: "🏫 Room Type Matching",
+      color: "var(--green)",
+      desc: "Some classes need a computer lab, others just need a regular classroom. A higher number means the system tries harder to put each class in the right kind of room.",
+    },
     {
       key: "compactness",
       name: "🗜 Schedule Compactness",
       color: "var(--purple)",
+      desc: "This keeps a teacher's classes close together without big gaps in between. A higher number means fewer long empty breaks in a teacher's day.",
     },
     {
       key: "balance",
       name: "⚖ Balanced Time Utilization",
       color: "var(--orange)",
+      desc: "This spreads classes evenly across the week so no single day gets too packed. A higher number means the system works harder to avoid piling everything on one day.",
     },
   ];
 
@@ -117,6 +125,27 @@ export default function AlgorithmPage() {
         >
           💾 Save Config
         </button>
+      </div>
+
+      {/* Warning Banner */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          padding: "12px 16px",
+          marginBottom: 8,
+          borderRadius: 8,
+          background: "rgba(210, 153, 34, 0.12)",
+          border: "1px solid rgba(210, 153, 34, 0.5)",
+        }}
+      >
+        <span style={{ fontSize: 22, lineHeight: 1 }}>⚠️</span>
+        <span style={{ fontSize: 13, color: "#e3a720", lineHeight: 1.5 }}>
+          <strong>Warning:</strong> Do not change the settings if you don't know
+          what you are doing! Incorrect configuration may cause scheduling
+          conflicts or produce unexpected results.
+        </span>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
@@ -177,41 +206,126 @@ export default function AlgorithmPage() {
               Total = {totalWeight}%
             </span>
           </div>
-          <div style={{ padding: "8px 16px 16px" }}>
+          <div
+            style={{
+              padding: "12px 16px 16px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
             {softWeightItems.map((w) => (
-              <div className="weight-item" key={w.key}>
-                <div className="weight-header">
-                  <span className="weight-name">{w.name}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={weights[w.key]}
-                    onChange={(e) => handleWeightChange(w.key, e.target.value)}
-                    style={{
-                      width: 54,
-                      textAlign: "center",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: "2px 6px",
-                      borderRadius: 6,
-                      border: "1px solid var(--border)",
-                      background: "var(--surface2)",
-                      color: "var(--text)",
-                    }}
-                  />
-                </div>
-                <div className="weight-bar">
+              <div
+                key={w.key}
+                style={{
+                  background: "var(--surface2)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                {/* Top row: name + input */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    gap: 10,
+                  }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "var(--text)",
+                        marginBottom: 3,
+                      }}
+                    >
+                      {w.name}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "var(--text3)",
+                        lineHeight: 1.55,
+                      }}
+                    >
+                      {w.desc}
+                    </div>
+                  </div>
                   <div
-                    className="weight-fill"
-                    style={{ width: `${weights[w.key]}%`, background: w.color }}
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 3,
+                      flexShrink: 0,
+                    }}
+                  >
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={weights[w.key]}
+                      onChange={(e) =>
+                        handleWeightChange(w.key, e.target.value)
+                      }
+                      style={{
+                        width: 52,
+                        textAlign: "center",
+                        fontSize: 15,
+                        fontWeight: 700,
+                        padding: "4px 6px",
+                        borderRadius: 8,
+                        border: `1.5px solid ${w.color}`,
+                        background: "var(--surface)",
+                        color: w.color,
+                      }}
+                    />
+                    <span style={{ fontSize: 10, color: "var(--text3)" }}>
+                      weight
+                    </span>
+                  </div>
+                </div>
+                {/* Progress bar */}
+                <div
+                  style={{
+                    height: 5,
+                    borderRadius: 99,
+                    background: "var(--border)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${weights[w.key]}%`,
+                      background: w.color,
+                      borderRadius: 99,
+                      transition: "width 0.3s ease",
+                    }}
                   />
                 </div>
               </div>
             ))}
             {totalWeight !== 100 && (
-              <div style={{ fontSize: 11, color: "var(--red)", marginTop: 8 }}>
-                ⚠ Weights must total exactly 100% before saving.
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--red)",
+                  marginTop: 4,
+                  padding: "6px 10px",
+                  background: "rgba(248,81,73,0.08)",
+                  borderRadius: 6,
+                  border: "1px solid rgba(248,81,73,0.25)",
+                }}
+              >
+                ⚠ Weights must total exactly 100% before saving. Currently:{" "}
+                {totalWeight}%
               </div>
             )}
           </div>
