@@ -50,6 +50,12 @@ function cloneInstructors(instructors) {
   return instructors.map((instructor) => ({ ...instructor }));
 }
 
+function cloneInstructorSubjects(instructorSubjects) {
+  return instructorSubjects.map((instructorSubject) => ({
+    ...instructorSubject,
+  }));
+}
+
 function normalizeSubjectFromRow(row) {
   return {
     code: row.subjectCode ?? row.code ?? "",
@@ -143,6 +149,34 @@ function normalizeScheduleAssignments(rows) {
   return Array.from(uniqueRows.values());
 }
 
+function normalizeInstructorSubject(row) {
+  const subjectId = String(row?.subject_id ?? row?.subjectId ?? "").trim();
+  const instructorId = String(
+    row?.instructor_id ?? row?.instructorId ?? "",
+  ).trim();
+
+  return {
+    subjectId,
+    instructorId,
+    priority: Number(row?.priority ?? 0),
+    maxSections: Number(row?.max_sections ?? row?.maxSections ?? 0),
+  };
+}
+
+function normalizeInstructorSubjects(rows) {
+  const uniqueRows = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const normalized = normalizeInstructorSubject(row);
+    if (!normalized.subjectId || !normalized.instructorId) return;
+
+    const key = `${normalized.subjectId}::${normalized.instructorId}`;
+    uniqueRows.set(key, normalized);
+  });
+
+  return Array.from(uniqueRows.values());
+}
+
 function normalizeAssignmentFromDbRow(row, lookup) {
   const subject = lookup.subjectById.get(String(row.subject_id ?? ""));
   const section = lookup.sectionById.get(String(row.section_id ?? ""));
@@ -211,44 +245,6 @@ function buildNormalizedFromCourseRows(rows) {
   };
 }
 
-function denormalizeSectionRow(section, subjectByCode) {
-  const subject = subjectByCode.get(section.subjectCode) ?? null;
-
-  return {
-    code: section.subjectCode,
-    section: section.section ?? DEFAULT_SECTION,
-    sectionId:
-      section.sectionId ??
-      buildSectionIdentity(
-        section.subjectCode,
-        section.section ?? DEFAULT_SECTION,
-        section.academicYear ?? "",
-        section.semester ?? "",
-      ),
-    sectionIdentity:
-      section.sectionIdentity ??
-      buildSectionIdentity(
-        section.subjectCode,
-        section.section ?? DEFAULT_SECTION,
-        section.academicYear ?? "",
-        section.semester ?? "",
-      ),
-    title: subject?.title ?? "",
-    program: subject?.program ?? "",
-    year: subject?.year ?? "",
-    roomType: section.roomType ?? subject?.roomType ?? "Lecture",
-    academicYear: section.academicYear ?? "",
-    semester: section.semester ?? "",
-    enrolled: Number(section.enrolled ?? 0),
-    status: section.status ?? "Pending",
-    instructor: section.instructor ?? "",
-    room: section.room ?? "",
-    time: section.time ?? "",
-    duration: Number(section.duration ?? 1.5),
-    pattern: section.pattern ?? "",
-  };
-}
-
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
@@ -256,6 +252,7 @@ export function DataProvider({ children }) {
   const [subjectSections, setSubjectSections] = useState([]);
   const [rooms, setRooms] = useState([]);
   const [instructors, setInstructors] = useState([]);
+  const [instructorSubjects, setInstructorSubjects] = useState([]);
   const [scheduleAssignments, setScheduleAssignments] = useState([]);
 
   const bootstrapFromSupabase = useCallback(async () => {
@@ -264,6 +261,7 @@ export function DataProvider({ children }) {
       subjectsResult,
       sectionsResult,
       instructorsResult,
+      instructorSubjectsResult,
       assignmentsResult,
     ] = await Promise.all([
       supabase.from("rooms").select("*").order("number"),
@@ -279,6 +277,9 @@ export function DataProvider({ children }) {
         .eq("semester", ACTIVE_SEMESTER),
       supabase.from("instructors").select("*").order("name"),
       supabase
+        .from("instructor_subjects")
+        .select("subject_id, instructor_id, priority, max_sections"),
+      supabase
         .from("schedule_assignments")
         .select("*")
         .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
@@ -290,12 +291,17 @@ export function DataProvider({ children }) {
       setSubjectSections([]);
       setRooms([]);
       setInstructors([]);
+      setInstructorSubjects([]);
       setScheduleAssignments([]);
       return;
     }
 
     const roomRows = cloneRooms(roomsResult.data ?? []);
     const instructorRows = cloneInstructors(instructorsResult.data ?? []);
+    const normalizedInstructorSubjects =
+      instructorsResult.error || instructorSubjectsResult.error
+        ? []
+        : normalizeInstructorSubjects(instructorSubjectsResult.data ?? []);
     const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
       normalizeSubjectFromRow(row),
     );
@@ -348,6 +354,7 @@ export function DataProvider({ children }) {
     setSubjects(normalizedSubjects);
     setSubjectSections(normalizedSections);
     setInstructors(instructorRows);
+    setInstructorSubjects(normalizedInstructorSubjects);
     setScheduleAssignments(normalizedAssignments);
   }, []);
 
@@ -358,23 +365,6 @@ export function DataProvider({ children }) {
 
     return () => clearTimeout(timer);
   }, [bootstrapFromSupabase]);
-
-  const subjectByCode = useMemo(() => {
-    const map = new Map();
-    subjects.forEach((subject) => {
-      map.set(subject.code, subject);
-    });
-    return map;
-  }, [subjects]);
-
-  // Transitional adapter: keep legacy rows available for existing UI consumers.
-  const courses = useMemo(
-    () =>
-      subjectSections.map((section) =>
-        denormalizeSectionRow(section, subjectByCode),
-      ),
-    [subjectSections, subjectByCode],
-  );
 
   const instructorLoads = useMemo(() => {
     const loadMap = new Map();
@@ -600,6 +590,14 @@ export function DataProvider({ children }) {
     setInstructors(cloneInstructors(newInstructors ?? []));
   }, []);
 
+  const updateInstructorSubjects = useCallback((newInstructorSubjects) => {
+    setInstructorSubjects(
+      cloneInstructorSubjects(
+        normalizeInstructorSubjects(newInstructorSubjects ?? []),
+      ),
+    );
+  }, []);
+
   const updateScheduleAssignments = useCallback((newAssignments) => {
     setScheduleAssignments(normalizeScheduleAssignments(newAssignments));
   }, []);
@@ -610,6 +608,7 @@ export function DataProvider({ children }) {
     setSubjectSections([]);
     setRooms([]);
     setInstructors([]);
+    setInstructorSubjects([]);
     setScheduleAssignments([]);
     bootstrapFromSupabase();
   }, [bootstrapFromSupabase]);
@@ -618,9 +617,9 @@ export function DataProvider({ children }) {
     () => ({
       subjects,
       subjectSections,
-      courses,
       rooms,
       instructors,
+      instructorSubjects,
       scheduleAssignments,
       availableSubjects,
       availableSections,
@@ -641,15 +640,16 @@ export function DataProvider({ children }) {
       updateRooms,
       addInstructor,
       updateInstructors,
+      updateInstructorSubjects,
       updateScheduleAssignments,
       resetAllData,
     }),
     [
       subjects,
       subjectSections,
-      courses,
       rooms,
       instructors,
+      instructorSubjects,
       scheduleAssignments,
       availableSubjects,
       availableSections,
@@ -670,6 +670,7 @@ export function DataProvider({ children }) {
       updateRooms,
       addInstructor,
       updateInstructors,
+      updateInstructorSubjects,
       updateScheduleAssignments,
       resetAllData,
     ],

@@ -18,7 +18,6 @@ export default function ScheduleModal({ onClose }) {
     availableSubjects,
     availableSections,
     availableRooms,
-    availableInstructors,
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
@@ -196,7 +195,6 @@ export default function ScheduleModal({ onClose }) {
     const result = runAutoSchedule({
       sectionRows: [...sectionRows],
       rooms: [...availableRooms],
-      instructors: [...availableInstructors],
       scheduleAssignments: [...scheduleAssignments],
       startTime: autoStart,
       endTime: autoEnd,

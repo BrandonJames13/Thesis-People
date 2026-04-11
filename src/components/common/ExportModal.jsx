@@ -11,7 +11,8 @@ import {
 } from "../../utils/exportUtils";
 
 export default function ExportModal({ isOpen, onClose }) {
-  const { courses, rooms, instructors, scheduleAssignments } = useData();
+  const { subjects, subjectSections, rooms, instructors, scheduleAssignments } =
+    useData();
   const { showNotification } = useNotification();
   const [exportType, setExportType] = useState(CSV_TYPES.FULL_LIST);
 
@@ -20,13 +21,40 @@ export default function ExportModal({ isOpen, onClose }) {
     [exportType],
   );
 
+  const subjectSectionRows = useMemo(() => {
+    const subjectByCode = new Map(
+      subjects.map((subject) => [String(subject.code ?? "").trim(), subject]),
+    );
+
+    return subjectSections.map((section) => {
+      const subject = subjectByCode.get(
+        String(section.subjectCode ?? "").trim(),
+      );
+
+      return {
+        code: section.subjectCode,
+        title: subject?.title ?? "",
+        section: section.section,
+        academicYear: section.academicYear,
+        semester: section.semester,
+        program: subject?.program ?? "",
+        year: subject?.year ?? "",
+        enrolled: Number(section.enrolled ?? 0),
+        roomType: section.roomType ?? subject?.roomType ?? "Lecture",
+        duration: Number(section.duration ?? subject?.duration ?? 1.5),
+        instructor: section.instructor ?? "",
+        status: section.status ?? "Pending",
+      };
+    });
+  }, [subjectSections, subjects]);
+
   const selectedRows = useMemo(() => {
     if (exportType === CSV_TYPES.FULL_LIST) return scheduleAssignments;
     if (exportType === CSV_TYPES.ROOMS) return rooms;
     if (exportType === CSV_TYPES.INSTRUCTORS) return instructors;
-    if (exportType === CSV_TYPES.SUBJECTS) return courses;
+    if (exportType === CSV_TYPES.SUBJECTS) return subjectSectionRows;
     return [];
-  }, [courses, exportType, instructors, rooms, scheduleAssignments]);
+  }, [exportType, instructors, rooms, scheduleAssignments, subjectSectionRows]);
 
   const handleExport = () => {
     const didExport = exportCsv(exportType, selectedRows);
