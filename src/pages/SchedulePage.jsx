@@ -4,32 +4,122 @@ import { TIME_SLOTS, DAYS, COLOR_MAP } from "../data/constants";
 import { patternDaysMap } from "../data/constants";
 import ScheduleModal from "../components/schedule/ScheduleModal";
 import ExportModal from "../components/common/ExportModal";
-import {
-  formatAssignmentLabel,
-  getAssignmentSectionId,
-} from "../utils/scheduleUtils";
 import { formatTimeFromMin } from "../utils/timeUtils";
 
-function getTimeRangeFromAssignment(assignment) {
-  const rawTime = String(assignment?.time ?? "");
-  const match = rawTime.match(/(\d+):(\d+)\s*(AM|PM)/i);
+function getAssignmentCourseCode(assignment) {
+  return String(
+    assignment?.course_code ??
+      assignment?.code ??
+      assignment?.subjectCode ??
+      "",
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function getAssignmentLabel(assignment) {
+  const code = getAssignmentCourseCode(assignment) || "UNKNOWN";
+  const section = String(assignment?.section ?? "").trim() || "A";
+  return `${code}-${section}`;
+}
+
+function parseTimeTextToMinutes(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const match = text.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
   if (!match) return null;
 
   let hour = Number(match[1]);
   const minute = Number(match[2]);
   const period = String(match[3]).toUpperCase();
 
+  if (!Number.isFinite(hour) || !Number.isFinite(minute) || minute >= 60) {
+    return null;
+  }
+
   if (period === "PM" && hour !== 12) hour += 12;
   if (period === "AM" && hour === 12) hour = 0;
 
-  const startMin = hour * 60 + minute;
-  const durationMinutes = Math.max(
-    1,
-    Math.round((Number(assignment?.duration ?? 1.5) || 1.5) * 60),
+  return hour * 60 + minute;
+}
+
+function parseSqlTimeToMinutes(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (
+    !Number.isFinite(hour) ||
+    !Number.isFinite(minute) ||
+    hour > 23 ||
+    minute > 59
+  ) {
+    return null;
+  }
+
+  return hour * 60 + minute;
+}
+
+function isValidTimeDisplay(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return false;
+
+  const normalized = text.replace(/\s*[–-]\s*/, " - ");
+  const match = normalized.match(
+    /^(\d{1,2}:\d{2}\s*(?:AM|PM))\s-\s(\d{1,2}:\d{2}\s*(?:AM|PM))$/i,
   );
-  const endMin = startMin + durationMinutes;
+  if (!match) return false;
+
+  const startMin = parseTimeTextToMinutes(match[1]);
+  const endMin = parseTimeTextToMinutes(match[2]);
+  return (
+    Number.isFinite(startMin) && Number.isFinite(endMin) && endMin > startMin
+  );
+}
+
+function getAssignmentTimeRange(assignment) {
+  const startFromSql = parseSqlTimeToMinutes(assignment?.time_start);
+  const endFromSql = parseSqlTimeToMinutes(assignment?.time_end);
+  if (
+    Number.isFinite(startFromSql) &&
+    Number.isFinite(endFromSql) &&
+    endFromSql > startFromSql
+  ) {
+    return { startMin: startFromSql, endMin: endFromSql };
+  }
+
+  const rawDisplay = String(assignment?.time_display ?? "").trim();
+  if (!isValidTimeDisplay(rawDisplay)) return null;
+
+  const [startText, endText] = rawDisplay
+    .replace(/\s*[–-]\s*/, " - ")
+    .split(" - ")
+    .map((part) => part.trim());
+  const startMin = parseTimeTextToMinutes(startText);
+  const endMin = parseTimeTextToMinutes(endText);
+
+  if (
+    !Number.isFinite(startMin) ||
+    !Number.isFinite(endMin) ||
+    endMin <= startMin
+  ) {
+    return null;
+  }
 
   return { startMin, endMin };
+}
+
+function getAssignmentTimeWindow(assignment) {
+  const timeRange = getAssignmentTimeRange(assignment);
+  if (!timeRange) return "";
+
+  const rawDisplay = String(assignment?.time_display ?? "").trim();
+  if (isValidTimeDisplay(rawDisplay)) return rawDisplay;
+
+  return `${formatTimeFromMin(timeRange.startMin)} – ${formatTimeFromMin(timeRange.endMin)}`;
 }
 
 export default function SchedulePage() {
@@ -47,7 +137,7 @@ export default function SchedulePage() {
   // Get unique instructor names from assignments + instructor list
   const allInstructorNames = useMemo(() => {
     const fromAssignments = scheduleAssignments
-      .map((a) => a.instructor)
+      .map((a) => a.instructor_name ?? a.instructor)
       .filter(Boolean);
     const fromList = instructors.map((i) => i.name);
     return [...new Set([...fromList, ...fromAssignments])].sort();
@@ -60,18 +150,21 @@ export default function SchedulePage() {
   const labelCounts = useMemo(() => {
     const counts = new Map();
     scheduleAssignments.forEach((assignment) => {
-      const label = formatAssignmentLabel(assignment);
+      const label = getAssignmentLabel(assignment);
       counts.set(label, (counts.get(label) ?? 0) + 1);
     });
     return counts;
   }, [scheduleAssignments]);
 
   const getDisplayLabel = (assignment) => {
-    const label = formatAssignmentLabel(assignment);
+    const label = getAssignmentLabel(assignment);
     if ((labelCounts.get(label) ?? 0) <= 1) return label;
 
     const sectionRef = String(
-      getAssignmentSectionId(assignment) ?? assignment?.assignment_id ?? "",
+      assignment?.section_id ??
+        assignment?.assignment_id ??
+        assignment?.assignmentId ??
+        "",
     ).trim();
     if (!sectionRef) return label;
 
@@ -82,14 +175,18 @@ export default function SchedulePage() {
 
   // Filter assignments by selected room, year, and instructor
   const visibleAssignments = scheduleAssignments.filter((assignment) => {
-    const roomMatch = roomFilter ? assignment.room === roomFilter : true;
+    const roomMatch = roomFilter
+      ? String(assignment.room_number ?? assignment.room ?? "").trim() ===
+        roomFilter
+      : true;
     const yearMatch = yearFilter ? assignment.year === yearFilter : true;
     const instrMatch = instructorFilter
-      ? assignment.instructor?.trim().toLowerCase() ===
-        instructorFilter.trim().toLowerCase()
+      ? String(assignment.instructor_name ?? assignment.instructor ?? "")
+          .trim()
+          .toLowerCase() === instructorFilter.trim().toLowerCase()
       : true;
     const sectionMatch = sectionFilter
-      ? formatAssignmentLabel(assignment)
+      ? getAssignmentLabel(assignment)
           .toLowerCase()
           .includes(sectionFilter.trim().toLowerCase())
       : true;
@@ -110,9 +207,9 @@ export default function SchedulePage() {
   }));
 
   visibleAssignments.forEach((assignment) => {
-    if (!assignment.time || !assignment.pattern) return;
+    if (!assignment.pattern) return;
 
-    const timeRange = getTimeRangeFromAssignment(assignment);
+    const timeRange = getAssignmentTimeRange(assignment);
     if (!timeRange) return;
 
     const coveredSlots = slotRanges.filter(
@@ -197,11 +294,7 @@ export default function SchedulePage() {
         const assignment = cell.assignment;
         const dh = Math.floor(assignment.duration);
         const dm = Math.round((assignment.duration - dh) * 60);
-        const visibleWindow =
-          Number.isFinite(cell.visibleStartMin) &&
-          Number.isFinite(cell.visibleEndMin)
-            ? `${formatTimeFromMin(cell.visibleStartMin)}-${formatTimeFromMin(cell.visibleEndMin)}`
-            : assignment.time;
+        const visibleWindow = getAssignmentTimeWindow(assignment);
         cells.push(
           <td
             key={day}
@@ -215,8 +308,12 @@ export default function SchedulePage() {
               {getDisplayLabel(assignment)}
               {assignment.status === "Conflict" ? " ⚠" : ""}
             </div>
-            <div className="sched-room">{assignment.room}</div>
-            <div className="sched-prof">{assignment.instructor}</div>
+            <div className="sched-room">
+              {assignment.room_number ?? assignment.room}
+            </div>
+            <div className="sched-prof">
+              {assignment.instructor_name ?? assignment.instructor}
+            </div>
             <div className="sched-time-window">{visibleWindow}</div>
             <div className="sched-dur">
               {dm > 0 ? `${dh}h ${dm}m` : `${dh}h`} · {assignment.pattern}
