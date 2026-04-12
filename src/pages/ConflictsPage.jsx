@@ -253,15 +253,21 @@ export default function ConflictsPage() {
             <tbody>
               {[...reallocationLog].reverse().map((entry, i) => (
                 <tr
-                  key={`${entry.assignmentKey || entry.sectionId || entry.code}-${i}`}
+                  key={`${entry.assignmentId || entry.sectionId || entry.assignmentKey || entry.code}-${i}`}
                 >
                   <td className="monospace">
                     <div>{entry.code}</div>
                     <div
                       style={{ fontSize: 10, color: "var(--text3)" }}
-                      title={entry.assignmentKey || entry.sectionId}
+                      title={
+                        entry.assignmentId ||
+                        entry.sectionId ||
+                        entry.assignmentKey
+                      }
                     >
-                      {entry.sectionId || entry.assignmentKey}
+                      {entry.assignmentId ||
+                        entry.sectionId ||
+                        entry.assignmentKey}
                     </div>
                   </td>
                   <td className="monospace" style={{ fontSize: 12 }}>

@@ -17,10 +17,77 @@ import {
   formatAssignmentLabel,
   getAssignmentIdentityKey,
   getAssignmentSectionId,
+  getAssignmentSubjectCode,
 } from "../utils/scheduleUtils";
 import { normalizeRoomType } from "../data/constants";
+import { mapReallocationEntriesToConflictLog } from "../utils/conflictLogUtils";
 
 const ConflictContext = createContext();
+
+function normalizeIdentityPart(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function getAssignmentId(row) {
+  return String(row?.assignmentId ?? row?.assignment_id ?? "").trim();
+}
+
+function getAssignmentIdentifiers(row) {
+  const assignmentId = getAssignmentId(row);
+  const sectionId = String(getAssignmentSectionId(row) ?? "").trim();
+  const identityKey = getAssignmentIdentityKey(row);
+
+  const entityKey = assignmentId
+    ? `ASSIGNMENT:${normalizeIdentityPart(assignmentId)}`
+    : sectionId
+      ? `SECTION:${normalizeIdentityPart(sectionId)}`
+      : identityKey;
+
+  return {
+    assignmentId,
+    sectionId,
+    identityKey,
+    entityKey,
+  };
+}
+
+function getTargetIdentifiers(conflict) {
+  return {
+    assignmentId: String(conflict?.affectedAssignmentId ?? "").trim(),
+    sectionId: String(conflict?.affectedSectionId ?? "").trim(),
+    identityKey: String(conflict?.affectedAssignmentKey ?? "").trim(),
+  };
+}
+
+function mergeIdentifiers(base, override) {
+  return {
+    assignmentId: override.assignmentId || base.assignmentId,
+    sectionId: override.sectionId || base.sectionId,
+    identityKey: override.identityKey || base.identityKey,
+  };
+}
+
+function isSameAssignment(row, target) {
+  const rowIds = getAssignmentIdentifiers(row);
+
+  if (target.assignmentId && rowIds.assignmentId) {
+    return (
+      normalizeIdentityPart(rowIds.assignmentId) ===
+      normalizeIdentityPart(target.assignmentId)
+    );
+  }
+
+  if (target.sectionId && rowIds.sectionId) {
+    return (
+      normalizeIdentityPart(rowIds.sectionId) ===
+      normalizeIdentityPart(target.sectionId)
+    );
+  }
+
+  return rowIds.identityKey === target.identityKey;
+}
 
 function getSectionRef(row) {
   return getAssignmentSectionId(row) || getAssignmentIdentityKey(row);
@@ -47,12 +114,9 @@ export function ConflictProvider({ children }) {
         const a = scheduleAssignments[i];
         const b = scheduleAssignments[j];
         if (!coursesOverlap(a, b)) continue;
-        const pairKey = [
-          getAssignmentIdentityKey(a),
-          getAssignmentIdentityKey(b),
-        ]
-          .sort()
-          .join("|");
+        const aIds = getAssignmentIdentifiers(a);
+        const bIds = getAssignmentIdentifiers(b);
+        const pairKey = [aIds.entityKey, bIds.entityKey].sort().join("|");
         const aLabel = formatAssignmentLabel(a);
         const bLabel = formatAssignmentLabel(b);
 
@@ -70,8 +134,12 @@ export function ConflictProvider({ children }) {
               type: "DOUBLE_BOOKING",
               severity: "HARD",
               courses: [a, b],
-              primaryAssignmentKey: getAssignmentIdentityKey(a),
-              affectedAssignmentKey: getAssignmentIdentityKey(b),
+              primaryAssignmentKey: aIds.identityKey,
+              affectedAssignmentKey: bIds.identityKey,
+              primaryAssignmentId: aIds.assignmentId,
+              affectedAssignmentId: bIds.assignmentId,
+              primarySectionId: aIds.sectionId,
+              affectedSectionId: bIds.sectionId,
               room: a.room,
               days,
               title: `Double Booking — ${a.room} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)} · ${aLabel} vs ${bLabel}`,
@@ -101,8 +169,12 @@ export function ConflictProvider({ children }) {
               type: "INSTRUCTOR_CONFLICT",
               severity: "HARD",
               courses: [a, b],
-              primaryAssignmentKey: getAssignmentIdentityKey(a),
-              affectedAssignmentKey: getAssignmentIdentityKey(b),
+              primaryAssignmentKey: aIds.identityKey,
+              affectedAssignmentKey: bIds.identityKey,
+              primaryAssignmentId: aIds.assignmentId,
+              affectedAssignmentId: bIds.assignmentId,
+              primarySectionId: aIds.sectionId,
+              affectedSectionId: bIds.sectionId,
               days,
               title: `Instructor Conflict — ${a.instructor} · ${days.join("/")} ${formatTimeFromMin(ta.startMin)} · ${aLabel} vs ${bLabel}`,
               desc: `Instructor <strong>${a.instructor}</strong> is simultaneously scheduled for <strong>${aSection}</strong> (${a.room}) and <strong>${bSection}</strong> (${b.room}) on ${days.join("/")} at ${formatTimeFromMin(ta.startMin)}.`,
@@ -115,9 +187,10 @@ export function ConflictProvider({ children }) {
       const course = scheduleAssignments[i];
       const room = rooms.find((r) => r.number === course.room);
       if (room && course.enrolled > 0) {
+        const courseIds = getAssignmentIdentifiers(course);
         const utilization = course.enrolled / room.capacity;
         if (utilization < 0.6) {
-          const id = `UNDERUTIL|${getAssignmentIdentityKey(course)}`;
+          const id = `UNDERUTIL|${courseIds.entityKey}`;
           if (!dismissedSoftConflicts.has(id)) {
             const pct = Math.round(utilization * 100);
             const betterRoom = rooms.find(
@@ -133,7 +206,9 @@ export function ConflictProvider({ children }) {
               type: "ROOM_UNDERUTILIZATION",
               severity: "SOFT",
               courses: [course],
-              assignmentKey: getAssignmentIdentityKey(course),
+              assignmentKey: courseIds.identityKey,
+              assignmentId: courseIds.assignmentId,
+              sectionId: courseIds.sectionId,
               title: `Room Underutilization — ${formatAssignmentLabel(course)} in ${course.room} (${room.capacity} seats)`,
               desc: `<strong>${getSectionDisplay(course)}</strong> (${course.title} · ${course.enrolled} enrolled) is in ${course.room} (capacity ${room.capacity}) at ${pct}% utilization.${betterRoom ? ` ${betterRoom.number} (${betterRoom.capacity} seats) would be more appropriate.` : ""}`,
               meta: `TYPE: ROOM_UNDERUTILIZATION · SEVERITY: SOFT · WEIGHT: 25% · UTILIZATION: ${pct}%`,
@@ -153,20 +228,21 @@ export function ConflictProvider({ children }) {
       const cf = hard.find((c) => c.id === conflictId);
       if (!cf) return "Conflict already resolved.";
 
-      const courseToMoveKey =
-        cf.affectedAssignmentKey ?? getAssignmentIdentityKey(cf.courses?.[1]);
-      const courseToMove = scheduleAssignments.find(
-        (assignment) =>
-          getAssignmentIdentityKey(assignment) === courseToMoveKey,
+      const targetIds = mergeIdentifiers(
+        getAssignmentIdentifiers(cf.courses?.[1]),
+        getTargetIdentifiers(cf),
+      );
+      const courseToMove = scheduleAssignments.find((assignment) =>
+        isSameAssignment(assignment, targetIds),
       );
       if (!courseToMove) return "Conflict row no longer exists.";
 
       const neededType = normalizeRoomType(courseToMove.roomType);
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
-      const target = newAssignments.find(
-        (s) => getAssignmentIdentityKey(s) === courseToMoveKey,
-      );
+      const target = newAssignments.find((s) => isSameAssignment(s, targetIds));
       if (!target) return null;
+
+      const targetIdentifiers = getAssignmentIdentifiers(target);
 
       const freeRoom = rooms.find(
         (r) =>
@@ -176,7 +252,7 @@ export function ConflictProvider({ children }) {
           r.capacity >= (courseToMove.enrolled || 0) &&
           !newAssignments.some(
             (s) =>
-              getAssignmentIdentityKey(s) !== courseToMoveKey &&
+              !isSameAssignment(s, targetIdentifiers) &&
               s.room === r.number &&
               coursesOverlap(s, target),
           ),
@@ -192,14 +268,25 @@ export function ConflictProvider({ children }) {
           ...prev,
           {
             code: `${targetLabel} [${sectionRef}]`,
+            courseCode: getAssignmentSubjectCode(target),
             sectionLabel: targetLabel,
-            assignmentKey: courseToMoveKey,
-            sectionId: sectionRef,
+            assignmentId: targetIdentifiers.assignmentId,
+            assignmentKey: targetIdentifiers.identityKey,
+            sectionId: targetIdentifiers.sectionId || sectionRef,
             from: `${oldRoom} · ${target.time}`,
             to: `${freeRoom.number} · ${target.time}`,
+            fromDetail: {
+              room: oldRoom,
+              time: target.time,
+            },
+            toDetail: {
+              room: freeRoom.number,
+              time: target.time,
+            },
             type: cf.type,
             typeLabel:
               cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
+            resolvedAt: new Date().toISOString(),
           },
         ]);
         message = `${targetLabel} reallocated to ${freeRoom.number} ✓`;
@@ -222,7 +309,7 @@ export function ConflictProvider({ children }) {
           };
           const hasConflict = newAssignments.some(
             (s) =>
-              getAssignmentIdentityKey(s) !== courseToMoveKey &&
+              !isSameAssignment(s, targetIdentifiers) &&
               (s.room === target.room ||
                 (s.instructor && s.instructor === target.instructor)) &&
               coursesOverlap(s, testCourse),
@@ -236,14 +323,25 @@ export function ConflictProvider({ children }) {
               ...prev,
               {
                 code: `${targetLabel} [${sectionRef}]`,
+                courseCode: getAssignmentSubjectCode(target),
                 sectionLabel: targetLabel,
-                assignmentKey: courseToMoveKey,
-                sectionId: sectionRef,
+                assignmentId: targetIdentifiers.assignmentId,
+                assignmentKey: targetIdentifiers.identityKey,
+                sectionId: targetIdentifiers.sectionId || sectionRef,
                 from: `${target.room} · ${oldTime}`,
                 to: `${target.room} · ${target.time}`,
+                fromDetail: {
+                  room: target.room,
+                  time: oldTime,
+                },
+                toDetail: {
+                  room: target.room,
+                  time: target.time,
+                },
                 type: cf.type,
                 typeLabel:
                   cf.type === "DOUBLE_BOOKING" ? "Double Book" : "Instructor",
+                resolvedAt: new Date().toISOString(),
               },
             ]);
             message = `${targetLabel} rescheduled to ${target.time} ✓`;
@@ -285,12 +383,20 @@ export function ConflictProvider({ children }) {
       if (!cf?.betterRoom) return null;
 
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
-      const targetKey =
-        cf.assignmentKey ?? getAssignmentIdentityKey(cf.courses[0]);
-      const target = newAssignments.find(
-        (s) => getAssignmentIdentityKey(s) === targetKey,
+      const targetIds = mergeIdentifiers(
+        getAssignmentIdentifiers(cf.courses?.[0]),
+        {
+          assignmentId: String(cf.assignmentId ?? "").trim(),
+          sectionId: String(cf.sectionId ?? "").trim(),
+          identityKey: String(
+            cf.assignmentKey ?? getAssignmentIdentityKey(cf.courses?.[0]),
+          ).trim(),
+        },
       );
+      const target = newAssignments.find((s) => isSameAssignment(s, targetIds));
       if (!target) return null;
+
+      const targetIdentifiers = getAssignmentIdentifiers(target);
 
       const oldRoom = target.room;
       target.room = cf.betterRoom.number;
@@ -301,13 +407,24 @@ export function ConflictProvider({ children }) {
         ...prev,
         {
           code: `${targetLabel} [${getSectionRef(target)}]`,
+          courseCode: getAssignmentSubjectCode(target),
           sectionLabel: targetLabel,
-          assignmentKey: targetKey,
-          sectionId: getSectionRef(target),
+          assignmentId: targetIdentifiers.assignmentId,
+          assignmentKey: targetIdentifiers.identityKey,
+          sectionId: targetIdentifiers.sectionId || getSectionRef(target),
           from: `${oldRoom} · ${target.time}`,
           to: `${cf.betterRoom.number} · ${target.time}`,
+          fromDetail: {
+            room: oldRoom,
+            time: target.time,
+          },
+          toDetail: {
+            room: cf.betterRoom.number,
+            time: target.time,
+          },
           type: "ROOM_UNDERUTILIZATION",
           typeLabel: "Underutil",
+          resolvedAt: new Date().toISOString(),
         },
       ]);
 
@@ -321,6 +438,10 @@ export function ConflictProvider({ children }) {
     setDismissedSoftConflicts((prev) => new Set([...prev, conflictId]));
   }, []);
 
+  const buildConflictLogPayloads = useCallback(() => {
+    return mapReallocationEntriesToConflictLog(reallocationLog);
+  }, [reallocationLog]);
+
   const value = useMemo(
     () => ({
       detectConflicts,
@@ -329,6 +450,7 @@ export function ConflictProvider({ children }) {
       suggestBetterRoom,
       dismissSoftConflict,
       reallocationLog,
+      buildConflictLogPayloads,
       dismissedSoftConflicts,
     }),
     [
@@ -338,6 +460,7 @@ export function ConflictProvider({ children }) {
       suggestBetterRoom,
       dismissSoftConflict,
       reallocationLog,
+      buildConflictLogPayloads,
       dismissedSoftConflicts,
     ],
   );
