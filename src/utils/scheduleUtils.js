@@ -2,6 +2,7 @@ import { coursesOverlap, formatTime } from "./timeUtils";
 import { normalizeRoomType, patternDaysMap } from "../data/constants";
 
 const DEFAULT_SECTION = "A";
+const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 
 // ─── Identity helpers ────────────────────────────────────────────────────────
 
@@ -23,12 +24,12 @@ export function getAssignmentSection(row) {
 }
 
 export function getAssignmentSectionId(row) {
+  const explicit = getNormalizedSectionId(row);
+  if (explicit) return explicit;
   const explicitIdentity = String(
     row?.sectionIdentity ?? row?.section_identity ?? "",
   ).trim();
   if (explicitIdentity) return explicitIdentity;
-  const explicit = String(row?.section_id ?? row?.sectionId ?? "").trim();
-  if (explicit) return explicit;
   const code = getAssignmentSubjectCode(row);
   const section = getAssignmentSection(row);
   const academicYear = String(
@@ -44,8 +45,13 @@ export function getAssignmentIdentityKey(row) {
     row?.assignmentId ?? row?.assignment_id ?? "",
   ).trim();
   if (assignmentId) return `ASSIGNMENT:${normalizeIdentityPart(assignmentId)}`;
-  const sectionId = getAssignmentSectionId(row);
+  const sectionId = getNormalizedSectionId(row);
   if (sectionId) return `SECTION:${normalizeIdentityPart(sectionId)}`;
+  const sectionIdentity = String(
+    row?.sectionIdentity ?? row?.section_identity ?? "",
+  ).trim();
+  if (sectionIdentity)
+    return `IDENTITY:${normalizeIdentityPart(sectionIdentity)}`;
   const code = normalizeIdentityPart(
     row?.code ?? row?.subjectCode ?? row?.subject_code,
   );
@@ -133,6 +139,16 @@ export function buildNormalizedAssignment({
 }) {
   const room = resolveRoomByNumber(roomNumber, rooms);
   const baseSectionId = getNormalizedSectionId(sectionRow);
+  const normalizedStatus = normalizeAssignmentStatus(status);
+  const normalizedAcademicYear = getAssignmentAcademicYear({
+    academic_year: academicYear,
+    academicYear,
+    ...sectionRow,
+  });
+  const normalizedSemester = getAssignmentSemester({
+    semester,
+    ...sectionRow,
+  });
   const endMinutes =
     parse24TextToMinutes(startTime24) + Math.round(duration * 60);
   const endTime24 = minutesTo24Text(endMinutes);
@@ -159,14 +175,52 @@ export function buildNormalizedAssignment({
     time_start: parseTimeToSQL(startTime24),
     time_end: parseTimeToSQL(endTime24),
     duration: Number(duration) || 1.5,
-    status,
-    academic_year: academicYear,
-    semester,
+    status: normalizedStatus,
+    academic_year: normalizedAcademicYear,
+    semester: normalizedSemester,
 
     // Audit fields (populated by backend on insert)
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
+}
+
+function normalizeAssignmentStatus(value, fallback = "Pending") {
+  const text = String(value ?? "").trim();
+  if (!text) return fallback;
+  const lower = text.toLowerCase();
+  if (lower === "assigned") return "Assigned";
+  if (lower === "conflict") return "Conflict";
+  if (lower === "pending" || lower === "not assigned") return "Pending";
+  return VALID_ASSIGNMENT_STATUSES.has(text) ? text : fallback;
+}
+
+function getAssignmentAcademicYear(row) {
+  return String(row?.academic_year ?? row?.academicYear ?? "").trim();
+}
+
+function getAssignmentSemester(row) {
+  return String(row?.semester ?? "").trim();
+}
+
+function getAssignmentRoom(row) {
+  return String(row?.room ?? row?.room_number ?? "").trim();
+}
+
+function getAssignmentInstructorName(row) {
+  return String(row?.instructor ?? row?.instructor_name ?? "").trim();
+}
+
+function getAssignmentInstructorId(row) {
+  return String(row?.instructorId ?? row?.instructor_id ?? "").trim();
+}
+
+function buildSectionTermKey(row) {
+  const sectionId = getNormalizedSectionId(row);
+  const academicYear = getAssignmentAcademicYear(row);
+  const semester = getAssignmentSemester(row);
+  if (!sectionId || !academicYear || !semester) return "";
+  return `${sectionId}::${academicYear}::${semester}`;
 }
 
 // ─── Time parsing ─────────────────────────────────────────────────────────────
@@ -251,6 +305,96 @@ function buildEligibleRooms(roomPool, assignment) {
   });
 }
 
+function buildSubjectIdToEligibleInstructors(instructorSubjects) {
+  const map = new Map();
+  (Array.isArray(instructorSubjects) ? instructorSubjects : []).forEach(
+    (row) => {
+      const subjectId = String(row?.subjectId ?? row?.subject_id ?? "").trim();
+      const instructorId = String(
+        row?.instructorId ?? row?.instructor_id ?? "",
+      ).trim();
+      if (!subjectId || !instructorId) return;
+      const ids = map.get(subjectId) ?? new Set();
+      ids.add(instructorId);
+      map.set(subjectId, ids);
+    },
+  );
+  return map;
+}
+
+function buildInstructorPoolMap(instructors) {
+  const map = new Map();
+  (Array.isArray(instructors) ? instructors : []).forEach((row) => {
+    const id = String(row?.id ?? row?.instructor_id ?? "").trim();
+    if (!id) return;
+    const isInactive =
+      String(row?.status ?? "")
+        .trim()
+        .toLowerCase() === "inactive";
+    if (isInactive) return;
+    map.set(id, {
+      id,
+      name: String(row?.name ?? row?.instructor_name ?? "").trim(),
+    });
+  });
+  return map;
+}
+
+function buildInstructorLoadCount(assignments) {
+  const load = new Map();
+  (Array.isArray(assignments) ? assignments : []).forEach((row) => {
+    if (normalizeAssignmentStatus(row?.status) !== "Assigned") return;
+    const id = getAssignmentInstructorId(row);
+    if (!id) return;
+    load.set(id, (load.get(id) ?? 0) + 1);
+  });
+  return load;
+}
+
+function chooseInstructorForPlacement({
+  course,
+  placementBase,
+  occupiedPool,
+  assignmentKeyToIgnore,
+  eligibleInstructorIdsBySubjectId,
+  instructorPoolById,
+  instructorLoadCount,
+}) {
+  const subjectId = String(course?.subjectId ?? "").trim();
+  if (!subjectId) return null;
+  const eligibleIds = eligibleInstructorIdsBySubjectId.get(subjectId);
+  if (!eligibleIds || eligibleIds.size === 0) return null;
+
+  const sortedCandidates = Array.from(eligibleIds)
+    .filter((id) => instructorPoolById.has(id))
+    .map((id) => ({ id, load: instructorLoadCount.get(id) ?? 0 }))
+    .sort((a, b) => {
+      if (a.load !== b.load) return a.load - b.load;
+      return a.id.localeCompare(b.id);
+    });
+
+  for (const candidate of sortedCandidates) {
+    const instructor = instructorPoolById.get(candidate.id);
+    const testAssignment = {
+      ...placementBase,
+      instructorId: candidate.id,
+      instructor_id: candidate.id,
+      instructor: instructor?.name ?? "",
+      instructor_name: instructor?.name ?? "",
+    };
+    if (
+      !hasCoverageConflict(occupiedPool, testAssignment, assignmentKeyToIgnore)
+    ) {
+      return {
+        instructorId: candidate.id,
+        instructorName: instructor?.name ?? "",
+      };
+    }
+  }
+
+  return null;
+}
+
 // ─── Conflict detection ───────────────────────────────────────────────────────
 
 function hasCoverageConflict(
@@ -259,20 +403,35 @@ function hasCoverageConflict(
   assignmentKeyToIgnore,
 ) {
   const testKey = getAssignmentIdentityKey(testAssignment);
+  const testSectionTermKey = buildSectionTermKey(testAssignment);
   return existingAssignments.some((assignment) => {
     const existingKey = getAssignmentIdentityKey(assignment);
     if (existingKey === testKey) return false;
     if (assignmentKeyToIgnore && existingKey === assignmentKeyToIgnore)
       return false;
-    const sameRoom =
-      assignment.room &&
-      testAssignment.room &&
-      assignment.room === testAssignment.room;
+    const existingSectionTermKey = buildSectionTermKey(assignment);
+    if (
+      testSectionTermKey &&
+      existingSectionTermKey &&
+      testSectionTermKey === existingSectionTermKey
+    ) {
+      return true;
+    }
+    const existingRoom = getAssignmentRoom(assignment);
+    const testRoom = getAssignmentRoom(testAssignment);
+    const sameRoom = existingRoom && testRoom && existingRoom === testRoom;
+    const existingInstructorId = getAssignmentInstructorId(assignment);
+    const testInstructorId = getAssignmentInstructorId(testAssignment);
+    const existingInstructorName = getAssignmentInstructorName(assignment);
+    const testInstructorName = getAssignmentInstructorName(testAssignment);
     const sameInstructor =
-      assignment.instructor &&
-      testAssignment.instructor &&
-      assignment.instructor.trim().toLowerCase() ===
-        testAssignment.instructor.trim().toLowerCase();
+      (existingInstructorId &&
+        testInstructorId &&
+        existingInstructorId === testInstructorId) ||
+      (existingInstructorName &&
+        testInstructorName &&
+        existingInstructorName.toLowerCase() ===
+          testInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, testAssignment);
   });
@@ -416,6 +575,71 @@ function mergeWithExistingAssignments(
   return Array.from(mergedByKey.values());
 }
 
+function normalizeForConflictChecks(row, fallbackPattern = "MWF") {
+  const startTime24 = extractStartTime24(row, "");
+  const pattern = getPatternForRow(row, fallbackPattern);
+  return {
+    ...row,
+    code: getAssignmentSubjectCode(row),
+    section: getAssignmentSection(row),
+    sectionId: getAssignmentSectionId(row),
+    academicYear: getAssignmentAcademicYear(row),
+    semester: getAssignmentSemester(row),
+    room: getAssignmentRoom(row),
+    instructor: getAssignmentInstructorName(row),
+    instructorId: getAssignmentInstructorId(row),
+    time:
+      String(row?.time ?? "").trim() ||
+      (startTime24 ? `${pattern} ${formatTime(startTime24)}` : ""),
+    duration: Number(row?.duration ?? 1.5) || 1.5,
+    pattern,
+    subjectId: String(row?.subjectId ?? row?.subject_id ?? "").trim(),
+  };
+}
+
+function dedupeBySectionTerm(assignments) {
+  const byKey = new Map();
+  const statusRank = { Assigned: 3, Conflict: 2, Pending: 1 };
+
+  (Array.isArray(assignments) ? assignments : []).forEach((assignment) => {
+    const uniqueKey =
+      buildSectionTermKey(assignment) || getAssignmentIdentityKey(assignment);
+    if (!uniqueKey) return;
+
+    const next = {
+      ...assignment,
+      status: normalizeAssignmentStatus(assignment?.status),
+    };
+    const existing = byKey.get(uniqueKey);
+    if (!existing) {
+      byKey.set(uniqueKey, next);
+      return;
+    }
+
+    const existingRank =
+      statusRank[normalizeAssignmentStatus(existing.status)] ?? 0;
+    const nextRank = statusRank[normalizeAssignmentStatus(next.status)] ?? 0;
+
+    if (nextRank > existingRank) {
+      byKey.set(uniqueKey, next);
+      return;
+    }
+
+    if (nextRank === existingRank) {
+      const existingFilled =
+        Number(Boolean(existing.room_id)) +
+        Number(Boolean(existing.instructor_id));
+      const nextFilled =
+        Number(Boolean(next.room_id)) + Number(Boolean(next.instructor_id));
+      if (nextFilled >= existingFilled) {
+        byKey.set(uniqueKey, next);
+      }
+    }
+  });
+
+  return Array.from(byKey.values());
+}
+
 // ─── ★ UPDATED Auto-Schedule ──────────────────────────────────────────────────
 //
 //  New behaviour:
@@ -428,7 +652,10 @@ function mergeWithExistingAssignments(
 
 export function runAutoSchedule({
   sectionRows,
+  subjects = [],
   rooms,
+  instructors = [],
+  instructorSubjects = [],
   scheduleAssignments,
   startTime,
   endTime,
@@ -439,10 +666,21 @@ export function runAutoSchedule({
     return { error: "Please select at least one active day." };
 
   const weights = getSoftWeights();
-  const newRooms = rooms.map((r) => ({ ...r }));
+  const newRooms = (Array.isArray(rooms) ? rooms : []).map((r) => ({ ...r }));
+  const subjectByCode = new Map(
+    (Array.isArray(subjects) ? subjects : []).map((subject) => [
+      String(subject?.code ?? "")
+        .trim()
+        .toUpperCase(),
+      subject,
+    ]),
+  );
+  const instructorPoolById = buildInstructorPoolMap(instructors);
+  const eligibleInstructorIdsBySubjectId =
+    buildSubjectIdToEligibleInstructors(instructorSubjects);
   const existingAssignments = (
     Array.isArray(scheduleAssignments) ? scheduleAssignments : []
-  ).map((a) => ({ ...a }));
+  ).map((a) => normalizeForConflictChecks(a, pattern));
   const generatedAssignments = [];
 
   const startMinutes = parse24TextToMinutes(startTime);
@@ -471,15 +709,29 @@ export function runAutoSchedule({
   let assigned = 0;
   let conflictCount = 0;
 
-  sectionRows.forEach((course) => {
-    const courseDuration = Number(course.duration ?? 1.5) || 1.5;
+  sectionRows.forEach((row) => {
+    const course = normalizeForConflictChecks(row, pattern);
+    const courseSubjectCode = getAssignmentSubjectCode(course);
+    const fallbackSubject = subjectByCode.get(courseSubjectCode);
+    const courseSubjectId = String(
+      course.subjectId ??
+        fallbackSubject?.id ??
+        fallbackSubject?.subject_id ??
+        "",
+    ).trim();
+    course.subjectId = courseSubjectId;
+
+    const courseDuration =
+      Number(course.duration ?? fallbackSubject?.duration ?? 1.5) || 1.5;
     const durationMinutes = Math.round(courseDuration * 60);
     if (durationMinutes <= 0) return;
+    const assignmentKey = getAssignmentIdentityKey(course);
 
     // Resolve imported fields
     const importedStart = extractStartTime24(course, "");
     const importedPattern = getPatternForRow(course, "");
-    const importedInstructor = String(course.instructor ?? "").trim();
+    const importedInstructor = getAssignmentInstructorName(course);
+    const importedInstructorId = getAssignmentInstructorId(course);
 
     // Patterns to try: imported first, then alternatives, then fallback
     const patternsToTry = importedPattern
@@ -506,6 +758,28 @@ export function runAutoSchedule({
 
     if (timeSlotsToTry.length === 0) return;
 
+    const eligibleInstructorIds =
+      eligibleInstructorIdsBySubjectId.get(courseSubjectId);
+    if (!eligibleInstructorIds || eligibleInstructorIds.size === 0) {
+      generatedAssignments.push({
+        ...course,
+        room: "",
+        instructor: "",
+        instructorId: "",
+        instructor_id: "",
+        time: importedStart
+          ? `${importedPattern || pattern} ${formatTime(importedStart)}`
+          : "",
+        duration: courseDuration,
+        pattern: importedPattern || pattern,
+        status: "Conflict",
+        conflictReason:
+          "No eligible instructor mapped for this section subject.",
+      });
+      conflictCount++;
+      return;
+    }
+
     const eligibleRooms = buildEligibleRooms(newRooms, course);
     if (eligibleRooms.length === 0) {
       generatedAssignments.push({
@@ -517,6 +791,8 @@ export function runAutoSchedule({
         duration: courseDuration,
         pattern: importedPattern || pattern,
         instructor: importedInstructor,
+        instructorId: importedInstructorId,
+        instructor_id: importedInstructorId,
         status: "Conflict",
         conflictReason: "No eligible room (type/capacity) for this section.",
       });
@@ -531,10 +807,12 @@ export function runAutoSchedule({
     });
 
     const occupiedPool = [...existingAssignments, ...generatedAssignments];
+    const instructorLoadCount = buildInstructorLoadCount(occupiedPool);
 
     let bestResult = null;
     let patternUsed = null;
     let slotUsed = null;
+    let instructorUsed = null;
 
     outerSearch: for (const tryPattern of patternsToTry) {
       const patternDays = patternDaysMap[tryPattern] ?? [];
@@ -547,20 +825,75 @@ export function runAutoSchedule({
         const candidateTime = `${tryPattern} ${formatTime(slot)}`;
 
         for (const room of orderedRooms) {
-          const testAssignment = {
+          const placementBase = {
             ...course,
             time: candidateTime,
             duration: courseDuration,
             pattern: tryPattern,
             room: room.number,
-            instructor: importedInstructor,
+            sectionId: getAssignmentSectionId(course),
+            section_id: getNormalizedSectionId(course),
+            academicYear: getAssignmentAcademicYear(course),
+            semester: getAssignmentSemester(course),
+            subjectId: courseSubjectId,
+            subject_id: courseSubjectId,
           };
-          if (!hasCoverageConflict(occupiedPool, testAssignment)) {
+
+          let selectedInstructor = null;
+          if (
+            importedInstructorId &&
+            eligibleInstructorIds.has(importedInstructorId) &&
+            instructorPoolById.has(importedInstructorId)
+          ) {
+            const importedPlacement = {
+              ...placementBase,
+              instructorId: importedInstructorId,
+              instructor_id: importedInstructorId,
+              instructor:
+                importedInstructor ||
+                instructorPoolById.get(importedInstructorId)?.name ||
+                "",
+              instructor_name:
+                importedInstructor ||
+                instructorPoolById.get(importedInstructorId)?.name ||
+                "",
+            };
+            if (
+              !hasCoverageConflict(
+                occupiedPool,
+                importedPlacement,
+                assignmentKey,
+              )
+            ) {
+              selectedInstructor = {
+                instructorId: importedInstructorId,
+                instructorName:
+                  importedInstructor ||
+                  instructorPoolById.get(importedInstructorId)?.name ||
+                  "",
+              };
+            }
+          }
+
+          if (!selectedInstructor) {
+            selectedInstructor = chooseInstructorForPlacement({
+              course,
+              placementBase,
+              occupiedPool,
+              assignmentKeyToIgnore: assignmentKey,
+              eligibleInstructorIdsBySubjectId,
+              instructorPoolById,
+              instructorLoadCount,
+            });
+          }
+
+          if (selectedInstructor) {
             const score = scoreSoftConstraints(course, room, slot, weights);
             if (bestResult === null || score > bestResult.score) {
               bestResult = { room, score };
               patternUsed = tryPattern;
               slotUsed = slot;
+              instructorUsed = selectedInstructor;
               // Perfect match (imported slot + imported pattern) — stop searching
               if (
                 tryPattern === importedPattern &&
@@ -581,7 +914,10 @@ export function runAutoSchedule({
         time: `${patternUsed} ${formatTime(slotUsed)}`,
         duration: courseDuration,
         pattern: patternUsed,
-        instructor: importedInstructor,
+        instructor: instructorUsed?.instructorName || "",
+        instructor_name: instructorUsed?.instructorName || "",
+        instructorId: instructorUsed?.instructorId || "",
+        instructor_id: instructorUsed?.instructorId || "",
         status: "Assigned",
         patternAdjusted:
           importedPattern && patternUsed !== importedPattern
@@ -600,8 +936,11 @@ export function runAutoSchedule({
         duration: courseDuration,
         pattern: importedPattern || pattern,
         instructor: importedInstructor,
+        instructorId: importedInstructorId,
+        instructor_id: importedInstructorId,
         status: "Conflict",
-        conflictReason: "No available room for any pattern/time combination.",
+        conflictReason:
+          "No available room and instructor combination for any pattern/time combination.",
       });
       conflictCount++;
     }
@@ -617,9 +956,12 @@ export function runAutoSchedule({
     if (room && room.status !== "Maintenance") room.status = "Occupied";
   });
 
-  // Build a map of section rows by identity key for normalization
+  // Build maps for section lookup when transforming to FK-compatible rows
   const sectionRowMap = new Map(
     sectionRows.map((row) => [getAssignmentIdentityKey(row), row]),
+  );
+  const sectionTermMap = new Map(
+    sectionRows.map((row) => [buildSectionTermKey(row), row]),
   );
 
   // Transform assignments to normalized schema with FK/display columns
@@ -631,36 +973,49 @@ export function runAutoSchedule({
       assignment.section_id.length > 0 &&
       !assignment.section_id.includes("|")
     ) {
-      return assignment;
+      return {
+        ...assignment,
+        status: normalizeAssignmentStatus(assignment.status),
+        academic_year:
+          getAssignmentAcademicYear(assignment) || assignment.academic_year,
+        semester: getAssignmentSemester(assignment) || assignment.semester,
+      };
     }
 
-    const associatedSectionRow = sectionRowMap.get(
-      getAssignmentIdentityKey(assignment),
-    );
+    const associatedSectionRow =
+      sectionRowMap.get(getAssignmentIdentityKey(assignment)) ||
+      sectionTermMap.get(buildSectionTermKey(assignment));
 
     if (!associatedSectionRow) {
       // Fallback for existing assignments or those without matching section row
+      const startTime24 = extractStartTime24(assignment, "");
+      const duration = Number(assignment.duration ?? 1.5) || 1.5;
+      const endMinutes =
+        (parse24TextToMinutes(startTime24) || 0) + Math.round(duration * 60);
       return {
         ...assignment,
         section_id: getNormalizedSectionId(assignment),
-        subject_id: assignment.subjectId,
-        room_id: resolveRoomByNumber(assignment.room, newRooms)?.id || null,
-        instructor_id: assignment.instructorId,
+        subject_id: String(
+          assignment.subjectId ?? assignment.subject_id ?? "",
+        ).trim(),
+        room_id:
+          resolveRoomByNumber(getAssignmentRoom(assignment), newRooms)?.id ||
+          null,
+        instructor_id: getAssignmentInstructorId(assignment),
         course_code: getAssignmentSubjectCode(assignment),
-        room_number: assignment.room,
-        instructor_name: assignment.instructor,
-        time_display: assignment.time || "",
-        time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
-        time_end: assignment.room
-          ? parseTimeToSQL(
-              minutesTo24Text(
-                (parse24TextToMinutes(extractStartTime24(assignment, "")) ||
-                  0) + Math.round((assignment.duration || 1.5) * 60),
-              ),
-            )
-          : "00:00:00",
-        academic_year: assignment.academicYear,
-        semester: assignment.semester,
+        room_number: getAssignmentRoom(assignment),
+        instructor_name: getAssignmentInstructorName(assignment),
+        pattern: getPatternForRow(assignment, pattern),
+        time_display: String(
+          assignment.time ?? assignment.time_display ?? "",
+        ).trim(),
+        time_start: parseTimeToSQL(startTime24),
+        time_end: parseTimeToSQL(minutesTo24Text(endMinutes)),
+        duration,
+        status: normalizeAssignmentStatus(assignment.status),
+        academic_year: getAssignmentAcademicYear(assignment),
+        semester: getAssignmentSemester(assignment),
+        updated_at: new Date().toISOString(),
       };
     }
 
@@ -680,18 +1035,75 @@ export function runAutoSchedule({
     });
   });
 
+  const validatedAssignments = normalizedFinalAssignments.map((assignment) => {
+    const normalizedStatus = normalizeAssignmentStatus(assignment.status);
+    const sectionId = String(assignment.section_id ?? "").trim();
+    const subjectId = String(assignment.subject_id ?? "").trim();
+    const roomId = String(assignment.room_id ?? "").trim();
+    const instructorId = String(assignment.instructor_id ?? "").trim();
+    const academicYear = getAssignmentAcademicYear(assignment);
+    const semester = getAssignmentSemester(assignment);
+
+    if (normalizedStatus === "Assigned") {
+      const missing = [];
+      if (!sectionId) missing.push("section_id");
+      if (!subjectId) missing.push("subject_id");
+      if (!roomId) missing.push("room_id");
+      if (!instructorId) missing.push("instructor_id");
+      if (!academicYear) missing.push("academic_year");
+      if (!semester) missing.push("semester");
+
+      if (missing.length > 0) {
+        return {
+          ...assignment,
+          status: "Conflict",
+          conflictReason:
+            assignment.conflictReason ||
+            `Missing required DB fields for assigned row: ${missing.join(", ")}`,
+          updated_at: new Date().toISOString(),
+        };
+      }
+    }
+
+    return {
+      ...assignment,
+      status: normalizedStatus,
+      academic_year: academicYear,
+      semester,
+    };
+  });
+
+  const dedupedAssignments = dedupeBySectionTerm(validatedAssignments);
+
+  newRooms.forEach((r) => {
+    if (r.status !== "Maintenance") r.status = "Available";
+  });
+  dedupedAssignments.forEach((assignment) => {
+    if (normalizeAssignmentStatus(assignment.status) !== "Assigned") return;
+    const roomNumber = getAssignmentRoom(assignment);
+    if (!roomNumber) return;
+    const room = newRooms.find((r) => String(r.number).trim() === roomNumber);
+    if (room && room.status !== "Maintenance") room.status = "Occupied";
+  });
+
   const patternAdjustedCount = generatedAssignments.filter(
     (a) => a.patternAdjusted,
   ).length;
-  let message = `Auto-generated ${assigned} assignment${assigned !== 1 ? "s" : ""} using imported time & day data (room-only assignment).`;
+  let message = `Auto-generated ${assigned} assignment${assigned !== 1 ? "s" : ""} using imported section data with room and instructor matching.`;
   if (patternAdjustedCount > 0)
     message += ` ${patternAdjustedCount} section${patternAdjustedCount !== 1 ? "s" : ""} had meeting pattern adjusted to avoid conflicts.`;
   if (conflictCount > 0)
-    message += ` ${conflictCount} section${conflictCount !== 1 ? "s" : ""} flagged as conflicts — no available room found.`;
+    message += ` ${conflictCount} section${conflictCount !== 1 ? "s" : ""} flagged as conflicts — no valid room/instructor placement found.`;
+
+  const duplicateTrimmed =
+    validatedAssignments.length - dedupedAssignments.length;
+  if (duplicateTrimmed > 0) {
+    message += ` ${duplicateTrimmed} duplicate section-term row${duplicateTrimmed !== 1 ? "s were" : " was"} collapsed to satisfy section/term uniqueness.`;
+  }
 
   return {
     rooms: newRooms,
-    scheduleAssignments: normalizedFinalAssignments,
+    scheduleAssignments: dedupedAssignments,
     assigned,
     conflicts: conflictCount,
     message,
@@ -704,13 +1116,30 @@ function getConflictingAssignments(assignments, targetAssignment, targetKey) {
   return assignments.filter((assignment) => {
     const currentKey = getAssignmentIdentityKey(assignment);
     if (currentKey === targetKey) return false;
-    const sameRoom =
-      assignment.room && assignment.room === targetAssignment.room;
+    const currentSectionTermKey = buildSectionTermKey(assignment);
+    const targetSectionTermKey = buildSectionTermKey(targetAssignment);
+    if (
+      currentSectionTermKey &&
+      targetSectionTermKey &&
+      currentSectionTermKey === targetSectionTermKey
+    ) {
+      return true;
+    }
+    const currentRoom = getAssignmentRoom(assignment);
+    const targetRoom = getAssignmentRoom(targetAssignment);
+    const sameRoom = currentRoom && targetRoom && currentRoom === targetRoom;
+    const currentInstructorId = getAssignmentInstructorId(assignment);
+    const targetInstructorId = getAssignmentInstructorId(targetAssignment);
+    const currentInstructorName = getAssignmentInstructorName(assignment);
+    const targetInstructorName = getAssignmentInstructorName(targetAssignment);
     const sameInstructor =
-      assignment.instructor &&
-      targetAssignment.instructor &&
-      assignment.instructor.trim().toLowerCase() ===
-        targetAssignment.instructor.trim().toLowerCase();
+      (currentInstructorId &&
+        targetInstructorId &&
+        currentInstructorId === targetInstructorId) ||
+      (currentInstructorName &&
+        targetInstructorName &&
+        currentInstructorName.toLowerCase() ===
+          targetInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, targetAssignment);
   });
@@ -752,7 +1181,7 @@ export function applyManualAssignments({
       duration: Number(entry.duration ?? sectionRow.duration ?? 1.5) || 1.5,
       pattern: resolvedPattern,
       time: `${resolvedPattern} ${formatTime(entry.startTime)}`,
-      status: "Assigned",
+      status: normalizeAssignmentStatus("Assigned"),
     };
 
     const desiredStartMinutes = parse24TextToMinutes(entry.startTime);
@@ -870,12 +1299,15 @@ export function applyManualAssignments({
       return {
         ...assignment,
         section_id: getNormalizedSectionId(assignment),
-        subject_id: assignment.subjectId,
+        subject_id: String(
+          assignment.subjectId ?? assignment.subject_id ?? "",
+        ).trim(),
         room_id: resolveRoomByNumber(assignment.room, rooms)?.id || null,
-        instructor_id: assignment.instructorId,
+        instructor_id: getAssignmentInstructorId(assignment),
         course_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
-        instructor_name: assignment.instructor,
+        instructor_name: getAssignmentInstructorName(assignment),
+        pattern: getPatternForRow(assignment, "MWF"),
         time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
         time_end: parseTimeToSQL(
@@ -884,8 +1316,11 @@ export function applyManualAssignments({
               Math.round((assignment.duration || 1.5) * 60),
           ),
         ),
-        academic_year: assignment.academicYear,
-        semester: assignment.semester,
+        duration: Number(assignment.duration ?? 1.5) || 1.5,
+        status: normalizeAssignmentStatus(assignment.status),
+        academic_year: getAssignmentAcademicYear(assignment),
+        semester: getAssignmentSemester(assignment),
+        updated_at: new Date().toISOString(),
       };
     }
 
@@ -905,7 +1340,10 @@ export function applyManualAssignments({
     });
   });
 
-  return { scheduleAssignments: normalizedAssignments, moved };
+  return {
+    scheduleAssignments: dedupeBySectionTerm(normalizedAssignments),
+    moved,
+  };
 }
 
 // ─── Manual conflict check ────────────────────────────────────────────────────
@@ -936,7 +1374,7 @@ export function checkManualConflict({
   };
   const conflicting = scheduleAssignments.filter(
     (a) =>
-      a.room === roomName &&
+      getAssignmentRoom(a) === roomName &&
       getAssignmentIdentityKey(a) !== assignmentKey &&
       coursesOverlap(a, testCourse),
   );
