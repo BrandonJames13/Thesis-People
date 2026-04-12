@@ -71,7 +71,7 @@ export function formatAssignmentLabel(row) {
  */
 export function getNormalizedSectionId(row) {
   const sectionId = String(row?.sectionId ?? row?.section_id ?? "").trim();
-  if (!sectionId) return ""; 
+  if (!sectionId) return "";
   // Strip __LEC or __LAB suffixes used for split components
   return sectionId.replace(/__(LEC|LAB)$/, "");
 }
@@ -83,7 +83,9 @@ export function getNormalizedSectionId(row) {
 export function resolveRoomByNumber(roomNumber, roomPool) {
   if (!roomNumber) return null;
   const normalized = String(roomNumber).trim();
-  return roomPool.find(r => String(r?.number ?? "").trim() === normalized) || null;
+  return (
+    roomPool.find((r) => String(r?.number ?? "").trim() === normalized) || null
+  );
 }
 
 /**
@@ -93,11 +95,11 @@ export function resolveRoomByNumber(roomNumber, roomPool) {
 export function formatTimeDisplay(startTime24, durationHours) {
   const startMinutes = parse24TextToMinutes(startTime24);
   if (startMinutes == null) return "";
-  
+
   const endMinutes = startMinutes + Math.round(durationHours * 60);
   const startFormatted = formatTime(startTime24);
   const endFormatted = formatTime(minutesTo24Text(endMinutes));
-  
+
   return `${startFormatted} – ${endFormatted}`;
 }
 
@@ -131,7 +133,8 @@ export function buildNormalizedAssignment({
 }) {
   const room = resolveRoomByNumber(roomNumber, rooms);
   const baseSectionId = getNormalizedSectionId(sectionRow);
-  const endMinutes = parse24TextToMinutes(startTime24) + Math.round(duration * 60);
+  const endMinutes =
+    parse24TextToMinutes(startTime24) + Math.round(duration * 60);
   const endTime24 = minutesTo24Text(endMinutes);
 
   return {
@@ -616,19 +619,24 @@ export function runAutoSchedule({
 
   // Build a map of section rows by identity key for normalization
   const sectionRowMap = new Map(
-    sectionRows.map((row) => [getAssignmentIdentityKey(row), row])
+    sectionRows.map((row) => [getAssignmentIdentityKey(row), row]),
   );
 
   // Transform assignments to normalized schema with FK/display columns
   const normalizedFinalAssignments = finalAssignments.map((assignment) => {
     // Check if already normalized
-    if (assignment.section_id && typeof assignment.section_id === "string" && 
-        assignment.section_id.length > 0 && 
-        !assignment.section_id.includes("|")) {
+    if (
+      assignment.section_id &&
+      typeof assignment.section_id === "string" &&
+      assignment.section_id.length > 0 &&
+      !assignment.section_id.includes("|")
+    ) {
       return assignment;
     }
 
-    const associatedSectionRow = sectionRowMap.get(getAssignmentIdentityKey(assignment));
+    const associatedSectionRow = sectionRowMap.get(
+      getAssignmentIdentityKey(assignment),
+    );
 
     if (!associatedSectionRow) {
       // Fallback for existing assignments or those without matching section row
@@ -641,12 +649,16 @@ export function runAutoSchedule({
         course_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
         instructor_name: assignment.instructor,
-        time_display: assignment.time || '',
+        time_display: assignment.time || "",
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
-        time_end: assignment.room ? parseTimeToSQL(minutesTo24Text(
-          (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) + 
-          Math.round((assignment.duration || 1.5) * 60)
-        )) : "00:00:00",
+        time_end: assignment.room
+          ? parseTimeToSQL(
+              minutesTo24Text(
+                (parse24TextToMinutes(extractStartTime24(assignment, "")) ||
+                  0) + Math.round((assignment.duration || 1.5) * 60),
+              ),
+            )
+          : "00:00:00",
         academic_year: assignment.academicYear,
         semester: assignment.semester,
       };
@@ -729,7 +741,7 @@ export function applyManualAssignments({
 
     const assignmentKey = getAssignmentIdentityKey(sectionRow);
     const resolvedPattern = getPatternForRow({ pattern: entry.pattern }, "MWF");
-    
+
     // Build desired assignment with old schema for conflict detection
     const desired = {
       ...sectionRow,
@@ -831,9 +843,12 @@ export function applyManualAssignments({
   // Transform assignments to normalized schema with FK/display columns
   const normalizedAssignments = nextAssignments.map((assignment) => {
     // Check if it's already normalized (has section_id as FK)
-    if (assignment.section_id && typeof assignment.section_id === "string" && 
-        assignment.section_id.length > 0 && 
-        !assignment.section_id.includes("|")) {
+    if (
+      assignment.section_id &&
+      typeof assignment.section_id === "string" &&
+      assignment.section_id.length > 0 &&
+      !assignment.section_id.includes("|")
+    ) {
       // Already normalized, return as-is
       return assignment;
     }
@@ -841,7 +856,10 @@ export function applyManualAssignments({
     // Find the original section row for this assignment
     let associatedSectionRow = null;
     for (const sectionRow of sectionRowsByIdentity.values()) {
-      if (getAssignmentIdentityKey(sectionRow) === getAssignmentIdentityKey(assignment)) {
+      if (
+        getAssignmentIdentityKey(sectionRow) ===
+        getAssignmentIdentityKey(assignment)
+      ) {
         associatedSectionRow = sectionRow;
         break;
       }
@@ -860,10 +878,12 @@ export function applyManualAssignments({
         instructor_name: assignment.instructor,
         time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
-        time_end: parseTimeToSQL(minutesTo24Text(
-          (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) + 
-          Math.round((assignment.duration || 1.5) * 60)
-        )),
+        time_end: parseTimeToSQL(
+          minutesTo24Text(
+            (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) +
+              Math.round((assignment.duration || 1.5) * 60),
+          ),
+        ),
         academic_year: assignment.academicYear,
         semester: assignment.semester,
       };
