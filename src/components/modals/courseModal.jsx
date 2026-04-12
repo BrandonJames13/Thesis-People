@@ -39,7 +39,7 @@ function validateEnrolledForRoomType(enrolled, roomType) {
   return null;
 }
 
-export function CourseModal({
+export function SubjectModal({
   subjects,
   existing,
   existingSections = [],

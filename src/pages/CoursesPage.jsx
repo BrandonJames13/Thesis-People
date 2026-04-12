@@ -3,14 +3,14 @@ import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
-import { CourseModal } from "../components/modals/courseModal";
+import { SubjectModal } from "../components/modals/SubjectModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 
 const CURRENT_ACADEMIC_YEAR = "2025-2026";
 const CURRENT_SEMESTER = "2nd";
 const PAGE_SIZE = 15;
 
-export default function CoursesPage() {
+export default function SubjectsPage() {
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
 
@@ -531,7 +531,7 @@ export default function CoursesPage() {
       </div>
 
       {showModal && isAdmin && (
-        <CourseModal
+        <SubjectModal
           subjects={subjectCatalogRows}
           existing={editSubject}
           existingSections={editSubject?.sections ?? []}
