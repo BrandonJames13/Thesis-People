@@ -27,7 +27,7 @@ function loadWeights() {
 export default function AlgorithmPage() {
   const {
     subjectSections,
-    assignments,
+    scheduleAssignments,
     availableRooms,
     availableInstructors,
     availableSubjects,
@@ -40,14 +40,20 @@ export default function AlgorithmPage() {
   const [weights, setWeights] = useState(loadWeights);
 
   const { hard } = detectConflicts();
-  const assignedCount = assignments.length;
+  const assignedCount = scheduleAssignments.filter(
+    (assignment) => assignment.status === "Assigned",
+  ).length;
   const totalSections = subjectSections.length;
   const conflictRate =
     assignedCount > 0
       ? ((hard.length / assignedCount) * 100).toFixed(1)
       : "0.0";
-  const occupiedRooms = new Set(assignments.map((c) => c.room).filter(Boolean))
-    .size;
+  const occupiedRooms = new Set(
+    scheduleAssignments
+      .filter((assignment) => assignment.status === "Assigned")
+      .map((assignment) => assignment.room_number ?? assignment.room)
+      .filter(Boolean),
+  ).size;
 
   const totalWeight =
     weights.timePreference +
@@ -115,7 +121,7 @@ export default function AlgorithmPage() {
           <div className="section-subtitle">
             Constraint-Based Greedy · Tier 1 (Hard) + Tier 2 (Soft) ·
             Transparent &amp; customizable · Uses all available
-            rooms/instructors/subjects/sections
+            rooms/instructors/subjects/subject sections
           </div>
         </div>
         <button
@@ -174,7 +180,7 @@ export default function AlgorithmPage() {
                 ["Room Capacity", "Capacity ≥ Enrollment count"],
                 [
                   "Instructor Conflict",
-                  "Faculty ≠ 2 section assignments simultaneously",
+                  "Faculty ≠ 2 subject-section assignments simultaneously",
                 ],
                 ["Time Slot Validity", "Within TSU academic calendar"],
               ].map(([name, rule]) => (
@@ -431,7 +437,7 @@ export default function AlgorithmPage() {
             <tbody>
               {[
                 [
-                  `Schedule Generation (${totalSections} sections)`,
+                  `Schedule Generation (${totalSections} subject sections)`,
                   "< 10s",
                   assignedCount > 0 ? "< 10s ✓" : "Not run",
                   assignedCount > 0 ? "green" : "orange",

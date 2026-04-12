@@ -53,14 +53,16 @@ export default function ConflictsPage() {
   };
 
   const getConflictSectionSummary = (conflict) => {
-    const labels = (conflict?.courses ?? []).map((assignment) => {
-      const label = formatAssignmentLabel(assignment);
-      const sectionRef = String(
-        getAssignmentSectionId(assignment) ?? assignment?.assignment_id ?? "",
-      ).trim();
-      if (!sectionRef) return label;
-      return `${label} [${sectionRef.slice(-10).toUpperCase()}]`;
-    });
+    const labels = (conflict?.assignments ?? conflict?.courses ?? []).map(
+      (assignment) => {
+        const label = formatAssignmentLabel(assignment);
+        const sectionRef = String(
+          getAssignmentSectionId(assignment) ?? assignment?.assignment_id ?? "",
+        ).trim();
+        if (!sectionRef) return label;
+        return `${label} [${sectionRef.slice(-10).toUpperCase()}]`;
+      },
+    );
     if (labels.length === 0) return "";
     return labels.join(" • ");
   };

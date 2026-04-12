@@ -2,12 +2,14 @@ import { useData } from "../context/DataContext";
 import { useConflicts } from "../context/ConflictContext";
 
 export default function AnalyticsPage() {
-  const { rooms, subjectSections, scheduleAssignments, assignments } =
-    useData();
+  const { rooms, subjectSections, scheduleAssignments } = useData();
   const { detectConflicts } = useConflicts();
 
   const { hard } = detectConflicts();
-  const hasSchedule = assignments.length > 0;
+  const assignedScheduleCount = scheduleAssignments.filter(
+    (assignment) => assignment.status === "Assigned",
+  ).length;
+  const hasSchedule = scheduleAssignments.length > 0;
 
   // Room-by-room utilization: % of time slots occupied per room
   const utilData = rooms
@@ -36,7 +38,7 @@ export default function AnalyticsPage() {
     rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
   const totalSections = subjectSections.length;
-  const assignedSections = assignments.length;
+  const assignedSections = assignedScheduleCount;
   const conflictRate =
     assignedSections > 0
       ? Math.round((hard.length / assignedSections) * 100)
@@ -130,13 +132,13 @@ export default function AnalyticsPage() {
           </div>
         </div>
         <div className="stat-card purple">
-          <div className="stat-label">Sections Scheduled</div>
+          <div className="stat-label">Subject Sections Scheduled</div>
           <div className="stat-value">
             {hasSchedule ? assignedSections : "—"}
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${assignedSections} of ${totalSections} total sections`
+              ? `${assignedSections} of ${totalSections} total subject sections`
               : "No schedule generated yet"}
           </div>
         </div>
@@ -157,7 +159,7 @@ export default function AnalyticsPage() {
                 fontSize: 13,
               }}
             >
-              Generate a schedule to see room utilization data.
+              Generate a schedule to see subject-section room utilization data.
             </div>
           ) : (
             utilData.map((row) => (
@@ -183,7 +185,8 @@ export default function AnalyticsPage() {
               borderTop: "1px solid var(--border)",
             }}
           >
-            International benchmark: 80–90% (CHED 2024)
+            International benchmark: 80–90% (CHED 2024) · Subject-section
+            schedule coverage
           </div>
         </div>
 

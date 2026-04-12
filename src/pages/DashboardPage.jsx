@@ -5,7 +5,7 @@ import ScheduleModal from "../components/schedule/ScheduleModal";
 import ConfirmModal from "../components/common/ConfirmModal";
 import ImportModal from "../components/common/ImportModal";
 import ExportModal from "../components/common/ExportModal";
-import { useState, useRef } from "react";
+import { useMemo, useState, useRef } from "react";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -22,7 +22,6 @@ export default function DashboardPage() {
     availableSections,
     availableInstructors,
     subjectSections,
-    assignments,
     scheduleAssignments,
     resetAllData,
   } = useData();
@@ -36,9 +35,19 @@ export default function DashboardPage() {
   const [lastGenTime, setLastGenTime] = useState(null);
   const genStartRef = useRef(null);
 
+  const assignedScheduleAssignments = useMemo(
+    () =>
+      scheduleAssignments.filter(
+        (assignment) => assignment.status === "Assigned",
+      ),
+    [scheduleAssignments],
+  );
+
+  const assignedSectionCount = assignedScheduleAssignments.length;
+
   const utilization =
     subjectSections.length > 0
-      ? Math.round((assignments.length / subjectSections.length) * 100)
+      ? Math.round((assignedSectionCount / subjectSections.length) * 100)
       : 0;
   const { hard } = detectConflicts();
   const hardCount = hard.length;
@@ -49,7 +58,7 @@ export default function DashboardPage() {
   const totalAvailableSections = availableSections.length;
   const totalAvailableRooms = availableRooms.length;
   const totalAvailableInstructors = availableInstructors.length;
-  const assignedSections = assignments.length;
+  const assignedSections = assignedSectionCount;
   const hasSchedule = scheduleAssignments.length > 0;
   const progressPct =
     totalSections > 0
@@ -197,8 +206,10 @@ export default function DashboardPage() {
         <div className="stat-card green">
           <div className="stat-icon">✅</div>
           <div className="stat-label">Scheduled</div>
-          <div className="stat-value">{assignments.length}</div>
-          <div className="stat-delta">{totalSections} total sections</div>
+          <div className="stat-value">{assignedSectionCount}</div>
+          <div className="stat-delta">
+            {totalSections} total subject sections
+          </div>
         </div>
         <div className="stat-card red">
           <div className="stat-icon">⚠</div>
@@ -240,7 +251,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {assignments.slice(0, 6).map((assignment) => (
+                {assignedScheduleAssignments.slice(0, 6).map((assignment) => (
                   <tr key={getAssignmentIdentityKey(assignment)}>
                     <td>
                       <span className="monospace">
@@ -248,15 +259,21 @@ export default function DashboardPage() {
                       </span>
                       <br />
                       <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                        {assignment.title}
+                        {assignment.course_title ?? assignment.title}
                         {assignment.sectionId
                           ? ` · ${String(assignment.sectionId).slice(-10).toUpperCase()}`
                           : ""}
                       </span>
                     </td>
-                    <td className="monospace">{assignment.room}</td>
-                    <td className="monospace">{assignment.time}</td>
-                    <td>{assignment.instructor}</td>
+                    <td className="monospace">
+                      {assignment.room_number ?? assignment.room}
+                    </td>
+                    <td className="monospace">
+                      {assignment.time_display ?? assignment.time}
+                    </td>
+                    <td>
+                      {assignment.instructor_name ?? assignment.instructor}
+                    </td>
                     <td>
                       <span
                         className={`pill pill-${assignment.status === "Assigned" ? "green" : "red"}`}
@@ -266,7 +283,7 @@ export default function DashboardPage() {
                     </td>
                   </tr>
                 ))}
-                {assignments.length === 0 && (
+                {assignedScheduleAssignments.length === 0 && (
                   <tr>
                     <td
                       colSpan={5}
@@ -276,7 +293,7 @@ export default function DashboardPage() {
                         color: "var(--text3)",
                       }}
                     >
-                      No section assignments yet
+                      No subject-section assignments yet
                     </td>
                   </tr>
                 )}
