@@ -69,11 +69,15 @@ export default function ScheduleModal({ onClose }) {
       const sectionKey = getAssignmentIdentityKey(section);
       const importedAssignment = assignmentByKey.get(sectionKey) ?? {};
 
+      // Store the base section_id before any Lec/Lab splitting
+      const baseSectionId = section.sectionId;
+
       const baseRow = {
         ...section,
         code: section.subjectCode,
         section: section.section,
         sectionId: section.sectionId,
+        baseSectionId, // Track the original DB section_id separately
         title: subject.title ?? "",
         program: subject.program ?? "",
         year: subject.year ?? "",
@@ -105,6 +109,7 @@ export default function ScheduleModal({ onClose }) {
           roomType: "Lecture",
           sectionId: `${section.sectionId}__LEC`,
           sectionIdentity: `${section.sectionIdentity ?? section.sectionId}__LEC`,
+          baseSectionId, // Keep reference to the base DB section_id
           title: `${baseRow.title} (Lec)`,
           _splitComponent: "Lec",
         });
@@ -114,6 +119,7 @@ export default function ScheduleModal({ onClose }) {
           roomType: "Computer Lab",
           sectionId: `${section.sectionId}__LAB`,
           sectionIdentity: `${section.sectionIdentity ?? section.sectionId}__LAB`,
+          baseSectionId, // Keep reference to the base DB section_id
           title: `${baseRow.title} (Lab)`,
           _splitComponent: "Lab",
         });

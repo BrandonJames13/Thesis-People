@@ -63,6 +63,109 @@ export function formatAssignmentLabel(row) {
   return `${code}-${section}`;
 }
 
+// ─── Schema mapping helpers ───────────────────────────────────────────────────
+
+/**
+ * Extracts the normalized (base) section_id by stripping Lec/Lab suffixes.
+ * Used to resolve the actual database section_id from UI section identities.
+ */
+export function getNormalizedSectionId(row) {
+  const sectionId = String(row?.sectionId ?? row?.section_id ?? "").trim();
+  if (!sectionId) return ""; 
+  // Strip __LEC or __LAB suffixes used for split components
+  return sectionId.replace(/__(LEC|LAB)$/, "");
+}
+
+/**
+ * Resolves a room number/name to a room ID by looking up in the room pool.
+ * Returns the room object if found, or null.
+ */
+export function resolveRoomByNumber(roomNumber, roomPool) {
+  if (!roomNumber) return null;
+  const normalized = String(roomNumber).trim();
+  return roomPool.find(r => String(r?.number ?? "").trim() === normalized) || null;
+}
+
+/**
+ * Formats a time range for display in 12-hour format.
+ * Example: "7:00 AM – 8:30 AM"
+ */
+export function formatTimeDisplay(startTime24, durationHours) {
+  const startMinutes = parse24TextToMinutes(startTime24);
+  if (startMinutes == null) return "";
+  
+  const endMinutes = startMinutes + Math.round(durationHours * 60);
+  const startFormatted = formatTime(startTime24);
+  const endFormatted = formatTime(minutesTo24Text(endMinutes));
+  
+  return `${startFormatted} – ${endFormatted}`;
+}
+
+/**
+ * Converts 24-hour time string to SQL TIME format (HH:MM:SS).
+ */
+export function parseTimeToSQL(time24String) {
+  const minutes = parse24TextToMinutes(time24String);
+  if (minutes == null) return "00:00:00";
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
+}
+
+/**
+ * Builds a normalized assignment object with proper FK columns and display columns.
+ * Ensures the schema matches schedule_assignments table structure.
+ */
+export function buildNormalizedAssignment({
+  sectionRow,
+  roomNumber,
+  rooms,
+  instructorId,
+  instructorName,
+  pattern,
+  startTime24,
+  duration,
+  status = "Assigned",
+  academicYear,
+  semester,
+}) {
+  const room = resolveRoomByNumber(roomNumber, rooms);
+  const baseSectionId = getNormalizedSectionId(sectionRow);
+  const endMinutes = parse24TextToMinutes(startTime24) + Math.round(duration * 60);
+  const endTime24 = minutesTo24Text(endMinutes);
+
+  return {
+    // FK columns (map to schedule_assignments table)
+    section_id: baseSectionId || sectionRow.sectionId,
+    subject_id: sectionRow.subjectId,
+    room_id: room?.id || null,
+    instructor_id: instructorId || null,
+
+    // Display columns
+    course_code: getAssignmentSubjectCode(sectionRow),
+    course_title: sectionRow.title,
+    section: sectionRow.section,
+    program: sectionRow.program,
+    year: sectionRow.year,
+    enrolled: sectionRow.enrolled || 0,
+    room_number: roomNumber,
+    room_type: sectionRow.roomType || "Lecture",
+    instructor_name: instructorName,
+    pattern,
+    time_display: formatTimeDisplay(startTime24, duration),
+    time_start: parseTimeToSQL(startTime24),
+    time_end: parseTimeToSQL(endTime24),
+    duration: Number(duration) || 1.5,
+    status,
+    academic_year: academicYear,
+    semester,
+
+    // Audit fields (populated by backend on insert)
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
 // ─── Time parsing ─────────────────────────────────────────────────────────────
 
 function parseTimeTextToMinutes(value) {
@@ -511,6 +614,60 @@ export function runAutoSchedule({
     if (room && room.status !== "Maintenance") room.status = "Occupied";
   });
 
+  // Build a map of section rows by identity key for normalization
+  const sectionRowMap = new Map(
+    sectionRows.map((row) => [getAssignmentIdentityKey(row), row])
+  );
+
+  // Transform assignments to normalized schema with FK/display columns
+  const normalizedFinalAssignments = finalAssignments.map((assignment) => {
+    // Check if already normalized
+    if (assignment.section_id && typeof assignment.section_id === "string" && 
+        assignment.section_id.length > 0 && 
+        !assignment.section_id.includes("|")) {
+      return assignment;
+    }
+
+    const associatedSectionRow = sectionRowMap.get(getAssignmentIdentityKey(assignment));
+
+    if (!associatedSectionRow) {
+      // Fallback for existing assignments or those without matching section row
+      return {
+        ...assignment,
+        section_id: getNormalizedSectionId(assignment),
+        subject_id: assignment.subjectId,
+        room_id: resolveRoomByNumber(assignment.room, newRooms)?.id || null,
+        instructor_id: assignment.instructorId,
+        course_code: getAssignmentSubjectCode(assignment),
+        room_number: assignment.room,
+        instructor_name: assignment.instructor,
+        time_display: assignment.time || '',
+        time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
+        time_end: assignment.room ? parseTimeToSQL(minutesTo24Text(
+          (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) + 
+          Math.round((assignment.duration || 1.5) * 60)
+        )) : "00:00:00",
+        academic_year: assignment.academicYear,
+        semester: assignment.semester,
+      };
+    }
+
+    // Build normalized assignment using helper
+    return buildNormalizedAssignment({
+      sectionRow: associatedSectionRow,
+      roomNumber: assignment.room,
+      rooms: newRooms,
+      instructorId: assignment.instructorId,
+      instructorName: assignment.instructor,
+      pattern: assignment.pattern,
+      startTime24: extractStartTime24(assignment, ""),
+      duration: assignment.duration,
+      status: assignment.status,
+      academicYear: associatedSectionRow.academicYear,
+      semester: associatedSectionRow.semester,
+    });
+  });
+
   const patternAdjustedCount = generatedAssignments.filter(
     (a) => a.patternAdjusted,
   ).length;
@@ -522,7 +679,7 @@ export function runAutoSchedule({
 
   return {
     rooms: newRooms,
-    scheduleAssignments: finalAssignments,
+    scheduleAssignments: normalizedFinalAssignments,
     assigned,
     conflicts: conflictCount,
     message,
@@ -572,11 +729,14 @@ export function applyManualAssignments({
 
     const assignmentKey = getAssignmentIdentityKey(sectionRow);
     const resolvedPattern = getPatternForRow({ pattern: entry.pattern }, "MWF");
+    
+    // Build desired assignment with old schema for conflict detection
     const desired = {
       ...sectionRow,
       sectionId: getAssignmentSectionId(sectionRow),
       room: entry.roomName,
       instructor: entry.instructor || sectionRow.instructor || "",
+      instructorId: entry.instructorId,
       duration: Number(entry.duration ?? sectionRow.duration ?? 1.5) || 1.5,
       pattern: resolvedPattern,
       time: `${resolvedPattern} ${formatTime(entry.startTime)}`,
@@ -668,7 +828,64 @@ export function applyManualAssignments({
     }
   }
 
-  return { scheduleAssignments: nextAssignments, moved };
+  // Transform assignments to normalized schema with FK/display columns
+  const normalizedAssignments = nextAssignments.map((assignment) => {
+    // Check if it's already normalized (has section_id as FK)
+    if (assignment.section_id && typeof assignment.section_id === "string" && 
+        assignment.section_id.length > 0 && 
+        !assignment.section_id.includes("|")) {
+      // Already normalized, return as-is
+      return assignment;
+    }
+
+    // Find the original section row for this assignment
+    let associatedSectionRow = null;
+    for (const sectionRow of sectionRowsByIdentity.values()) {
+      if (getAssignmentIdentityKey(sectionRow) === getAssignmentIdentityKey(assignment)) {
+        associatedSectionRow = sectionRow;
+        break;
+      }
+    }
+
+    if (!associatedSectionRow) {
+      // Fallback: return assignment with minimal FK info
+      return {
+        ...assignment,
+        section_id: getNormalizedSectionId(assignment),
+        subject_id: assignment.subjectId,
+        room_id: resolveRoomByNumber(assignment.room, rooms)?.id || null,
+        instructor_id: assignment.instructorId,
+        course_code: getAssignmentSubjectCode(assignment),
+        room_number: assignment.room,
+        instructor_name: assignment.instructor,
+        time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
+        time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
+        time_end: parseTimeToSQL(minutesTo24Text(
+          (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) + 
+          Math.round((assignment.duration || 1.5) * 60)
+        )),
+        academic_year: assignment.academicYear,
+        semester: assignment.semester,
+      };
+    }
+
+    // Build normalized assignment using helper
+    return buildNormalizedAssignment({
+      sectionRow: associatedSectionRow,
+      roomNumber: assignment.room,
+      rooms,
+      instructorId: assignment.instructorId,
+      instructorName: assignment.instructor,
+      pattern: assignment.pattern,
+      startTime24: extractStartTime24(assignment, ""),
+      duration: assignment.duration,
+      status: assignment.status,
+      academicYear: associatedSectionRow.academicYear,
+      semester: associatedSectionRow.semester,
+    });
+  });
+
+  return { scheduleAssignments: normalizedAssignments, moved };
 }
 
 // ─── Manual conflict check ────────────────────────────────────────────────────
