@@ -49,10 +49,35 @@ export default function ExportModal({ isOpen, onClose }) {
   }, [subjectSections, subjects]);
 
   const selectedRows = useMemo(() => {
-    if (exportType === CSV_TYPES.FULL_LIST) return scheduleAssignments;
+    if (exportType === CSV_TYPES.FULL_LIST) {
+      const instructorByName = new Map(
+        instructors.map((row) => [
+          String(row.name ?? "")
+            .trim()
+            .toLowerCase(),
+          row,
+        ]),
+      );
+
+      return scheduleAssignments.map((row) => {
+        const instructor = instructorByName.get(
+          String(row.instructor ?? "")
+            .trim()
+            .toLowerCase(),
+        );
+
+        return {
+          ...row,
+          employment_status: instructor?.employment_status ?? [],
+          max_units: instructor?.max_units ?? "",
+          allow_night_class: instructor?.allow_night_class ?? false,
+        };
+      });
+    }
     if (exportType === CSV_TYPES.ROOMS) return rooms;
     if (exportType === CSV_TYPES.INSTRUCTORS) return instructors;
     if (exportType === CSV_TYPES.SUBJECTS) return subjectSectionRows;
+    if (exportType === CSV_TYPES.SCHEDULE) return scheduleAssignments;
     return [];
   }, [exportType, instructors, rooms, scheduleAssignments, subjectSectionRows]);
 

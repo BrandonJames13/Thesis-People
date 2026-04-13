@@ -23,6 +23,12 @@
       "label": "Subject Sections",
       "path": "/csv/subjects-list.csv",
       "description": "Subject section records with academic year and semester."
+    },
+    {
+      "type": "schedule",
+      "label": "Schedule Assignments",
+      "path": "/csv/schedule-sample.csv",
+      "description": "Schedule assignment rows with time-based night class derivation."
     }
   ]
 }

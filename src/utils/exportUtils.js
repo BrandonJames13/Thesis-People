@@ -38,6 +38,7 @@ const VALID_EMPLOYMENT_STATUSES = new Set([
 
 const DEFAULT_ASSIGNMENT_STATUS = "Pending";
 const DEFAULT_SECTION_STATUS_DB = "Not Assigned";
+const NIGHT_CLASS_START_HOUR = 18;
 
 export const CSV_FORMATS = {
   [CSV_TYPES.FULL_LIST]: {
@@ -64,6 +65,9 @@ export const CSV_FORMATS = {
       "Duration (hrs)",
       "Instructor",
       "Status",
+      "Employment Status",
+      "Max Units",
+      "Allow Night Class",
     ],
     rowKey: (row) => {
       const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
@@ -303,6 +307,42 @@ function assertHeaderMatch(actualHeaders, expectedHeaders) {
   });
 }
 
+function assertFullListHeaderMatch(actualHeaders) {
+  const normalizedActual = actualHeaders.map(normalizeHeader);
+  const baseHeaders = [
+    "section id",
+    "subject code",
+    "subject title",
+    "section",
+    "academic year",
+    "semester",
+    "program",
+    "year",
+    "enrolled",
+    "type required",
+    "room",
+    "pattern",
+    "time",
+    "duration (hrs)",
+    "instructor",
+    "status",
+  ];
+
+  const baseMatches = baseHeaders.every(
+    (header, index) => normalizedActual[index] === header,
+  );
+  if (!baseMatches) return false;
+
+  if (normalizedActual.length === baseHeaders.length) return true;
+  if (normalizedActual.length !== baseHeaders.length + 3) return false;
+
+  return (
+    normalizedActual[16] === "employment status" &&
+    normalizedActual[17] === "max units" &&
+    normalizedActual[18] === "allow night class"
+  );
+}
+
 function assertRoomHeaderMatch(actualHeaders) {
   const normalizedActual = actualHeaders.map(normalizeHeader);
   const baseHeaders = CSV_FORMATS[CSV_TYPES.ROOMS].headers.map(normalizeHeader);
@@ -319,7 +359,12 @@ function assertRoomHeaderMatch(actualHeaders) {
   return ["wing", "room wing"].includes(normalizedActual[baseHeaders.length]);
 }
 
-function parseEmploymentStatusCell(rawValue, rowNumber, warnings) {
+function parseEmploymentStatusCell(
+  rawValue,
+  rowNumber,
+  warnings,
+  contextLabel = "Instructors",
+) {
   const cell = String(rawValue ?? "").trim();
   if (!cell) {
     return { value: null, provided: false };
@@ -346,14 +391,19 @@ function parseEmploymentStatusCell(rawValue, rowNumber, warnings) {
   if (invalid.length > 0) {
     addImportWarning(
       warnings,
-      `Instructors row ${rowNumber}: ignored invalid employment status value(s): ${invalid.join(", ")}.`,
+      `${contextLabel} row ${rowNumber}: ignored invalid employment status value(s): ${invalid.join(", ")}.`,
     );
   }
 
   return { value: valid, provided: true };
 }
 
-function parseMaxUnitsCell(rawValue, rowNumber, warnings) {
+function parseMaxUnitsCell(
+  rawValue,
+  rowNumber,
+  warnings,
+  contextLabel = "Instructors",
+) {
   const cell = String(rawValue ?? "").trim();
   if (!cell) {
     return { value: null, provided: false };
@@ -363,7 +413,7 @@ function parseMaxUnitsCell(rawValue, rowNumber, warnings) {
   if (!Number.isFinite(parsed) || parsed <= 0) {
     addImportWarning(
       warnings,
-      `Instructors row ${rowNumber}: invalid max units "${cell}"; storing null.`,
+      `${contextLabel} row ${rowNumber}: invalid max units "${cell}"; storing null.`,
     );
     return { value: null, provided: true };
   }
@@ -371,7 +421,12 @@ function parseMaxUnitsCell(rawValue, rowNumber, warnings) {
   return { value: parsed, provided: true };
 }
 
-function parseAllowNightClassCell(rawValue, rowNumber, warnings) {
+function parseAllowNightClassCell(
+  rawValue,
+  rowNumber,
+  warnings,
+  contextLabel = "Instructors",
+) {
   const cell = String(rawValue ?? "").trim();
   if (!cell) {
     return { value: false, provided: false };
@@ -391,9 +446,30 @@ function parseAllowNightClassCell(rawValue, rowNumber, warnings) {
 
   addImportWarning(
     warnings,
-    `Instructors row ${rowNumber}: invalid allow night class value "${cell}"; defaulted to false.`,
+    `${contextLabel} row ${rowNumber}: invalid allow night class value "${cell}"; defaulted to false.`,
   );
   return { value: false, provided: true };
+}
+
+export function isNightClassFromTime(timeDisplay) {
+  const value = String(timeDisplay ?? "").trim();
+  if (!value) return false;
+
+  const startToken = value.split("-")[0]?.trim() ?? "";
+  if (!startToken) return false;
+
+  const match = startToken.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!match) return false;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const ampm = String(match[3] ?? "").toUpperCase();
+
+  if (ampm === "PM" && hour < 12) hour += 12;
+  if (ampm === "AM" && hour === 12) hour = 0;
+
+  const totalMinutes = hour * 60 + minute;
+  return totalMinutes >= NIGHT_CLASS_START_HOUR * 60;
 }
 
 function resolveInstructorHeaderIndexes(actualHeaders) {
@@ -516,6 +592,24 @@ function parseFullListRows(rows, warnings = []) {
       const program = normalizeProgram(rawProgram);
       const year = String(r[7] ?? "").trim();
       const statusRaw = String(r[15] ?? "").trim();
+      const employmentStatusParsed = parseEmploymentStatusCell(
+        String(r[16] ?? ""),
+        rowNumber,
+        warnings,
+        "Full list",
+      );
+      const maxUnitsParsed = parseMaxUnitsCell(
+        String(r[17] ?? ""),
+        rowNumber,
+        warnings,
+        "Full list",
+      );
+      const allowNightClassParsed = parseAllowNightClassCell(
+        String(r[18] ?? ""),
+        rowNumber,
+        warnings,
+        "Full list",
+      );
 
       if (!semester) {
         throw new Error(
@@ -570,6 +664,12 @@ function parseFullListRows(rows, warnings = []) {
           .trim()
           .replace(/^—$/, ""),
         status: statusRaw,
+        employment_status: employmentStatusParsed.value,
+        max_units: maxUnitsParsed.value,
+        allow_night_class: allowNightClassParsed.value,
+        employment_status_provided: employmentStatusParsed.provided,
+        max_units_provided: maxUnitsParsed.provided,
+        allow_night_class_provided: allowNightClassParsed.provided,
         dedupeKey:
           section_id ||
           buildSectionIdentityKey(
@@ -925,6 +1025,9 @@ export function parseImportCsv(csvText, type) {
 
   const typesToCheck = config ? [type] : Object.values(CSV_TYPES);
   const selectedType = typesToCheck.find((candidate) => {
+    if (candidate === CSV_TYPES.FULL_LIST) {
+      return assertFullListHeaderMatch(headers);
+    }
     if (candidate === CSV_TYPES.ROOMS) {
       return assertRoomHeaderMatch(headers);
     }
@@ -990,6 +1093,12 @@ export function parseImportCsv(csvText, type) {
         time_display: row.time,
         duration: Number(row.duration ?? 0),
         status: normalizeAssignmentStatus(row.status),
+        employment_status: row.employment_status ?? null,
+        max_units: row.max_units ?? null,
+        allow_night_class: row.allow_night_class ?? false,
+        employment_status_provided: !!row.employment_status_provided,
+        max_units_provided: !!row.max_units_provided,
+        allow_night_class_provided: !!row.allow_night_class_provided,
       })),
       upsert: {
         table: "schedule_assignments",
@@ -1199,6 +1308,7 @@ export function parseImportCsv(csvText, type) {
         pattern: row.pattern,
         time_display: row.time,
         status: normalizeAssignmentStatus(row.status),
+        night_class: isNightClassFromTime(row.time),
       })),
       upsert: {
         table: "schedule_assignments",
@@ -1248,6 +1358,11 @@ export function mergeUniqueInstructors(
 }
 
 function serializeFullListRow(row) {
+  const employmentStatus = Array.isArray(row.employment_status)
+    ? row.employment_status.join(",")
+    : "";
+  const allowNightClass = row.allow_night_class ? "true" : "false";
+
   return [
     row.section_id ?? row.sectionId ?? "",
     row.code ?? "",
@@ -1264,6 +1379,23 @@ function serializeFullListRow(row) {
     row.time ?? "",
     row.duration ?? "",
     row.instructor ?? "",
+    row.status ?? "Pending",
+    employmentStatus,
+    row.max_units ?? "",
+    allowNightClass,
+  ];
+}
+
+function serializeScheduleRow(row) {
+  return [
+    row.code ?? row.course_code ?? "",
+    row.section ?? "",
+    row.academicYear ?? row.academic_year ?? "",
+    row.semester ?? "",
+    row.room ?? row.room_number ?? "",
+    row.pattern ?? "",
+    row.time ?? row.time_display ?? "",
+    row.instructor ?? row.instructor_name ?? "",
     row.status ?? "Pending",
   ];
 }
@@ -1318,6 +1450,8 @@ function serializeRecords(type, data) {
   if (type === CSV_TYPES.INSTRUCTORS)
     return (data ?? []).map(serializeInstructorRow);
   if (type === CSV_TYPES.SUBJECTS) return (data ?? []).map(serializeSubjectRow);
+  if (type === CSV_TYPES.SCHEDULE)
+    return (data ?? []).map(serializeScheduleRow);
   throw new Error(`Unsupported CSV type: ${type}`);
 }
 

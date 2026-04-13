@@ -24,6 +24,7 @@ import {
   CSV_TYPES,
   downloadCsvTemplate,
   getCsvTypeConfig,
+  isNightClassFromTime,
   parseImportCsv,
   normalizeSectionStatusForDb,
   summarizeImportedRows,
@@ -555,7 +556,7 @@ export default function ImportModal({ isOpen, onClose }) {
       instructorNames.length > 0
         ? supabase
             .from("instructors")
-            .select("id, name")
+            .select("id, name, allow_night_class")
             .in("name", instructorNames)
         : Promise.resolve({ data: [], error: null });
 
@@ -615,6 +616,27 @@ export default function ImportModal({ isOpen, onClose }) {
         row,
       ]),
     );
+
+    const nightClassViolations = [];
+    dbRows.forEach((row, index) => {
+      if (!row?.instructor_name || !isNightClassFromTime(row?.time_display)) {
+        return;
+      }
+
+      const instructor = instructorByName.get(
+        normalizeLookupKey(row.instructor_name),
+      );
+      if (!instructor) return;
+      if (instructor.allow_night_class) return;
+
+      nightClassViolations.push(
+        `Schedule row ${index + 2}: ${row.instructor_name} is not eligible for night classes (${row.time_display}).`,
+      );
+    });
+
+    if (nightClassViolations.length > 0) {
+      throw new Error(nightClassViolations.join(" "));
+    }
 
     // Build section lookup by composite key: (subject_id, section, academic_year, semester)
     const sectionByCompositeKey = new Map(
@@ -709,6 +731,12 @@ export default function ImportModal({ isOpen, onClose }) {
       department: null,
       availability: null,
       status: "Active",
+      employment_status: row.employment_status ?? null,
+      max_units: row.max_units ?? null,
+      allow_night_class: row.allow_night_class ?? false,
+      employment_status_provided: !!row.employment_status_provided,
+      max_units_provided: !!row.max_units_provided,
+      allow_night_class_provided: !!row.allow_night_class_provided,
     }));
 
     const existingRooms = await fetchExistingRows(
@@ -758,23 +786,35 @@ export default function ImportModal({ isOpen, onClose }) {
       const normalizedDepartment = normalizeDepartment(
         existing?.department ?? row.department,
       );
-      return existing
-        ? {
-            name: row.name,
-            department: normalizedDepartment,
-            availability: existing.availability ?? row.availability,
-            status: existing.status ?? row.status,
-            employment_status: existing.employment_status ?? [],
-            max_units: existing.max_units ?? null,
-            allow_night_class: existing.allow_night_class ?? false,
-          }
-        : {
-            ...row,
-            department: normalizedDepartment,
-            employment_status: [],
-            max_units: null,
-            allow_night_class: false,
-          };
+
+      const resolvedEmploymentStatus = row.employment_status_provided
+        ? (row.employment_status ?? [])
+        : (existing?.employment_status ?? []);
+      const resolvedMaxUnits = row.max_units_provided
+        ? (row.max_units ?? null)
+        : (existing?.max_units ?? null);
+      const resolvedAllowNightClass = row.allow_night_class_provided
+        ? (row.allow_night_class ?? false)
+        : (existing?.allow_night_class ?? false);
+
+      if (
+        resolvedAllowNightClass &&
+        !resolvedEmploymentStatus.includes("permanent")
+      ) {
+        throw new Error(
+          `Instructor ${row.name}: allow night class requires employment status to include permanent.`,
+        );
+      }
+
+      return {
+        name: row.name,
+        department: normalizedDepartment,
+        availability: existing?.availability ?? row.availability,
+        status: existing?.status ?? row.status,
+        employment_status: resolvedEmploymentStatus,
+        max_units: resolvedMaxUnits,
+        allow_night_class: resolvedAllowNightClass,
+      };
     });
 
     const subjectUpsertRows = subjectSourceRows.map((row) => ({
@@ -880,6 +920,16 @@ export default function ImportModal({ isOpen, onClose }) {
       const instructor = instructorByName.get(
         normalizeLookupKey(row.instructor),
       );
+
+      if (
+        instructor &&
+        isNightClassFromTime(scheduleRow.time_display) &&
+        !instructor.allow_night_class
+      ) {
+        throw new Error(
+          `Full list row ${index + 2}: ${row.instructor} is not eligible for night classes (${scheduleRow.time_display}).`,
+        );
+      }
 
       scheduleUpsertRows.push({
         ...scheduleRow,
