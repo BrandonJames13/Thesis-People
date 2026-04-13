@@ -24,7 +24,17 @@ const DEFAULT_INSTRUCTOR = {
   department: null,
   availability: "TBD",
   status: "Active",
+  employment_status: [],
+  max_units: null,
+  allow_night_class: false,
 };
+
+const VALID_EMPLOYMENT_STATUSES = new Set([
+  "lecturer",
+  "permanent",
+  "attached",
+  "fulltime",
+]);
 
 const DEFAULT_ASSIGNMENT_STATUS = "Pending";
 const DEFAULT_SECTION_STATUS_DB = "Not Assigned";
@@ -76,7 +86,15 @@ export const CSV_FORMATS = {
     templatePath: "/csv/instructors-list.csv",
     templateLabel: "Instructors Template",
     filename: "TSU_CCS_Instructors_List_AY2025-2026.csv",
-    headers: ["Name", "Department", "Availability", "Status"],
+    headers: [
+      "Name",
+      "Department",
+      "Availability",
+      "Status",
+      "Employment Status",
+      "Max Units",
+      "Allow Night Class",
+    ],
     rowKey: (row) => normalizeInstructorName(row?.name),
   },
   [CSV_TYPES.SUBJECTS]: {
@@ -301,12 +319,108 @@ function assertRoomHeaderMatch(actualHeaders) {
   return ["wing", "room wing"].includes(normalizedActual[baseHeaders.length]);
 }
 
+function parseEmploymentStatusCell(rawValue, rowNumber, warnings) {
+  const cell = String(rawValue ?? "").trim();
+  if (!cell) {
+    return { value: null, provided: false };
+  }
+
+  const tokens = cell
+    .split(",")
+    .map((token) => normalizeHeader(token))
+    .filter(Boolean);
+
+  const valid = [];
+  const invalid = [];
+
+  tokens.forEach((token) => {
+    if (VALID_EMPLOYMENT_STATUSES.has(token)) {
+      if (!valid.includes(token)) {
+        valid.push(token);
+      }
+      return;
+    }
+    invalid.push(token);
+  });
+
+  if (invalid.length > 0) {
+    addImportWarning(
+      warnings,
+      `Instructors row ${rowNumber}: ignored invalid employment status value(s): ${invalid.join(", ")}.`,
+    );
+  }
+
+  return { value: valid, provided: true };
+}
+
+function parseMaxUnitsCell(rawValue, rowNumber, warnings) {
+  const cell = String(rawValue ?? "").trim();
+  if (!cell) {
+    return { value: null, provided: false };
+  }
+
+  const parsed = Number(cell);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    addImportWarning(
+      warnings,
+      `Instructors row ${rowNumber}: invalid max units "${cell}"; storing null.`,
+    );
+    return { value: null, provided: true };
+  }
+
+  return { value: parsed, provided: true };
+}
+
+function parseAllowNightClassCell(rawValue, rowNumber, warnings) {
+  const cell = String(rawValue ?? "").trim();
+  if (!cell) {
+    return { value: false, provided: false };
+  }
+
+  const normalized = normalizeHeader(cell);
+  const truthy = new Set(["true", "yes", "y", "1", "on"]);
+  const falsy = new Set(["false", "no", "n", "0", "off"]);
+
+  if (truthy.has(normalized)) {
+    return { value: true, provided: true };
+  }
+
+  if (falsy.has(normalized)) {
+    return { value: false, provided: true };
+  }
+
+  addImportWarning(
+    warnings,
+    `Instructors row ${rowNumber}: invalid allow night class value "${cell}"; defaulted to false.`,
+  );
+  return { value: false, provided: true };
+}
+
 function resolveInstructorHeaderIndexes(actualHeaders) {
   const normalizedActual = actualHeaders.map(normalizeHeader);
 
   // Required base columns remain fixed for compatibility.
   if (normalizedActual[0] !== "name" || normalizedActual[1] !== "department") {
     return null;
+  }
+
+  // Extended template: Name, Department, Availability, Status, Employment Status, Max Units, Allow Night Class
+  if (
+    normalizedActual.length >= 7 &&
+    normalizedActual[2] === "availability" &&
+    normalizedActual[3] === "status" &&
+    normalizedActual[4] === "employment status" &&
+    normalizedActual[5] === "max units" &&
+    normalizedActual[6] === "allow night class"
+  ) {
+    return {
+      availabilityIndex: 2,
+      statusIndex: 3,
+      employmentStatusIndex: 4,
+      maxUnitsIndex: 5,
+      allowNightClassIndex: 6,
+      availabilityColumnMissing: false,
+    };
   }
 
   // Standard template: Name, Department, Availability, Status
@@ -318,6 +432,9 @@ function resolveInstructorHeaderIndexes(actualHeaders) {
     return {
       availabilityIndex: 2,
       statusIndex: 3,
+      employmentStatusIndex: -1,
+      maxUnitsIndex: -1,
+      allowNightClassIndex: -1,
       availabilityColumnMissing: false,
     };
   }
@@ -327,6 +444,9 @@ function resolveInstructorHeaderIndexes(actualHeaders) {
     return {
       availabilityIndex: -1,
       statusIndex: 2,
+      employmentStatusIndex: -1,
+      maxUnitsIndex: -1,
+      allowNightClassIndex: -1,
       availabilityColumnMissing: true,
     };
   }
@@ -340,6 +460,9 @@ function resolveInstructorHeaderIndexes(actualHeaders) {
     return {
       availabilityIndex: -1,
       statusIndex: 3,
+      employmentStatusIndex: -1,
+      maxUnitsIndex: -1,
+      allowNightClassIndex: -1,
       availabilityColumnMissing: true,
     };
   }
@@ -478,6 +601,15 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
   const statusIndex = Number.isInteger(options?.statusIndex)
     ? options.statusIndex
     : 3;
+  const employmentStatusIndex = Number.isInteger(options?.employmentStatusIndex)
+    ? options.employmentStatusIndex
+    : -1;
+  const maxUnitsIndex = Number.isInteger(options?.maxUnitsIndex)
+    ? options.maxUnitsIndex
+    : -1;
+  const allowNightClassIndex = Number.isInteger(options?.allowNightClassIndex)
+    ? options.allowNightClassIndex
+    : -1;
 
   if (options?.availabilityColumnMissing) {
     addImportWarning(
@@ -498,6 +630,30 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
       const availability = rawAvailability || null;
       const rawStatus = String(r[statusIndex] ?? "").trim();
       const status = rawStatus || null;
+      const employmentStatusParsed =
+        employmentStatusIndex >= 0
+          ? parseEmploymentStatusCell(
+              String(r[employmentStatusIndex] ?? ""),
+              rowNumber,
+              warnings,
+            )
+          : { value: null, provided: false };
+      const maxUnitsParsed =
+        maxUnitsIndex >= 0
+          ? parseMaxUnitsCell(
+              String(r[maxUnitsIndex] ?? ""),
+              rowNumber,
+              warnings,
+            )
+          : { value: null, provided: false };
+      const allowNightClassParsed =
+        allowNightClassIndex >= 0
+          ? parseAllowNightClassCell(
+              String(r[allowNightClassIndex] ?? ""),
+              rowNumber,
+              warnings,
+            )
+          : { value: false, provided: false };
 
       if (rawDepartment && !department) {
         addImportWarning(
@@ -532,6 +688,12 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
         department,
         availability,
         status,
+        employment_status: employmentStatusParsed.value,
+        max_units: maxUnitsParsed.value,
+        allow_night_class: allowNightClassParsed.value,
+        employment_status_provided: employmentStatusParsed.provided,
+        max_units_provided: maxUnitsParsed.provided,
+        allow_night_class_provided: allowNightClassParsed.provided,
       };
     })
     .filter((inst) => inst.name);
@@ -875,7 +1037,7 @@ export function parseImportCsv(csvText, type) {
     const instructorHeaderConfig = resolveInstructorHeaderIndexes(headers);
     if (!instructorHeaderConfig) {
       throw new Error(
-        "Invalid instructors CSV header. Use Name, Department, Availability, Status (or Name, Department, Status).",
+        "Invalid instructors CSV header. Use Name, Department, Availability, Status, Employment Status, Max Units, Allow Night Class (or legacy Name, Department, Availability, Status).",
       );
     }
 
@@ -901,6 +1063,12 @@ export function parseImportCsv(csvText, type) {
         department: inst.department,
         availability: inst.availability,
         status: inst.status,
+        employment_status: inst.employment_status ?? [],
+        max_units: inst.max_units,
+        allow_night_class: inst.allow_night_class ?? false,
+        employment_status_provided: !!inst.employment_status_provided,
+        max_units_provided: !!inst.max_units_provided,
+        allow_night_class_provided: !!inst.allow_night_class_provided,
         dedupe_key: normalizeInstructorName(inst.name),
       })),
       dbRowsWithDefaults: instructors.map((inst) => ({
@@ -908,6 +1076,14 @@ export function parseImportCsv(csvText, type) {
         department: inst.department,
         availability: inst.availability ?? DEFAULT_INSTRUCTOR.availability,
         status: inst.status ?? DEFAULT_INSTRUCTOR.status,
+        employment_status:
+          inst.employment_status ?? DEFAULT_INSTRUCTOR.employment_status,
+        max_units: inst.max_units ?? DEFAULT_INSTRUCTOR.max_units,
+        allow_night_class:
+          inst.allow_night_class ?? DEFAULT_INSTRUCTOR.allow_night_class,
+        employment_status_provided: !!inst.employment_status_provided,
+        max_units_provided: !!inst.max_units_provided,
+        allow_night_class_provided: !!inst.allow_night_class_provided,
         dedupe_key: normalizeInstructorName(inst.name),
       })),
       upsert: {
@@ -1102,11 +1278,19 @@ function serializeRoomRow(row) {
 }
 
 function serializeInstructorRow(row) {
+  const employmentStatus = Array.isArray(row.employment_status)
+    ? row.employment_status.join(",")
+    : "";
+  const allowNightClass = row.allow_night_class ? "true" : "false";
+
   return [
     row.name ?? "",
     row.department ?? DEFAULT_INSTRUCTOR.department,
     row.availability ?? DEFAULT_INSTRUCTOR.availability,
     row.status ?? DEFAULT_INSTRUCTOR.status,
+    employmentStatus,
+    row.max_units ?? "",
+    allowNightClass,
   ];
 }
 

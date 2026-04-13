@@ -354,6 +354,9 @@ export default function ImportModal({ isOpen, onClose }) {
           department: row.department,
           availability: row.availability,
           status: row.status,
+          employment_status: row.employment_status ?? [],
+          max_units: row.max_units ?? null,
+          allow_night_class: row.allow_night_class ?? false,
         };
 
         if (!existingRow) {
@@ -361,10 +364,26 @@ export default function ImportModal({ isOpen, onClose }) {
           return;
         }
 
+        const updatePayload = {
+          name: row.name,
+          department: row.department,
+          availability: row.availability,
+          status: row.status,
+          employment_status: row.employment_status_provided
+            ? (row.employment_status ?? [])
+            : (existingRow.employment_status ?? []),
+          max_units: row.max_units_provided
+            ? (row.max_units ?? null)
+            : (existingRow.max_units ?? null),
+          allow_night_class: row.allow_night_class_provided
+            ? (row.allow_night_class ?? false)
+            : (existingRow.allow_night_class ?? false),
+        };
+
         updateOps.push(
           supabase
             .from("instructors")
-            .update(payloadRow)
+            .update(updatePayload)
             .eq("id", existingRow.id),
         );
       });
@@ -745,10 +764,16 @@ export default function ImportModal({ isOpen, onClose }) {
             department: normalizedDepartment,
             availability: existing.availability ?? row.availability,
             status: existing.status ?? row.status,
+            employment_status: existing.employment_status ?? [],
+            max_units: existing.max_units ?? null,
+            allow_night_class: existing.allow_night_class ?? false,
           }
         : {
             ...row,
             department: normalizedDepartment,
+            employment_status: [],
+            max_units: null,
+            allow_night_class: false,
           };
     });
 
