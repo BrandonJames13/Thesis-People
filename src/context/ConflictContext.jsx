@@ -238,6 +238,22 @@ export function ConflictProvider({ children }) {
   const hardConflictCount = hardConflicts.length;
   const softConflictCount = softConflicts.length;
 
+  // Memoize conflict stats snapshot for efficient consumption in pages/components
+  const conflictStats = useMemo(() => {
+    const assignedCount = scheduleAssignments.filter(
+      (assignment) => assignment.status === "Assigned",
+    ).length;
+    return {
+      hardConflictCount: hardConflicts.length,
+      softConflictCount: softConflicts.length,
+      hardConflictRate:
+        assignedCount > 0
+          ? ((hardConflicts.length / assignedCount) * 100).toFixed(1)
+          : "0.0",
+      assignedCount,
+    };
+  }, [hardConflicts, softConflicts, scheduleAssignments]);
+
   // Explicitly refresh conflict detection (called after manual actions)
   const refreshConflicts = useCallback(() => {
     return detectConflicts();
@@ -472,6 +488,7 @@ export function ConflictProvider({ children }) {
       softConflicts,
       hardConflictCount,
       softConflictCount,
+      conflictStats,
 
       // Explicit refresh function for manual refresh
       refreshConflicts,
@@ -495,6 +512,7 @@ export function ConflictProvider({ children }) {
       softConflicts,
       hardConflictCount,
       softConflictCount,
+      conflictStats,
       refreshConflicts,
       resolveConflict,
       autoResolveAll,
