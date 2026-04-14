@@ -9,6 +9,7 @@ import {
   normalizeSemester,
   PROGRAM_CODES,
 } from "../data/constants";
+import { getStartTimeText, parseTimeTextToMinutes } from "./timeUtils";
 
 const VALID_PROGRAM_HINT = PROGRAM_CODES.join(", ");
 
@@ -455,20 +456,11 @@ export function isNightClassFromTime(timeDisplay) {
   const value = String(timeDisplay ?? "").trim();
   if (!value) return false;
 
-  const startToken = value.split("-")[0]?.trim() ?? "";
+  const startToken = getStartTimeText(value);
   if (!startToken) return false;
 
-  const match = startToken.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
-  if (!match) return false;
-
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const ampm = String(match[3] ?? "").toUpperCase();
-
-  if (ampm === "PM" && hour < 12) hour += 12;
-  if (ampm === "AM" && hour === 12) hour = 0;
-
-  const totalMinutes = hour * 60 + minute;
+  const totalMinutes = parseTimeTextToMinutes(startToken);
+  if (totalMinutes == null) return false;
   return totalMinutes >= NIGHT_CLASS_START_HOUR * 60;
 }
 

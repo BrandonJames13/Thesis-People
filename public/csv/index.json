@@ -4,7 +4,7 @@
       "type": "full-list",
       "label": "Full List",
       "path": "/csv/full-list.csv",
-      "description": "Full subject schedule with section, room, time, duration, instructor, and status."
+      "description": "Full subject schedule with section, room, and time ranges in 24-hour or AM/PM format, plus duration, instructor, and status."
     },
     {
       "type": "rooms",

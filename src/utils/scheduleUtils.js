@@ -1,4 +1,9 @@
-import { coursesOverlap, formatTime } from "./timeUtils";
+import {
+  coursesOverlap,
+  formatTime,
+  getStartTimeText,
+  parseTimeTextToMinutes,
+} from "./timeUtils";
 import { normalizeRoomType, patternDaysMap } from "../data/constants";
 
 const DEFAULT_SECTION = "A";
@@ -223,21 +228,6 @@ function buildSectionTermKey(row) {
   return `${sectionId}::${academicYear}::${semester}`;
 }
 
-// ─── Time parsing ─────────────────────────────────────────────────────────────
-
-function parseTimeTextToMinutes(value) {
-  const text = String(value ?? "").trim();
-  if (!text) return null;
-  const match = text.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return null;
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const ampm = String(match[3]).toUpperCase();
-  if (ampm === "PM" && hour !== 12) hour += 12;
-  if (ampm === "AM" && hour === 12) hour = 0;
-  return hour * 60 + minute;
-}
-
 function parse24TextToMinutes(value) {
   const text = String(value ?? "").trim();
   if (!text.includes(":")) return null;
@@ -259,9 +249,10 @@ export function extractStartTime24(row, fallback = "") {
   if (!raw) return fallback;
   // Strip leading "PATTERN " prefix like "TTH 8:00 AM"
   const withoutPattern = raw.replace(/^[A-Z/]+\s+/i, "");
-  const fromTimeText = parseTimeTextToMinutes(withoutPattern);
+  const startToken = getStartTimeText(withoutPattern);
+  const fromTimeText = parseTimeTextToMinutes(startToken);
   if (fromTimeText != null) return minutesTo24Text(fromTimeText);
-  const from24Text = parse24TextToMinutes(withoutPattern);
+  const from24Text = parse24TextToMinutes(startToken);
   if (from24Text != null) return minutesTo24Text(from24Text);
   return fallback;
 }

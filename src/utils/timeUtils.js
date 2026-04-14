@@ -1,14 +1,40 @@
 import { patternDaysMap } from "../data/constants";
 
+export function parseTimeTextToMinutes(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const match = text.match(/^(\d{1,2}):(\d{2})(?:\s*(AM|PM))?$/i);
+  if (!match) return null;
+
+  let hour = Number(match[1]);
+  const minute = Number(match[2]);
+  const ampm = String(match[3] ?? "").toUpperCase();
+
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  if (minute < 0 || minute > 59) return null;
+
+  if (ampm) {
+    if (hour < 1 || hour > 12) return null;
+    if (ampm === "PM" && hour !== 12) hour += 12;
+    if (ampm === "AM" && hour === 12) hour = 0;
+  } else if (hour < 0 || hour > 23) {
+    return null;
+  }
+
+  return hour * 60 + minute;
+}
+
+export function getStartTimeText(timeValue) {
+  const text = String(timeValue ?? "").trim();
+  if (!text) return "";
+  return text.split(/\s*[-–]\s*/)[0]?.trim() ?? "";
+}
+
 export function parseCourseTime(course) {
   if (!course.time) return null;
-  const match = course.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
-  if (!match) return null;
-  let h = parseInt(match[1]);
-  const ampm = match[3].toUpperCase();
-  if (ampm === "PM" && h !== 12) h += 12;
-  if (ampm === "AM" && h === 12) h = 0;
-  const startMin = h * 60 + parseInt(match[2]);
+  const startMin = parseTimeTextToMinutes(getStartTimeText(course.time));
+  if (startMin == null) return null;
   return {
     startMin,
     endMin: startMin + Math.round((course.duration || 1.5) * 60),
