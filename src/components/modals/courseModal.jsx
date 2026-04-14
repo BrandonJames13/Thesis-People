@@ -240,6 +240,8 @@ export function SubjectModal({
 
     // Build final payload: subject metadata + sections + instructor links
     // This maps directly to manage_subject RPC parameters
+    // NOTE: Instructor assignment is NOT handled by manage_subject RPC
+    // (requires time_start/time_end which are only available in schedule workflow)
     onSave({
       code: c,
       title: t,

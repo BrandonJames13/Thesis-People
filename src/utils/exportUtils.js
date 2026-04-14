@@ -1115,35 +1115,50 @@ export function parseImportCsv(csvText, type) {
      * - status: normalized via normalizeAssignmentStatus (default: "Pending")
      * Note: section_id, subject_id, room_id, instructor_id are resolved during import workflow
      */
+
+    // Build instructorSections array for instructor_subject_sections table
+    const instructorSections = rows
+      .filter((row) => row.instructor && (row.time_start || row.time_end))
+      .map((row) => ({
+        subject_ref: {
+          code: row.code,
+          program: row.program,
+          year: row.year,
+        },
+        section: row.section,
+        instructor: String(row.instructor ?? "").trim(),
+        time_start: row.time_start || null,
+        time_end: row.time_end || null,
+        academic_year: row.academicYear,
+        semester: row.semester,
+      }));
+
     return {
       type: selectedType,
       rows,
       warnings,
-      dbRows: rows.map((row) => ({
-        section_id:
-          String(row.section_id ?? row.sectionId ?? "").trim() || null,
-        course_code: row.code,
-        course_title: row.title,
-        section: row.section,
-        academic_year: row.academicYear,
-        semester: row.semester,
-        program: row.program,
-        year: row.year,
-        enrolled: Number(row.enrolled ?? 0),
-        room_number: row.room,
-        room_type: normalizeRoomType(row.roomType),
-        instructor_name: row.instructor,
-        pattern: row.pattern,
-        time_display: row.time,
-        duration: Number(row.duration ?? 0),
-        status: normalizeAssignmentStatus(row.status),
-        employment_status: row.employment_status ?? null,
-        max_units: row.max_units ?? null,
-        allow_night_class: row.allow_night_class ?? false,
-        employment_status_provided: !!row.employment_status_provided,
-        max_units_provided: !!row.max_units_provided,
-        allow_night_class_provided: !!row.allow_night_class_provided,
-      })),
+      dbRows: {
+        scheduleAssignments: rows.map((row) => ({
+          section_id:
+            String(row.section_id ?? row.sectionId ?? "").trim() || null,
+          course_code: row.code,
+          course_title: row.title,
+          section: row.section,
+          academic_year: row.academicYear,
+          semester: row.semester,
+          program: row.program,
+          year: row.year,
+          enrolled: Number(row.enrolled ?? 0),
+          room_number: row.room,
+          room_type: normalizeRoomType(row.roomType),
+          instructor_name: row.instructor,
+          pattern: row.pattern,
+          time_display: row.time,
+          duration: Number(row.duration ?? 0),
+          status: normalizeAssignmentStatus(row.status),
+        })),
+        instructorSections,
+      },
       upsert: {
         table: "schedule_assignments",
         conflictTarget: ["section_id", "academic_year", "semester"],

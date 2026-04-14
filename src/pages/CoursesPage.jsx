@@ -168,6 +168,9 @@ export default function SubjectsPage() {
       }
     }
 
+    // NOTE: p_instructor_ids is no longer supported by manage_subject RPC
+    // Instructor assignment requires time_start/time_end which are provided only in schedule assignment workflow
+    // The RPC now handles subject CRUD only (code, title, sections, etc)
     const { data, error } = await supabase.rpc("manage_subject", {
       p_operation: operation,
       p_subject_id: existingSubjectId ?? null,
@@ -178,7 +181,7 @@ export default function SubjectsPage() {
       p_room_type: subjectPayload?.room_type ?? null,
       p_duration: subjectPayload?.duration ?? 1.5,
       p_sections: normalizedSections,
-      p_instructor_ids: desiredInstructorIds,
+      p_instructor_ids: [], // Empty: instructors assigned only via schedule workflow
       p_academic_year: CURRENT_ACADEMIC_YEAR,
       p_semester: CURRENT_SEMESTER,
     });

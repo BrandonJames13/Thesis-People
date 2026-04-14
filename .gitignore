@@ -25,3 +25,4 @@ real_data
 *.sln
 *.sw?
 database_schema_code.file
+database_functions_ref.file

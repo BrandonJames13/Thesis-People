@@ -818,7 +818,20 @@ export default function ImportModal({ isOpen, onClose }) {
 
   const importFullList = async (payload) => {
     const sourceRows = Array.isArray(payload?.rows) ? payload.rows : [];
-    const scheduleDbRows = Array.isArray(payload?.dbRows) ? payload.dbRows : [];
+    const payloadDbRows = payload?.dbRows;
+
+    // Handle both old array format and new object format for dbRows
+    let scheduleDbRows = [];
+
+    if (Array.isArray(payloadDbRows)) {
+      // Old format: dbRows is an array of schedule assignments
+      scheduleDbRows = payloadDbRows;
+    } else if (payloadDbRows && typeof payloadDbRows === "object") {
+      // New format: dbRows is an object with scheduleAssignments and instructorSections
+      scheduleDbRows = Array.isArray(payloadDbRows.scheduleAssignments)
+        ? payloadDbRows.scheduleAssignments
+        : [];
+    }
 
     if (sourceRows.length === 0 || scheduleDbRows.length === 0) {
       throw new Error("No full list rows were parsed for import.");
@@ -987,7 +1000,6 @@ export default function ImportModal({ isOpen, onClose }) {
         }
 
         return {
-          ...(row.section_id ? { id: row.section_id } : {}),
           subject_id: subject.id,
           section: row.section,
           enrolled: Number(row.enrolled ?? 0),
@@ -1070,72 +1082,62 @@ export default function ImportModal({ isOpen, onClose }) {
       "Unable to import schedule assignments.",
     );
 
-    // Assign instructors to subjects at the subject level (not just to schedule assignments)
-    // Build a map of unique subject identities to their instructor IDs
-    const subjectInstructorMap = new Map();
-    const importWarnings = [];
-
+    // Assign instructors to subject sections with time data from full list
+    const instructorSectionUpsertRows = [];
     sourceRows.forEach((row) => {
       const instructorName = String(row.instructor ?? "").trim();
       if (!instructorName) return;
 
-      const subjectKey = buildSubjectIdentityKey(row);
-      const subject = subjectByKey.get(subjectKey);
-      if (!subject) return;
+      // Time fields are required by the database schema
+      if (!row.time_start || !row.time_end) {
+        console.warn(
+          `Skipping instructor section for "${instructorName}" and section "${row.section}" (${row.academicYear} ${row.semester}): time data not provided in CSV.`,
+        );
+        return;
+      }
 
       const instructor = instructorByName.get(
         normalizeLookupKey(instructorName),
       );
       if (!instructor) {
-        // Instructor either doesn't exist in CSV or wasn't found in DB
         return;
       }
 
-      // Map subject to its first available instructor
-      if (!subjectInstructorMap.has(subjectKey)) {
-        subjectInstructorMap.set(subjectKey, instructor.id);
+      const subject = subjectByKey.get(buildSubjectIdentityKey(row));
+      if (!subject) {
+        return;
       }
+
+      const sectionKey = `${normalizeLookupKey(subject.id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academicYear)}|${normalizeLookupKey(row.semester)}`;
+      const section = sectionByKey.get(sectionKey);
+      if (!section) {
+        return;
+      }
+
+      instructorSectionUpsertRows.push({
+        instructor_id: instructor.id,
+        section_id: section.id,
+        time_start: row.time_start,
+        time_end: row.time_end,
+        academic_year: row.academicYear,
+        semester: row.semester,
+      });
     });
 
-    // Call manage_subject RPC for each subject with an assigned instructor
-    for (const [subjectKey, instructorId] of subjectInstructorMap.entries()) {
-      const subject = importedSubjects.find(
-        (row) => buildSubjectIdentityKey(row) === subjectKey,
+    if (instructorSectionUpsertRows.length > 0) {
+      await upsertRows(
+        "instructor_subject_sections",
+        instructorSectionUpsertRows,
+        "instructor_id,section_id",
+        "Unable to import instructor subject sections.",
       );
-      if (!subject) continue;
-
-      const { error: rpcError } = await supabase.rpc("manage_subject", {
-        p_operation: "update",
-        p_subject_id: subject.id,
-        p_code: null,
-        p_title: null,
-        p_program: null,
-        p_year: null,
-        p_room_type: null,
-        p_duration: null,
-        p_sections: [],
-        p_instructor_ids: [instructorId],
-        p_academic_year: null,
-        p_semester: null,
-      });
-
-      if (rpcError) {
-        const normalizedError = normalizePostgresError(
-          rpcError,
-          "Unable to assign instructor",
-        );
-        importWarnings.push(
-          `Subject ${subject.code}: failed to assign instructor (${normalizedError.message}). Skipping.`,
-        );
-      }
     }
 
-    // Show warnings to user
-    if (importWarnings.length > 0) {
-      importWarnings.forEach((warning) => {
-        showNotification(`⚠ ${warning}`);
-      });
-    }
+    // NOTE: Instructor-section assignment is already handled by the importFullList workflow above
+    // via direct upsert to instructor_subject_sections table with proper section_id + timing.
+    // The manage_subject RPC approach is incompatible with the section-level assignment model
+    // (instructor_subject_sections.section_id FK, not subject_id).
+    // No additional RPC call needed - all mappings created during schedule assignment phase.
   };
 
   const applyImport = async () => {

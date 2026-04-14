@@ -562,7 +562,6 @@ export function DataProvider({ children }) {
   }, []);
 
   const updateInstructorSubjects = useCallback(() => {
-    // instructor_subjects table no longer exists; use instructor_subject_sections instead
     setInstructorSubjects([]);
   }, []);
 
