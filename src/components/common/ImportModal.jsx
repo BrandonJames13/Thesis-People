@@ -520,16 +520,22 @@ export default function ImportModal({ isOpen, onClose }) {
       "Unable to import subject sections.",
     );
 
-    // Assign instructors to subjects if provided
-    const instructorNames = Array.from(
-      new Set(
-        sectionRows
-          .map((row) => String(row.instructor ?? "").trim())
-          .filter(Boolean),
-      ),
-    );
+    // Assign instructors to subject sections with time data
+    const instructorSections = Array.isArray(
+      payload?.dbRows?.instructorSections,
+    )
+      ? payload.dbRows.instructorSections
+      : [];
 
-    if (instructorNames.length > 0) {
+    if (instructorSections.length > 0) {
+      const instructorNames = Array.from(
+        new Set(
+          instructorSections
+            .map((row) => String(row.instructor ?? "").trim())
+            .filter(Boolean),
+        ),
+      );
+
       const existingInstructors = await fetchExistingRows(
         "instructors",
         "name",
@@ -540,70 +546,92 @@ export default function ImportModal({ isOpen, onClose }) {
         existingInstructors.map((row) => [normalizeLookupKey(row.name), row]),
       );
 
-      // Build a map of unique subject identities to their instructor IDs
-      const subjectInstructorMap = new Map();
-      const importWarnings = [];
+      // Get existing sections to map to section_id
+      const subjectSectionRows =
+        sectionUpsertRows.length > 0
+          ? await supabase
+              .from("subject_sections")
+              .select("id, subject_id, section, academic_year, semester")
+          : { data: [], error: null };
 
-      sectionRows.forEach((row) => {
-        const instructorName = String(row.instructor ?? "").trim();
-        if (!instructorName) return;
-
-        const subjectKey = buildSubjectIdentityKey(row?.subject_ref);
-        const subjectId = subjectIdByIdentity.get(subjectKey);
-        if (!subjectId) return;
-
-        const existingInstructor = instructorByName.get(
-          normalizeLookupKey(instructorName),
+      if (subjectSectionRows.error) {
+        throw toNormalizedError(
+          subjectSectionRows.error,
+          "Unable to fetch subject sections for instructor assignment.",
+          {
+            operation: "read",
+            table: "subject_sections",
+          },
         );
-
-        if (!existingInstructor) {
-          importWarnings.push(
-            `Subject ${row?.subject_ref?.code}: instructor "${instructorName}" not found in database. Skipping assignment.`,
-          );
-          return;
-        }
-
-        subjectInstructorMap.set(subjectKey, existingInstructor.id);
-      });
-
-      // Call manage_subject RPC for each subject with an assigned instructor
-      for (const [subjectKey, instructorId] of subjectInstructorMap.entries()) {
-        const subject = subjectIndexRows.find(
-          (row) => buildSubjectIdentityKey(row) === subjectKey,
-        );
-        if (!subject) continue;
-
-        const { error: rpcError } = await supabase.rpc("manage_subject", {
-          p_operation: "update",
-          p_subject_id: subject.id,
-          p_code: null,
-          p_title: null,
-          p_program: null,
-          p_year: null,
-          p_room_type: null,
-          p_duration: null,
-          p_sections: [],
-          p_instructor_ids: [instructorId],
-          p_academic_year: null,
-          p_semester: null,
-        });
-
-        if (rpcError) {
-          const normalizedError = normalizePostgresError(
-            rpcError,
-            "Unable to assign instructor",
-          );
-          importWarnings.push(
-            `Subject ${subject.code}: failed to assign instructor (${normalizedError.message}). Skipping.`,
-          );
-        }
       }
 
-      // Show warnings to user
-      if (importWarnings.length > 0) {
-        importWarnings.forEach((warning) => {
-          showNotification(`⚠ ${warning}`);
-        });
+      // Build map of subject reference to section_id
+      const sectionIdByRef = new Map(
+        (subjectSectionRows.data ?? []).map((row) => [
+          `${row.subject_id}::${row.section}::${row.academic_year}::${row.semester}`,
+          row.id,
+        ]),
+      );
+
+      const instructorSectionUpsertRows = instructorSections
+        .map((row) => {
+          const instructorName = String(row.instructor ?? "").trim();
+          if (!instructorName) return null;
+
+          const instructor = instructorByName.get(
+            normalizeLookupKey(instructorName),
+          );
+          if (!instructor) {
+            console.warn(
+              `Skipping instructor section: instructor "${instructorName}" not found.`,
+            );
+            return null;
+          }
+
+          const subjectKey = buildSubjectIdentityKey(row?.subject_ref);
+          const subjectId = subjectIdByIdentity.get(subjectKey);
+          if (!subjectId) {
+            console.warn(
+              `Skipping instructor section: subject not found for ${subjectKey}.`,
+            );
+            return null;
+          }
+
+          const sectionRef = `${subjectId}::${row.section}::${row.academic_year}::${row.semester}`;
+          const sectionId = sectionIdByRef.get(sectionRef);
+          if (!sectionId) {
+            console.warn(
+              `Skipping instructor section: section not found for ${sectionRef}.`,
+            );
+            return null;
+          }
+
+          // Time fields are required by the database schema
+          if (!row.time_start || !row.time_end) {
+            console.warn(
+              `Skipping instructor section for "${instructorName}" and section "${row.section}" (${row.academic_year} ${row.semester}): time data not provided in CSV. Provide a "Time" column with format "HH:MM - HH:MM" or use Schedule import to add time assignments separately.`,
+            );
+            return null;
+          }
+
+          return {
+            instructor_id: instructor.id,
+            section_id: sectionId,
+            time_start: row.time_start,
+            time_end: row.time_end,
+            academic_year: row.academic_year,
+            semester: row.semester,
+          };
+        })
+        .filter(Boolean);
+
+      if (instructorSectionUpsertRows.length > 0) {
+        await upsertRows(
+          "instructor_subject_sections",
+          instructorSectionUpsertRows,
+          "instructor_id,section_id",
+          "Unable to import instructor subject sections.",
+        );
       }
     }
   };

@@ -50,12 +50,6 @@ function cloneInstructors(instructors) {
   return instructors.map((instructor) => ({ ...instructor }));
 }
 
-function cloneInstructorSubjects(instructorSubjects) {
-  return instructorSubjects.map((instructorSubject) => ({
-    ...instructorSubject,
-  }));
-}
-
 function normalizeSubjectFromRow(row) {
   return {
     code: row.subjectCode ?? row.code ?? "",
@@ -151,34 +145,6 @@ function normalizeScheduleAssignments(rows) {
   return Array.from(uniqueRows.values());
 }
 
-function normalizeInstructorSubject(row) {
-  const subjectId = String(row?.subject_id ?? row?.subjectId ?? "").trim();
-  const instructorId = String(
-    row?.instructor_id ?? row?.instructorId ?? "",
-  ).trim();
-
-  return {
-    subjectId,
-    instructorId,
-    priority: Number(row?.priority ?? 0),
-    maxSections: Number(row?.max_sections ?? row?.maxSections ?? 0),
-  };
-}
-
-function normalizeInstructorSubjects(rows) {
-  const uniqueRows = new Map();
-
-  (Array.isArray(rows) ? rows : []).forEach((row) => {
-    const normalized = normalizeInstructorSubject(row);
-    if (!normalized.subjectId || !normalized.instructorId) return;
-
-    const key = `${normalized.subjectId}::${normalized.instructorId}`;
-    uniqueRows.set(key, normalized);
-  });
-
-  return Array.from(uniqueRows.values());
-}
-
 function normalizeAssignmentFromDbRow(row, lookup) {
   const subject = lookup.subjectById.get(String(row.subject_id ?? ""));
   const section = lookup.sectionById.get(String(row.section_id ?? ""));
@@ -267,7 +233,6 @@ export function DataProvider({ children }) {
         subjectsResult,
         sectionsResult,
         instructorsResult,
-        instructorSubjectsResult,
         assignmentsResult,
       ] = await Promise.all([
         supabase.from("rooms").select("*").order("number"),
@@ -282,9 +247,6 @@ export function DataProvider({ children }) {
           .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
           .eq("semester", ACTIVE_SEMESTER),
         supabase.from("instructors").select("*").order("name"),
-        supabase
-          .from("instructor_subjects")
-          .select("subject_id, instructor_id, priority, max_sections"),
         supabase
           .from("schedule_assignments")
           .select("*")
@@ -304,10 +266,6 @@ export function DataProvider({ children }) {
 
       const roomRows = cloneRooms(roomsResult.data ?? []);
       const instructorRows = cloneInstructors(instructorsResult.data ?? []);
-      const normalizedInstructorSubjects =
-        instructorsResult.error || instructorSubjectsResult.error
-          ? []
-          : normalizeInstructorSubjects(instructorSubjectsResult.data ?? []);
       const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
         normalizeSubjectFromRow(row),
       );
@@ -364,7 +322,7 @@ export function DataProvider({ children }) {
       setSubjects(normalizedSubjects);
       setSubjectSections(normalizedSections);
       setInstructors(instructorRows);
-      setInstructorSubjects(normalizedInstructorSubjects);
+      setInstructorSubjects([]);
       setScheduleAssignments(normalizedAssignments);
     } finally {
       setIsBootstrapping(false);
@@ -603,12 +561,9 @@ export function DataProvider({ children }) {
     setInstructors(cloneInstructors(newInstructors ?? []));
   }, []);
 
-  const updateInstructorSubjects = useCallback((newInstructorSubjects) => {
-    setInstructorSubjects(
-      cloneInstructorSubjects(
-        normalizeInstructorSubjects(newInstructorSubjects ?? []),
-      ),
-    );
+  const updateInstructorSubjects = useCallback(() => {
+    // instructor_subjects table no longer exists; use instructor_subject_sections instead
+    setInstructorSubjects([]);
   }, []);
 
   const updateScheduleAssignments = useCallback((newAssignments) => {

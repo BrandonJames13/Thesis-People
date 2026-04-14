@@ -51,7 +51,6 @@ export default function SubjectsPage() {
         { data: subjectRows, error: subjectError },
         { data: sectionRows, error: sectionError },
         { data: instructorRows, error: instructorError },
-        { data: instructorSubjectRows, error: instructorSubjectError },
       ] = await Promise.all([
         supabase
           .from("subjects")
@@ -65,9 +64,6 @@ export default function SubjectsPage() {
           .eq("academic_year", CURRENT_ACADEMIC_YEAR)
           .eq("semester", CURRENT_SEMESTER),
         supabase.from("instructors").select("id, name").order("name"),
-        supabase
-          .from("instructor_subjects")
-          .select("subject_id, instructor_id"),
       ]);
 
       if (subjectError) {
@@ -83,12 +79,9 @@ export default function SubjectsPage() {
         );
       }
 
-      if (instructorError || instructorSubjectError) {
-        console.warn("Instructor load failed", {
-          instructorError,
-          instructorSubjectError,
-        });
-        showNotification("⚠ Instructor assignments could not be fully loaded.");
+      if (instructorError) {
+        console.warn("Instructor load failed", instructorError);
+        showNotification("⚠ Instructor list could not be fully loaded.");
       }
 
       const sectionMap = (sectionRows ?? []).reduce((acc, row) => {
@@ -99,22 +92,10 @@ export default function SubjectsPage() {
         return acc;
       }, {});
 
-      const instructorMap = (instructorSubjectRows ?? []).reduce((acc, row) => {
-        const subjectId = String(row.subject_id ?? "").trim();
-        const instructorId = String(row.instructor_id ?? "").trim();
-        if (!subjectId || !instructorId) return acc;
-        if (!acc[subjectId]) acc[subjectId] = [];
-        if (!acc[subjectId].includes(instructorId))
-          acc[subjectId].push(instructorId);
-        return acc;
-      }, {});
-
       setSubjects(subjectRows ?? []);
       setSectionsBySubjectId(sectionError ? {} : sectionMap);
       setInstructors(instructorRows ?? []);
-      setInstructorIdsBySubjectId(
-        instructorError || instructorSubjectError ? {} : instructorMap,
-      );
+      setInstructorIdsBySubjectId({});
     } finally {
       setLoading(false);
     }

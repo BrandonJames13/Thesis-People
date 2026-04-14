@@ -10,6 +10,7 @@ import {
   PROGRAM_CODES,
 } from "../data/constants";
 import { getStartTimeText, parseTimeTextToMinutes } from "./timeUtils";
+import { parseTimeToSQL } from "./scheduleUtils";
 
 const VALID_PROGRAM_HINT = PROGRAM_CODES.join(", ");
 
@@ -239,6 +240,42 @@ export function buildSubjectIdentityKey(row) {
   return [row?.code, row?.program, row?.year]
     .map((value) => normalizeHeader(value))
     .join("|");
+}
+
+/**
+ * Parse a time range string (e.g., "07:00 AM - 08:30 AM") into start/end times.
+ * Returns { timeStart: "HH:MM:SS", timeEnd: "HH:MM:SS" } in SQL format, or null if parsing fails.
+ * @param {string} timeRangeString - Time range like "07:00 AM - 08:30 AM" or "7:00 AM – 8:30 AM"
+ * @returns {Object|null} { timeStart, timeEnd } in SQL time format, or null
+ */
+export function parseTimeRange(timeRangeString) {
+  const text = String(timeRangeString ?? "").trim();
+  if (!text) return null;
+
+  // Split on dash or en-dash
+  const parts = text.split(/\s*[-–]\s*/).filter(Boolean);
+  if (parts.length !== 2) return null;
+
+  const startMinutes = parseTimeTextToMinutes(parts[0].trim());
+  const endMinutes = parseTimeTextToMinutes(parts[1].trim());
+
+  if (startMinutes == null || endMinutes == null) return null;
+
+  const timeStart = parseTimeToSQL(minutesToTime24(startMinutes));
+  const timeEnd = parseTimeToSQL(minutesToTime24(endMinutes));
+
+  return { timeStart, timeEnd };
+}
+
+/**
+ * Convert minutes since midnight to 24-hour time format (HH:MM).
+ * @param {number} totalMinutes - Minutes since midnight
+ * @returns {string} Time in HH:MM format
+ */
+function minutesToTime24(totalMinutes) {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
 function toNumber(value, fallback = 0) {
@@ -584,6 +621,14 @@ function parseFullListRows(rows, warnings = []) {
       const program = normalizeProgram(rawProgram);
       const year = String(r[7] ?? "").trim();
       const statusRaw = String(r[15] ?? "").trim();
+      const instructor = String(r[14] ?? "")
+        .trim()
+        .replace(/^—$/, "");
+
+      // Parse time range if provided (e.g., "07:00 AM - 08:30 AM")
+      const timeString = String(r[12] ?? "").trim();
+      const parsedTime = timeString ? parseTimeRange(timeString) : null;
+
       const employmentStatusParsed = parseEmploymentStatusCell(
         String(r[16] ?? ""),
         rowNumber,
@@ -650,11 +695,11 @@ function parseFullListRows(rows, warnings = []) {
         roomType,
         room: room || null,
         pattern: String(r[11] ?? "").trim(),
-        time: String(r[12] ?? "").trim(),
+        time: timeString,
+        time_start: parsedTime?.timeStart || null,
+        time_end: parsedTime?.timeEnd || null,
         duration: toNumber(r[13], 0),
-        instructor: String(r[14] ?? "")
-          .trim()
-          .replace(/^—$/, ""),
+        instructor,
         status: statusRaw,
         employment_status: employmentStatusParsed.value,
         max_units: maxUnitsParsed.value,
@@ -869,6 +914,11 @@ function parseSubjectRows(rows, warnings = []) {
       const program = normalizeProgram(rawProgram);
       const year = String(r[6] ?? "").trim();
       const statusRaw = String(r[11] ?? "").trim();
+      const instructor = String(r[10] ?? "").trim();
+
+      // Parse time range if provided (e.g., "07:00 AM - 08:30 AM")
+      const timeString = String(r[9] ?? "").trim();
+      const parsedTime = timeString ? parseTimeRange(timeString) : null;
 
       if (!semester) {
         throw new Error(
@@ -907,10 +957,12 @@ function parseSubjectRows(rows, warnings = []) {
         enrolled: toNumber(r[7], 0),
         roomType,
         duration: toNumber(r[9], 1.5),
-        instructor: String(r[10] ?? "").trim(),
+        instructor,
         status: statusRaw,
         room: "",
-        time: "",
+        time: timeString,
+        time_start: parsedTime?.timeStart || null,
+        time_end: parsedTime?.timeEnd || null,
         pattern: "",
         dedupeKey: buildSectionIdentityKey(
           { code, program, year, section, academicYear, semester },
@@ -1241,6 +1293,12 @@ export function parseImportCsv(csvText, type) {
      *   - enrolled: number of students (must be > 0)
      *   - status: "Assigned" or "Not Assigned" (normalized)
      *   - academic_year, semester: enrollment period
+     * dbRows.instructorSections: instructor-subject-section relationships for instructor_subject_sections table:
+     *   - subject_ref: { code, program, year } for subject resolution
+     *   - section: section identifier for section_id resolution
+     *   - instructor: instructor name
+     *   - time_start, time_end: parsed from CSV time field
+     *   - academic_year, semester: enrollment period
      */
     return {
       type: selectedType,
@@ -1249,6 +1307,25 @@ export function parseImportCsv(csvText, type) {
       dbRows: {
         subjects: dbSubjects,
         subject_sections: dbSections,
+        instructorSections: subjects
+          .filter((row) => {
+            const instructor = String(row.instructor ?? "").trim();
+            const timeStart = row.time_start;
+            return instructor || timeStart;
+          })
+          .map((row) => ({
+            subject_ref: {
+              code: row.code,
+              program: row.program,
+              year: row.year,
+            },
+            section: row.section,
+            instructor: String(row.instructor ?? "").trim(),
+            time_start: row.time_start || null,
+            time_end: row.time_end || null,
+            academic_year: row.academicYear,
+            semester: row.semester,
+          })),
       },
       upsert: {
         subjects: {

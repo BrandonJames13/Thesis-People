@@ -21,6 +21,7 @@ grant execute on function public.is_admin_user() to authenticated;
 
 alter table if exists public.subjects enable row level security;
 alter table if exists public.subject_sections enable row level security;
+alter table if exists public.instructor_subject_sections enable row level security;
 alter table if exists public.rooms enable row level security;
 alter table if exists public.instructors enable row level security;
 alter table if exists public.schedule_assignments enable row level security;
@@ -114,6 +115,29 @@ using (public.is_admin_user())
 with check (public.is_admin_user());
 
 create policy instructors_admin_delete on public.instructors
+for delete to authenticated
+using (public.is_admin_user());
+
+-- Instructor subject sections policies
+drop policy if exists instructor_subject_sections_admin_select on public.instructor_subject_sections;
+drop policy if exists instructor_subject_sections_admin_insert on public.instructor_subject_sections;
+drop policy if exists instructor_subject_sections_admin_update on public.instructor_subject_sections;
+drop policy if exists instructor_subject_sections_admin_delete on public.instructor_subject_sections;
+
+create policy instructor_subject_sections_admin_select on public.instructor_subject_sections
+for select to authenticated
+using (public.is_admin_user());
+
+create policy instructor_subject_sections_admin_insert on public.instructor_subject_sections
+for insert to authenticated
+with check (public.is_admin_user());
+
+create policy instructor_subject_sections_admin_update on public.instructor_subject_sections
+for update to authenticated
+using (public.is_admin_user())
+with check (public.is_admin_user());
+
+create policy instructor_subject_sections_admin_delete on public.instructor_subject_sections
 for delete to authenticated
 using (public.is_admin_user());
 
