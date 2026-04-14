@@ -532,7 +532,7 @@ export default function ScheduleModal({ onClose }) {
   };
 
   return (
-    <Modal isOpen={true} onClose={onClose}>
+    <Modal isOpen={true} onClose={onClose} disableCloseWhileBusy={isGenerating}>
       <div style={{ width: "100%" }}>
         {/* Header */}
         <div
@@ -783,7 +783,11 @@ export default function ScheduleModal({ onClose }) {
                 borderTop: "1px solid var(--border)",
               }}
             >
-              <button className="btn btn-secondary" onClick={onClose}>
+              <button
+                className="btn btn-secondary"
+                onClick={onClose}
+                disabled={isGenerating}
+              >
                 Cancel
               </button>
               <button
@@ -791,7 +795,7 @@ export default function ScheduleModal({ onClose }) {
                 onClick={handleRunAuto}
                 disabled={isGenerating}
               >
-                {isGenerating ? "⏳ Generating..." : "⚙ Run Auto-Generate"}
+                {isGenerating ? "Generating..." : "⚙ Run Auto-Generate"}
               </button>
             </div>
             {isGenerating && (
@@ -802,7 +806,7 @@ export default function ScheduleModal({ onClose }) {
                   marginTop: 8,
                 }}
               >
-                Generating schedule. Please wait...
+                Generating schedules, please wait...
               </div>
             )}
           </div>

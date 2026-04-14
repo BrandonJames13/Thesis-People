@@ -346,6 +346,8 @@ function chooseInstructorForPlacement({
   course,
   placementBase,
   occupiedPool,
+  occupancyIndexes,
+  pattern,
   assignmentKeyToIgnore,
   eligibleInstructorIdsBySubjectId,
   instructorPoolById,
@@ -374,7 +376,13 @@ function chooseInstructorForPlacement({
       instructor_name: instructor?.name ?? "",
     };
     if (
-      !hasCoverageConflict(occupiedPool, testAssignment, assignmentKeyToIgnore)
+      !hasIndexedCoverageConflict(
+        occupiedPool,
+        occupancyIndexes,
+        testAssignment,
+        pattern,
+        assignmentKeyToIgnore,
+      )
     ) {
       return {
         instructorId: candidate.id,
@@ -631,6 +639,242 @@ function dedupeBySectionTerm(assignments) {
   return Array.from(byKey.values());
 }
 
+/**
+ * Check if placement has any coverage conflicts using indexed occupancy.
+ * Checks: section-term uniqueness, room occupancy, instructor occupancy.
+ * Much faster than hasCoverageConflict (O(1) index lookups vs O(n) array scan).
+ */
+function hasIndexedCoverageConflict(
+  occupiedPool,
+  occupancyIndexes,
+  testAssignment,
+  pattern,
+  assignmentKeyToIgnore,
+) {
+  const { roomIndex, instructorIndex } = occupancyIndexes;
+  const testKey = getAssignmentIdentityKey(testAssignment);
+  const testSectionTermKey = buildSectionTermKey(testAssignment);
+
+  // Check section-term uniqueness in occupiedPool
+  if (testSectionTermKey) {
+    const hasConflictingSectionTerm = occupiedPool.some((assignment) => {
+      const existingKey = getAssignmentIdentityKey(assignment);
+      if (existingKey === testKey) return false;
+      if (assignmentKeyToIgnore && existingKey === assignmentKeyToIgnore)
+        return false;
+      const existingSectionTermKey = buildSectionTermKey(assignment);
+      return (
+        existingSectionTermKey &&
+        testSectionTermKey &&
+        testSectionTermKey === existingSectionTermKey
+      );
+    });
+    if (hasConflictingSectionTerm) return true;
+  }
+
+  // Check room occupancy via index
+  const testRoom = getAssignmentRoom(testAssignment);
+  if (testRoom) {
+    const patternDays = patternDaysMap[pattern] ?? [];
+    const startTime = extractStartTime24(testAssignment, "");
+    const startMinutes = startTime ? parse24TextToMinutes(startTime) : null;
+    if (startMinutes != null && patternDays.length > 0) {
+      const duration = Number(testAssignment.duration ?? 1.5) || 1.5;
+      const durationMinutes = Math.round(duration * 60);
+      for (const day of patternDays) {
+        if (
+          hasRoomConflictAtSlot(
+            roomIndex,
+            day,
+            startMinutes,
+            durationMinutes,
+            testRoom,
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  // Check instructor occupancy via index
+  const testInstructorId = getAssignmentInstructorId(testAssignment);
+  if (testInstructorId) {
+    const patternDays = patternDaysMap[pattern] ?? [];
+    const startTime = extractStartTime24(testAssignment, "");
+    const startMinutes = startTime ? parse24TextToMinutes(startTime) : null;
+    if (startMinutes != null && patternDays.length > 0) {
+      const duration = Number(testAssignment.duration ?? 1.5) || 1.5;
+      const durationMinutes = Math.round(duration * 60);
+      for (const day of patternDays) {
+        if (
+          hasInstructorConflictAtSlot(
+            instructorIndex,
+            day,
+            startMinutes,
+            durationMinutes,
+            testInstructorId,
+          )
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+}
+
+// ─── Occupancy indexing (perf optimization) ───────────────────────────────────
+
+/**
+ * Build indexed occupancy maps from assignments for O(1) conflict lookups.
+ * Returns { roomIndex, instructorIndex } where:
+ * - roomIndex: Map<"day_slotMinutes", Set<roomNumber>>
+ * - instructorIndex: Map<"day_slotMinutes_instructorId", true>
+ */
+function buildOccupancyIndex(assignments) {
+  const roomIndex = new Map();
+  const instructorIndex = new Map();
+
+  assignments.forEach((assignment) => {
+    if (normalizeAssignmentStatus(assignment?.status) !== "Assigned") return;
+
+    const pattern = getPatternForRow(assignment, "");
+    if (!pattern) return;
+
+    const patternDays = patternDaysMap[pattern] ?? [];
+    const startTime = extractStartTime24(assignment, "");
+    const startMinutes = startTime ? parse24TextToMinutes(startTime) : null;
+    if (startMinutes == null) return;
+
+    const duration = Number(assignment.duration ?? 1.5) || 1.5;
+    const durationMinutes = Math.round(duration * 60);
+    const endMinutes = startMinutes + durationMinutes;
+
+    // Index room occupancy for each day in pattern
+    const roomNumber = getAssignmentRoom(assignment);
+    if (roomNumber) {
+      patternDays.forEach((day) => {
+        // For each 30-minute slot during the class, mark room as occupied
+        for (let slot = startMinutes; slot < endMinutes; slot += 30) {
+          const key = `${day}_${slot}`;
+          if (!roomIndex.has(key)) roomIndex.set(key, new Set());
+          roomIndex.get(key).add(roomNumber);
+        }
+      });
+    }
+
+    // Index instructor occupancy
+    const instructorId = getAssignmentInstructorId(assignment);
+    if (instructorId) {
+      patternDays.forEach((day) => {
+        for (let slot = startMinutes; slot < endMinutes; slot += 30) {
+          const key = `${day}_${slot}_${instructorId}`;
+          instructorIndex.set(key, true);
+        }
+      });
+    }
+  });
+
+  return { roomIndex, instructorIndex };
+}
+
+/**
+ * Check if room is occupied at any overlapping slot for given day/time/duration.
+ * O(duration_minutes / 30) lookup.
+ */
+function hasRoomConflictAtSlot(
+  roomOccupancyIndex,
+  day,
+  slotMinutes,
+  durationMinutes,
+  roomNumber,
+) {
+  for (
+    let slot = slotMinutes;
+    slot < slotMinutes + durationMinutes;
+    slot += 30
+  ) {
+    const key = `${day}_${slot}`;
+    const roomsAtSlot = roomOccupancyIndex.get(key);
+    if (roomsAtSlot && roomsAtSlot.has(roomNumber)) return true;
+  }
+  return false;
+}
+
+/**
+ * Check if instructor is occupied at any overlapping slot for given day/time/duration.
+ * O(duration_minutes / 30) lookup.
+ */
+function hasInstructorConflictAtSlot(
+  instructorOccupancyIndex,
+  day,
+  slotMinutes,
+  durationMinutes,
+  instructorId,
+) {
+  for (
+    let slot = slotMinutes;
+    slot < slotMinutes + durationMinutes;
+    slot += 30
+  ) {
+    const key = `${day}_${slot}_${instructorId}`;
+    if (instructorOccupancyIndex.has(key)) return true;
+  }
+  return false;
+}
+
+/**
+ * Update occupancy indexes when a new assignment is placed.
+ * Mutates indexes in place.
+ */
+function updateOccupancyIndex(indexes, assignment, pattern) {
+  if (normalizeAssignmentStatus(assignment?.status) !== "Assigned") return;
+
+  const { roomIndex, instructorIndex } = indexes;
+  const patternDays = patternDaysMap[pattern] ?? [];
+  if (patternDays.length === 0) return;
+
+  const startTime = extractStartTime24(assignment, "");
+  const startMinutes = startTime ? parse24TextToMinutes(startTime) : null;
+  if (startMinutes == null) return;
+
+  const duration = Number(assignment.duration ?? 1.5) || 1.5;
+  const durationMinutes = Math.round(duration * 60);
+
+  // Add room occupancy
+  const roomNumber = getAssignmentRoom(assignment);
+  if (roomNumber) {
+    patternDays.forEach((day) => {
+      for (
+        let slot = startMinutes;
+        slot < startMinutes + durationMinutes;
+        slot += 30
+      ) {
+        const key = `${day}_${slot}`;
+        if (!roomIndex.has(key)) roomIndex.set(key, new Set());
+        roomIndex.get(key).add(roomNumber);
+      }
+    });
+  }
+
+  // Add instructor occupancy
+  const instructorId = getAssignmentInstructorId(assignment);
+  if (instructorId) {
+    patternDays.forEach((day) => {
+      for (
+        let slot = startMinutes;
+        slot < startMinutes + durationMinutes;
+        slot += 30
+      ) {
+        const key = `${day}_${slot}_${instructorId}`;
+        instructorIndex.set(key, true);
+      }
+    });
+  }
+}
+
 // ─── ★ UPDATED Auto-Schedule ──────────────────────────────────────────────────
 //
 //  New behaviour:
@@ -640,6 +884,8 @@ function dedupeBySectionTerm(assignments) {
 //     at the same start time before doing a full time-window scan.
 //  4. If pattern was changed, patternAdjusted note is attached.
 //  5. Sections with no valid placement are marked "Conflict".
+//
+//  Optimization: Uses indexed occupancy maps for O(1) conflict detection.
 
 export function runAutoSchedule({
   sectionRows,
@@ -696,6 +942,11 @@ export function runAutoSchedule({
   newRooms.forEach((r) => {
     if (r.status !== "Maintenance") r.status = "Available";
   });
+
+  // ─── Build occupancy indexes once (perf optimization) ───────────────────────
+  const occupancyIndexes = buildOccupancyIndex(existingAssignments);
+  const occupiedPool = [...existingAssignments];
+  const instructorLoadCount = buildInstructorLoadCount(existingAssignments);
 
   let assigned = 0;
   let conflictCount = 0;
@@ -797,9 +1048,6 @@ export function runAutoSchedule({
       return aWaste - bWaste;
     });
 
-    const occupiedPool = [...existingAssignments, ...generatedAssignments];
-    const instructorLoadCount = buildInstructorLoadCount(occupiedPool);
-
     let bestResult = null;
     let patternUsed = null;
     let slotUsed = null;
@@ -850,9 +1098,11 @@ export function runAutoSchedule({
                 "",
             };
             if (
-              !hasCoverageConflict(
+              !hasIndexedCoverageConflict(
                 occupiedPool,
+                occupancyIndexes,
                 importedPlacement,
+                tryPattern,
                 assignmentKey,
               )
             ) {
@@ -871,6 +1121,8 @@ export function runAutoSchedule({
               course,
               placementBase,
               occupiedPool,
+              occupancyIndexes,
+              pattern: tryPattern,
               assignmentKeyToIgnore: assignmentKey,
               eligibleInstructorIdsBySubjectId,
               instructorPoolById,
@@ -899,7 +1151,7 @@ export function runAutoSchedule({
     }
 
     if (bestResult) {
-      generatedAssignments.push({
+      const finalAssignment = {
         ...course,
         room: bestResult.room.number,
         time: `${patternUsed} ${formatTime(slotUsed)}`,
@@ -914,7 +1166,21 @@ export function runAutoSchedule({
           importedPattern && patternUsed !== importedPattern
             ? `Pattern changed from ${importedPattern} to ${patternUsed} to resolve conflict`
             : undefined,
-      });
+      };
+      generatedAssignments.push(finalAssignment);
+
+      // ─── Incremental occupancy updates (perf optimization) ──────────────────
+      occupiedPool.push(finalAssignment);
+      updateOccupancyIndex(occupancyIndexes, finalAssignment, patternUsed);
+      const instructorId = instructorUsed?.instructorId;
+      if (instructorId) {
+        instructorLoadCount.set(
+          instructorId,
+          (instructorLoadCount.get(instructorId) ?? 0) + 1,
+        );
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       bestResult.room.status = "Occupied";
       assigned++;
     } else {
