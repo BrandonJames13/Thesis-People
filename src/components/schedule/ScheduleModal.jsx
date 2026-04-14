@@ -12,7 +12,7 @@ import {
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
-export default function ScheduleModal({ onClose }) {
+export default function ScheduleModal({ onClose, onRunComplete }) {
   const {
     rooms,
     availableSubjects,
@@ -376,6 +376,7 @@ export default function ScheduleModal({ onClose }) {
 
       updateRooms(mergedRooms);
       updateScheduleAssignments(result.scheduleAssignments);
+      if (onRunComplete) onRunComplete();
       onClose();
       showNotification(result.message);
     } finally {
@@ -516,6 +517,7 @@ export default function ScheduleModal({ onClose }) {
     }
 
     updateScheduleAssignments(result.scheduleAssignments);
+    if (onRunComplete) onRunComplete();
     onClose();
 
     const movedCount = (result.moved ?? []).length;

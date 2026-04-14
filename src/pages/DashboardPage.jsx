@@ -25,7 +25,7 @@ export default function DashboardPage() {
     scheduleAssignments,
     resetAllData,
   } = useData();
-  const { detectConflicts, hardConflictCount } = useConflicts();
+  const { hardConflictCount } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -63,6 +63,17 @@ export default function DashboardPage() {
       ? Math.round((assignedSections / totalSections) * 100)
       : 0;
   const genTimeLabel = lastGenTime !== null ? `${lastGenTime}s` : "—";
+
+  const handleGenerationComplete = () => {
+    if (genStartRef.current) {
+      const elapsed = (
+        (performance.now() - genStartRef.current) /
+        1000
+      ).toFixed(1);
+      setLastGenTime(elapsed);
+      genStartRef.current = null;
+    }
+  };
 
   const requireAdmin = () => {
     if (isAdmin) return true;
@@ -501,17 +512,8 @@ export default function DashboardPage() {
 
       {showScheduleModal && isAdmin && (
         <ScheduleModal
-          onClose={() => {
-            if (genStartRef.current) {
-              const elapsed = (
-                (performance.now() - genStartRef.current) /
-                1000
-              ).toFixed(1);
-              setLastGenTime(elapsed);
-              genStartRef.current = null;
-            }
-            setShowScheduleModal(false);
-          }}
+          onRunComplete={handleGenerationComplete}
+          onClose={() => setShowScheduleModal(false)}
         />
       )}
 
