@@ -797,6 +797,8 @@ export default function ImportModal({ isOpen, onClose }) {
           semester: row.semester,
           pattern: row.pattern,
           time_display: row.time_display,
+          time_start: row.time_start || null,
+          time_end: row.time_end || null,
           status: row.status,
         };
       })
@@ -1084,35 +1086,78 @@ export default function ImportModal({ isOpen, onClose }) {
 
     // Assign instructors to subject sections with time data from full list
     const instructorSectionUpsertRows = [];
-    sourceRows.forEach((row) => {
+    console.log("=== START Instructor-Subject Section Assignment ===");
+    console.log(`Total rows to process: ${sourceRows.length}`);
+    console.log(`Available instructors in DB: ${instructorByName.size}`);
+    console.log(`Available subjects in DB: ${subjectByKey.size}`);
+    console.log(`Available sections in DB: ${sectionByKey.size}`);
+
+    // Show sample keys for debugging
+    if (instructorByName.size > 0) {
+      console.log(
+        `Sample instructor keys (first 3): ${Array.from(instructorByName.keys()).slice(0, 3).join(", ")}`,
+      );
+    }
+    if (subjectByKey.size > 0) {
+      console.log(
+        `Sample subject keys (first 3): ${Array.from(subjectByKey.keys()).slice(0, 3).join(", ")}`,
+      );
+    }
+    if (sectionByKey.size > 0) {
+      console.log(
+        `Sample section keys (first 3): ${Array.from(sectionByKey.keys()).slice(0, 3).join(", ")}`,
+      );
+    }
+
+    const debugLogs = [];
+    sourceRows.forEach((row, idx) => {
       const instructorName = String(row.instructor ?? "").trim();
-      if (!instructorName) return;
+      if (!instructorName) {
+        debugLogs.push(`Row ${idx + 1}: No instructor name provided`);
+        return;
+      }
 
       // Time fields are required by the database schema
       if (!row.time_start || !row.time_end) {
         console.warn(
           `Skipping instructor section for "${instructorName}" and section "${row.section}" (${row.academicYear} ${row.semester}): time data not provided in CSV.`,
         );
+        debugLogs.push(
+          `Row ${idx + 1}: Missing time data for "${instructorName}"`,
+        );
         return;
       }
 
-      const instructor = instructorByName.get(
-        normalizeLookupKey(instructorName),
-      );
+      const normalizedInstructorName = normalizeLookupKey(instructorName);
+      const instructor = instructorByName.get(normalizedInstructorName);
       if (!instructor) {
+        debugLogs.push(
+          `Row ${idx + 1}: Instructor NOT FOUND - searching for "${instructorName}" (normalized: "${normalizedInstructorName}")`,
+        );
         return;
       }
 
-      const subject = subjectByKey.get(buildSubjectIdentityKey(row));
+      const subjectKey = buildSubjectIdentityKey(row);
+      const subject = subjectByKey.get(subjectKey);
       if (!subject) {
+        debugLogs.push(
+          `Row ${idx + 1}: Subject NOT FOUND - looked for key "${subjectKey}"`,
+        );
         return;
       }
 
       const sectionKey = `${normalizeLookupKey(subject.id)}|${normalizeLookupKey(row.section)}|${normalizeLookupKey(row.academicYear)}|${normalizeLookupKey(row.semester)}`;
       const section = sectionByKey.get(sectionKey);
       if (!section) {
+        debugLogs.push(
+          `Row ${idx + 1}: Section NOT FOUND - looked for key "${sectionKey}"`,
+        );
         return;
       }
+
+      debugLogs.push(
+        `Row ${idx + 1}: ✅ MATCH - Instructor: ${instructor.id.substring(0, 8)}, Section: ${section.id.substring(0, 8)}`,
+      );
 
       instructorSectionUpsertRows.push({
         instructor_id: instructor.id,
@@ -1124,12 +1169,30 @@ export default function ImportModal({ isOpen, onClose }) {
       });
     });
 
+    console.log(`\n=== Assignment Results ===`);
+    console.log(
+      `Successfully matched: ${instructorSectionUpsertRows.length} row(s)`,
+    );
+    console.log(`\n=== Detailed Row Processing ===`);
+    debugLogs.forEach((log) => console.log(log));
+    console.log(`\n=== END Instructor-Subject Section Assignment ===\n`);
+
     if (instructorSectionUpsertRows.length > 0) {
       await upsertRows(
         "instructor_subject_sections",
         instructorSectionUpsertRows,
         "instructor_id,section_id",
         "Unable to import instructor subject sections.",
+      );
+      console.log(
+        `✅ Successfully upserted ${instructorSectionUpsertRows.length} instructor-section assignments`,
+      );
+    } else {
+      console.warn(
+        `⚠️ No instructor-section assignments were created. This may indicate:
+        1. No matching instructors in database (check instructor names)
+        2. No matching subjects/sections (check subject import)
+        3. Missing time data in CSV (check column 13)`,
       );
     }
 

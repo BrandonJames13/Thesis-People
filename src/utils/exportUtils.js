@@ -1025,6 +1025,9 @@ function parseScheduleRows(rows, warnings = []) {
         );
       }
 
+      // Parse time range into start/end times
+      const parsedTime = time ? parseTimeRange(time) : null;
+
       return {
         code,
         section,
@@ -1033,6 +1036,8 @@ function parseScheduleRows(rows, warnings = []) {
         room,
         pattern,
         time,
+        time_start: parsedTime?.timeStart || null,
+        time_end: parsedTime?.timeEnd || null,
         instructor,
         status: statusRaw,
         dedupeKey: [code, section, academicYear, semester, room]
