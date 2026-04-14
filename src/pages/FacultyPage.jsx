@@ -219,8 +219,13 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
 
 export default function FacultyPage() {
   const { isAdmin } = useAuth();
-  const { scheduleAssignments, getInstructorLoad, instructorSubjects } =
-    useData();
+  const {
+    scheduleAssignments,
+    getInstructorLoad,
+    instructorSubjects,
+    isBootstrapping,
+    isGenerationInProgress,
+  } = useData();
   const { showNotification } = useNotification();
 
   const notifyDbError = useCallback(
@@ -373,7 +378,7 @@ export default function FacultyPage() {
     setPage(1);
   };
 
-  if (loading) {
+  if (loading || isBootstrapping || isGenerationInProgress) {
     return <div className="page-container">Loading instructors...</div>;
   }
 

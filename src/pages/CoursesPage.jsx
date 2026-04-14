@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useNotification } from "../context/NotificationContext";
 import { useAuth } from "../context/AuthContext";
+import { useData } from "../context/DataContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import { SubjectModal } from "../components/modals/SubjectModal";
 import ConfirmModal from "../components/common/ConfirmModal";
@@ -13,6 +14,7 @@ const PAGE_SIZE = 15;
 export default function SubjectsPage() {
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
+  const { isBootstrapping, isGenerationInProgress } = useData();
 
   const notifyDbError = useCallback(
     (error, operation, entity = "subject") => {
@@ -251,7 +253,7 @@ export default function SubjectsPage() {
   // ============================================================
   // RENDER
   // ============================================================
-  if (loading) {
+  if (loading || isBootstrapping || isGenerationInProgress) {
     return <div className="page-container">Loading subjects...</div>;
   }
 

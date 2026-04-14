@@ -23,6 +23,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
+    setIsGenerationInProgress,
   } = useData();
   const { showNotification } = useNotification();
 
@@ -334,6 +335,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     }
 
     setIsGenerating(true);
+    setIsGenerationInProgress(true);
 
     try {
       await new Promise((resolve) => {
@@ -382,6 +384,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     } finally {
       if (isMountedRef.current) {
         setIsGenerating(false);
+        setIsGenerationInProgress(false);
       }
     }
   };

@@ -256,109 +256,119 @@ export function DataProvider({ children }) {
   const [instructors, setInstructors] = useState([]);
   const [instructorSubjects, setInstructorSubjects] = useState([]);
   const [scheduleAssignments, setScheduleAssignments] = useState([]);
+  const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
 
   const bootstrapFromSupabase = useCallback(async () => {
-    const [
-      roomsResult,
-      subjectsResult,
-      sectionsResult,
-      instructorsResult,
-      instructorSubjectsResult,
-      assignmentsResult,
-    ] = await Promise.all([
-      supabase.from("rooms").select("*").order("number"),
-      supabase
-        .from("subjects")
-        .select("id, code, title, program, year, room_type, duration"),
-      supabase
-        .from("subject_sections")
-        .select(
-          "id, subject_id, section, enrolled, status, academic_year, semester",
-        )
-        .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
-        .eq("semester", ACTIVE_SEMESTER),
-      supabase.from("instructors").select("*").order("name"),
-      supabase
-        .from("instructor_subjects")
-        .select("subject_id, instructor_id, priority, max_sections"),
-      supabase
-        .from("schedule_assignments")
-        .select("*")
-        .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
-        .eq("semester", ACTIVE_SEMESTER),
-    ]);
+    setIsBootstrapping(true);
+    try {
+      const [
+        roomsResult,
+        subjectsResult,
+        sectionsResult,
+        instructorsResult,
+        instructorSubjectsResult,
+        assignmentsResult,
+      ] = await Promise.all([
+        supabase.from("rooms").select("*").order("number"),
+        supabase
+          .from("subjects")
+          .select("id, code, title, program, year, room_type, duration"),
+        supabase
+          .from("subject_sections")
+          .select(
+            "id, subject_id, section, enrolled, status, academic_year, semester",
+          )
+          .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+          .eq("semester", ACTIVE_SEMESTER),
+        supabase.from("instructors").select("*").order("name"),
+        supabase
+          .from("instructor_subjects")
+          .select("subject_id, instructor_id, priority, max_sections"),
+        supabase
+          .from("schedule_assignments")
+          .select("*")
+          .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+          .eq("semester", ACTIVE_SEMESTER),
+      ]);
 
-    if (roomsResult.error || subjectsResult.error || sectionsResult.error) {
-      setSubjects([]);
-      setSubjectSections([]);
-      setRooms([]);
-      setInstructors([]);
-      setInstructorSubjects([]);
-      setScheduleAssignments([]);
-      return;
-    }
+      if (roomsResult.error || subjectsResult.error || sectionsResult.error) {
+        setSubjects([]);
+        setSubjectSections([]);
+        setRooms([]);
+        setInstructors([]);
+        setInstructorSubjects([]);
+        setScheduleAssignments([]);
+        return;
+      }
 
-    const roomRows = cloneRooms(roomsResult.data ?? []);
-    const instructorRows = cloneInstructors(instructorsResult.data ?? []);
-    const normalizedInstructorSubjects =
-      instructorsResult.error || instructorSubjectsResult.error
+      const roomRows = cloneRooms(roomsResult.data ?? []);
+      const instructorRows = cloneInstructors(instructorsResult.data ?? []);
+      const normalizedInstructorSubjects =
+        instructorsResult.error || instructorSubjectsResult.error
+          ? []
+          : normalizeInstructorSubjects(instructorSubjectsResult.data ?? []);
+      const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
+        normalizeSubjectFromRow(row),
+      );
+
+      const subjectById = new Map(
+        (subjectsResult.data ?? []).map((row) => [String(row.id), row]),
+      );
+
+      const normalizedSections = (sectionsResult.data ?? [])
+        .map((row) => {
+          const subject = subjectById.get(String(row.subject_id));
+          if (!subject) return null;
+
+          return normalizeSectionFromRow({
+            section_id: row.id,
+            subject_id: row.subject_id,
+            subjectCode: subject.code,
+            section: row.section,
+            academic_year: row.academic_year,
+            semester: row.semester,
+            enrolled: row.enrolled,
+            status: row.status === "Not Assigned" ? "Pending" : row.status,
+            duration: Number(subject.duration ?? 1.5),
+            room_type: subject.room_type,
+          });
+        })
+        .filter(Boolean);
+
+      const sectionById = new Map(
+        normalizedSections.map((section) => [
+          String(section.sectionId),
+          section,
+        ]),
+      );
+      const roomById = new Map(roomRows.map((room) => [String(room.id), room]));
+      const instructorById = new Map(
+        instructorRows.map((instructor) => [String(instructor.id), instructor]),
+      );
+
+      const normalizedAssignments = assignmentsResult.error
         ? []
-        : normalizeInstructorSubjects(instructorSubjectsResult.data ?? []);
-    const normalizedSubjects = (subjectsResult.data ?? []).map((row) =>
-      normalizeSubjectFromRow(row),
-    );
+        : normalizeScheduleAssignments(
+            (assignmentsResult.data ?? []).map((row) =>
+              normalizeAssignmentFromDbRow(row, {
+                subjectById,
+                sectionById,
+                roomById,
+                instructorById,
+              }),
+            ),
+          );
 
-    const subjectById = new Map(
-      (subjectsResult.data ?? []).map((row) => [String(row.id), row]),
-    );
-
-    const normalizedSections = (sectionsResult.data ?? [])
-      .map((row) => {
-        const subject = subjectById.get(String(row.subject_id));
-        if (!subject) return null;
-
-        return normalizeSectionFromRow({
-          section_id: row.id,
-          subject_id: row.subject_id,
-          subjectCode: subject.code,
-          section: row.section,
-          academic_year: row.academic_year,
-          semester: row.semester,
-          enrolled: row.enrolled,
-          status: row.status === "Not Assigned" ? "Pending" : row.status,
-          duration: Number(subject.duration ?? 1.5),
-          room_type: subject.room_type,
-        });
-      })
-      .filter(Boolean);
-
-    const sectionById = new Map(
-      normalizedSections.map((section) => [String(section.sectionId), section]),
-    );
-    const roomById = new Map(roomRows.map((room) => [String(room.id), room]));
-    const instructorById = new Map(
-      instructorRows.map((instructor) => [String(instructor.id), instructor]),
-    );
-
-    const normalizedAssignments = assignmentsResult.error
-      ? []
-      : normalizeScheduleAssignments(
-          (assignmentsResult.data ?? []).map((row) =>
-            normalizeAssignmentFromDbRow(row, {
-              subjectById,
-              sectionById,
-              roomById,
-              instructorById,
-            }),
-          ),
-        );
-
-    setRooms(roomRows);
-    setSubjects(normalizedSubjects);
-    setSubjectSections(normalizedSections);
-    setInstructors(instructorRows);
-    setInstructorSubjects(normalizedInstructorSubjects);
-    setScheduleAssignments(normalizedAssignments);
+      setRooms(roomRows);
+      setSubjects(normalizedSubjects);
+      setSubjectSections(normalizedSections);
+      setInstructors(instructorRows);
+      setInstructorSubjects(normalizedInstructorSubjects);
+      setScheduleAssignments(normalizedAssignments);
+    } finally {
+      setIsBootstrapping(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -632,6 +642,9 @@ export function DataProvider({ children }) {
       getInstructorLoad,
       assignments,
       conflicts,
+      isBootstrapping,
+      isGenerationInProgress,
+      setIsGenerationInProgress,
       addSubject,
       updateSubjects,
       addSubjectSection,
@@ -662,6 +675,8 @@ export function DataProvider({ children }) {
       getInstructorLoad,
       assignments,
       conflicts,
+      isBootstrapping,
+      isGenerationInProgress,
       addSubject,
       updateSubjects,
       addSubjectSection,
