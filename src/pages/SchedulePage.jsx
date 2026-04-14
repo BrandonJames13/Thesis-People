@@ -174,78 +174,90 @@ export default function SchedulePage() {
   };
 
   // Filter assignments by selected room, year, and instructor
-  const visibleAssignments = scheduleAssignments.filter((assignment) => {
-    const roomMatch = roomFilter
-      ? String(assignment.room_number ?? assignment.room ?? "").trim() ===
-        roomFilter
-      : true;
-    const yearMatch = yearFilter ? assignment.year === yearFilter : true;
-    const instrMatch = instructorFilter
-      ? String(assignment.instructor_name ?? assignment.instructor ?? "")
-          .trim()
-          .toLowerCase() === instructorFilter.trim().toLowerCase()
-      : true;
-    const sectionMatch = sectionFilter
-      ? getAssignmentLabel(assignment)
-          .toLowerCase()
-          .includes(sectionFilter.trim().toLowerCase())
-      : true;
-    return roomMatch && yearMatch && instrMatch && sectionMatch;
-  });
+  const visibleAssignments = useMemo(() => {
+    return scheduleAssignments.filter((assignment) => {
+      const roomMatch = roomFilter
+        ? String(assignment.room_number ?? assignment.room ?? "").trim() ===
+          roomFilter
+        : true;
+      const yearMatch = yearFilter ? assignment.year === yearFilter : true;
+      const instrMatch = instructorFilter
+        ? String(assignment.instructor_name ?? assignment.instructor ?? "")
+            .trim()
+            .toLowerCase() === instructorFilter.trim().toLowerCase()
+        : true;
+      const sectionMatch = sectionFilter
+        ? getAssignmentLabel(assignment)
+            .toLowerCase()
+            .includes(sectionFilter.trim().toLowerCase())
+        : true;
+      return roomMatch && yearMatch && instrMatch && sectionMatch;
+    });
+  }, [
+    roomFilter,
+    yearFilter,
+    instructorFilter,
+    sectionFilter,
+    scheduleAssignments,
+  ]);
 
   // Build bounded grid map (one visible block per day/slot cell).
-  const grid = {};
-  DAYS.forEach((d) => {
-    grid[d] = {};
-  });
-
-  const slotRanges = TIME_SLOTS.map((hour, index) => ({
-    hour,
-    index,
-    startMin: hour * 60,
-    endMin: (hour + 1) * 60,
-  }));
-
-  visibleAssignments.forEach((assignment) => {
-    if (!assignment.pattern) return;
-
-    const timeRange = getAssignmentTimeRange(assignment);
-    if (!timeRange) return;
-
-    const coveredSlots = slotRanges.filter(
-      (slot) =>
-        timeRange.startMin < slot.endMin && timeRange.endMin > slot.startMin,
-    );
-    if (coveredSlots.length === 0) return;
-
-    const startingSlot = coveredSlots[0];
-    const boundedSpan = coveredSlots.length;
-
-    const assignedDays = patternDaysMap[assignment.pattern] || [];
-    assignedDays.forEach((day) => {
-      if (!DAYS.includes(day)) return;
-      if (grid[day][startingSlot.hour]) return;
-
-      coveredSlots.forEach((slot, slotIndex) => {
-        grid[day][slot.hour] =
-          slotIndex === 0
-            ? {
-                assignment,
-                span: boundedSpan,
-                color: COLOR_MAP[assignment.pattern] || "blue",
-                visibleStartMin: timeRange.startMin,
-                visibleEndMin: timeRange.endMin,
-              }
-            : "blocked";
-      });
-
-      for (const slot of coveredSlots) {
-        if (!TIME_SLOTS.includes(slot.hour)) {
-          delete grid[day][slot.hour];
-        }
-      }
+  const grid = useMemo(() => {
+    const gridMap = {};
+    DAYS.forEach((d) => {
+      gridMap[d] = {};
     });
-  });
+
+    const slotRanges = TIME_SLOTS.map((hour, index) => ({
+      hour,
+      index,
+      startMin: hour * 60,
+      endMin: (hour + 1) * 60,
+    }));
+
+    visibleAssignments.forEach((assignment) => {
+      if (!assignment.pattern) return;
+
+      const timeRange = getAssignmentTimeRange(assignment);
+      if (!timeRange) return;
+
+      const coveredSlots = slotRanges.filter(
+        (slot) =>
+          timeRange.startMin < slot.endMin && timeRange.endMin > slot.startMin,
+      );
+      if (coveredSlots.length === 0) return;
+
+      const startingSlot = coveredSlots[0];
+      const boundedSpan = coveredSlots.length;
+
+      const assignedDays = patternDaysMap[assignment.pattern] || [];
+      assignedDays.forEach((day) => {
+        if (!DAYS.includes(day)) return;
+        if (gridMap[day][startingSlot.hour]) return;
+
+        coveredSlots.forEach((slot, slotIndex) => {
+          gridMap[day][slot.hour] =
+            slotIndex === 0
+              ? {
+                  assignment,
+                  span: boundedSpan,
+                  color: COLOR_MAP[assignment.pattern] || "blue",
+                  visibleStartMin: timeRange.startMin,
+                  visibleEndMin: timeRange.endMin,
+                }
+              : "blocked";
+        });
+
+        for (const slot of coveredSlots) {
+          if (!TIME_SLOTS.includes(slot.hour)) {
+            delete gridMap[day][slot.hour];
+          }
+        }
+      });
+    });
+
+    return gridMap;
+  }, [visibleAssignments]);
 
   const renderBody = () => {
     if (scheduleAssignments.length === 0) {
