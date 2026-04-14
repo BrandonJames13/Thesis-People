@@ -91,6 +91,49 @@ main {
     opacity: 0.75;
   }
 }
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* ============ LOADING ============ */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.loading-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+.loading-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text2);
+}
+.loading-pulse {
+  animation: pulse 1.5s ease-in-out infinite;
+}
 
 /* ============ BUTTONS ============ */
 .btn {

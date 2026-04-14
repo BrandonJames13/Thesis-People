@@ -804,14 +804,13 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
               </button>
             </div>
             {isGenerating && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "var(--text2)",
-                  marginTop: 8,
-                }}
-              >
-                Generating schedules, please wait...
+              <div className="loading-indicator" style={{ marginTop: 8 }}>
+                <span className="loading-spinner"></span>
+                <div className="loading-text">
+                  <span className="loading-pulse">
+                    Generating schedules, please wait...
+                  </span>
+                </div>
               </div>
             )}
           </div>
