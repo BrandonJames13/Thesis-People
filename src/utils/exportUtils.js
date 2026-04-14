@@ -1224,6 +1224,7 @@ export function parseImportCsv(csvText, type) {
       status: normalizeSectionStatusForDb(row.status),
       academic_year: row.academicYear,
       semester: row.semester,
+      instructor: String(row.instructor ?? "").trim(),
       dedupe_key: buildSectionIdentityKey(row, { includeProgramYear: true }),
     }));
 

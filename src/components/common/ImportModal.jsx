@@ -519,6 +519,93 @@ export default function ImportModal({ isOpen, onClose }) {
       "subject_id,section,academic_year,semester",
       "Unable to import subject sections.",
     );
+
+    // Assign instructors to subjects if provided
+    const instructorNames = Array.from(
+      new Set(
+        sectionRows
+          .map((row) => String(row.instructor ?? "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    if (instructorNames.length > 0) {
+      const existingInstructors = await fetchExistingRows(
+        "instructors",
+        "name",
+        instructorNames,
+      );
+
+      const instructorByName = new Map(
+        existingInstructors.map((row) => [normalizeLookupKey(row.name), row]),
+      );
+
+      // Build a map of unique subject identities to their instructor IDs
+      const subjectInstructorMap = new Map();
+      const importWarnings = [];
+
+      sectionRows.forEach((row) => {
+        const instructorName = String(row.instructor ?? "").trim();
+        if (!instructorName) return;
+
+        const subjectKey = buildSubjectIdentityKey(row?.subject_ref);
+        const subjectId = subjectIdByIdentity.get(subjectKey);
+        if (!subjectId) return;
+
+        const existingInstructor = instructorByName.get(
+          normalizeLookupKey(instructorName),
+        );
+
+        if (!existingInstructor) {
+          importWarnings.push(
+            `Subject ${row?.subject_ref?.code}: instructor "${instructorName}" not found in database. Skipping assignment.`,
+          );
+          return;
+        }
+
+        subjectInstructorMap.set(subjectKey, existingInstructor.id);
+      });
+
+      // Call manage_subject RPC for each subject with an assigned instructor
+      for (const [subjectKey, instructorId] of subjectInstructorMap.entries()) {
+        const subject = subjectIndexRows.find(
+          (row) => buildSubjectIdentityKey(row) === subjectKey,
+        );
+        if (!subject) continue;
+
+        const { error: rpcError } = await supabase.rpc("manage_subject", {
+          p_operation: "update",
+          p_subject_id: subject.id,
+          p_code: null,
+          p_title: null,
+          p_program: null,
+          p_year: null,
+          p_room_type: null,
+          p_duration: null,
+          p_sections: [],
+          p_instructor_ids: [instructorId],
+          p_academic_year: null,
+          p_semester: null,
+        });
+
+        if (rpcError) {
+          const normalizedError = normalizePostgresError(
+            rpcError,
+            "Unable to assign instructor",
+          );
+          importWarnings.push(
+            `Subject ${subject.code}: failed to assign instructor (${normalizedError.message}). Skipping.`,
+          );
+        }
+      }
+
+      // Show warnings to user
+      if (importWarnings.length > 0) {
+        importWarnings.forEach((warning) => {
+          showNotification(`⚠ ${warning}`);
+        });
+      }
+    }
   };
 
   const importSchedule = async (payload) => {
@@ -954,6 +1041,73 @@ export default function ImportModal({ isOpen, onClose }) {
       "section_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
+
+    // Assign instructors to subjects at the subject level (not just to schedule assignments)
+    // Build a map of unique subject identities to their instructor IDs
+    const subjectInstructorMap = new Map();
+    const importWarnings = [];
+
+    sourceRows.forEach((row) => {
+      const instructorName = String(row.instructor ?? "").trim();
+      if (!instructorName) return;
+
+      const subjectKey = buildSubjectIdentityKey(row);
+      const subject = subjectByKey.get(subjectKey);
+      if (!subject) return;
+
+      const instructor = instructorByName.get(
+        normalizeLookupKey(instructorName),
+      );
+      if (!instructor) {
+        // Instructor either doesn't exist in CSV or wasn't found in DB
+        return;
+      }
+
+      // Map subject to its first available instructor
+      if (!subjectInstructorMap.has(subjectKey)) {
+        subjectInstructorMap.set(subjectKey, instructor.id);
+      }
+    });
+
+    // Call manage_subject RPC for each subject with an assigned instructor
+    for (const [subjectKey, instructorId] of subjectInstructorMap.entries()) {
+      const subject = importedSubjects.find(
+        (row) => buildSubjectIdentityKey(row) === subjectKey,
+      );
+      if (!subject) continue;
+
+      const { error: rpcError } = await supabase.rpc("manage_subject", {
+        p_operation: "update",
+        p_subject_id: subject.id,
+        p_code: null,
+        p_title: null,
+        p_program: null,
+        p_year: null,
+        p_room_type: null,
+        p_duration: null,
+        p_sections: [],
+        p_instructor_ids: [instructorId],
+        p_academic_year: null,
+        p_semester: null,
+      });
+
+      if (rpcError) {
+        const normalizedError = normalizePostgresError(
+          rpcError,
+          "Unable to assign instructor",
+        );
+        importWarnings.push(
+          `Subject ${subject.code}: failed to assign instructor (${normalizedError.message}). Skipping.`,
+        );
+      }
+    }
+
+    // Show warnings to user
+    if (importWarnings.length > 0) {
+      importWarnings.forEach((warning) => {
+        showNotification(`⚠ ${warning}`);
+      });
+    }
   };
 
   const applyImport = async () => {
