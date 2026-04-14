@@ -67,6 +67,7 @@ export default function ImportModal({ isOpen, onClose }) {
   const [error, setError] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [showValidationLogs, setShowValidationLogs] = useState(false);
 
   const selectedTypeConfig = useMemo(
     () => getCsvTypeConfig(importType),
@@ -111,6 +112,7 @@ export default function ImportModal({ isOpen, onClose }) {
   useEffect(() => {
     if (!isOpen) return;
     setParsed(null);
+    setShowValidationLogs(false);
     setError("");
     setLocalFile(null);
     setSource("upload");
@@ -1038,6 +1040,7 @@ export default function ImportModal({ isOpen, onClose }) {
             onClick={() => {
               setSource("upload");
               setParsed(null);
+              setShowValidationLogs(false);
               setError("");
             }}
           >
@@ -1050,6 +1053,7 @@ export default function ImportModal({ isOpen, onClose }) {
             onClick={() => {
               setSource("repo");
               setParsed(null);
+              setShowValidationLogs(false);
               setError("");
             }}
           >
@@ -1135,12 +1139,32 @@ export default function ImportModal({ isOpen, onClose }) {
               gap: 6,
             }}
           >
-            <div style={{ fontWeight: 700 }}>Validation feedback</div>
-            <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {parsed.warnings.map((warning, index) => (
-                <li key={`${warning}-${index}`}>{warning}</li>
-              ))}
-            </ul>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div style={{ fontWeight: 700 }}>
+                {parsed.warnings.length} warning
+                {parsed.warnings.length !== 1 ? "s" : ""} found
+              </div>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setShowValidationLogs(!showValidationLogs)}
+                style={{ fontSize: 11, padding: "4px 8px" }}
+              >
+                {showValidationLogs ? "Hide Logs" : "Show Logs"}
+              </button>
+            </div>
+            {showValidationLogs && (
+              <ul style={{ margin: 0, paddingLeft: 18, marginTop: 6 }}>
+                {parsed.warnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
