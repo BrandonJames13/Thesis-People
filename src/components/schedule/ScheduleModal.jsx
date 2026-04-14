@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { formatTime, getEndTime } from "../../utils/timeUtils";
@@ -50,6 +50,8 @@ export default function ScheduleModal({ onClose }) {
   const [manualPattern, setManualPattern] = useState("MWF");
   const [manualEntries, setManualEntries] = useState([]);
   const [conflictMsg, setConflictMsg] = useState(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const isMountedRef = useRef(true);
 
   const sectionRows = useMemo(() => {
     const subjectByCode = new Map(
@@ -295,6 +297,13 @@ export default function ScheduleModal({ onClose }) {
     setManualInstructor("");
   }, [manualInstructor, manualInstructorOptions]);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   const toggleDay = (day) => {
     setActiveDays((prev) =>
       prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
@@ -314,42 +323,66 @@ export default function ScheduleModal({ onClose }) {
     });
   }
 
-  const handleRunAuto = () => {
+  const handleRunAuto = async () => {
+    if (isGenerating) {
+      return;
+    }
+
     if (activeDays.length === 0) {
       alert("Please select at least one active day.");
       return;
     }
 
-    const result = runAutoSchedule({
-      sectionRows: [...sectionRows],
-      subjects: [...availableSubjects],
-      rooms: [...availableRooms],
-      instructors: [...availableInstructors],
-      instructorSubjects: [...instructorSubjects],
-      scheduleAssignments: [...scheduleAssignments],
-      startTime: autoStart,
-      endTime: autoEnd,
-      pattern: autoPattern,
-      activeDays,
-    });
+    setIsGenerating(true);
 
-    if (result.error) {
-      alert(result.error);
-      return;
+    try {
+      await new Promise((resolve) => {
+        if (
+          typeof window !== "undefined" &&
+          typeof window.requestAnimationFrame === "function"
+        ) {
+          window.requestAnimationFrame(() => resolve());
+          return;
+        }
+
+        setTimeout(resolve, 0);
+      });
+
+      const result = runAutoSchedule({
+        sectionRows: [...sectionRows],
+        subjects: [...availableSubjects],
+        rooms: [...availableRooms],
+        instructors: [...availableInstructors],
+        instructorSubjects: [...instructorSubjects],
+        scheduleAssignments: [...scheduleAssignments],
+        startTime: autoStart,
+        endTime: autoEnd,
+        pattern: autoPattern,
+        activeDays,
+      });
+
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+
+      const roomUpdatesByNumber = new Map(
+        result.rooms.map((room) => [room.number, room]),
+      );
+      const mergedRooms = rooms.map((room) => {
+        const next = roomUpdatesByNumber.get(room.number);
+        return next ? { ...room, ...next } : { ...room };
+      });
+
+      updateRooms(mergedRooms);
+      updateScheduleAssignments(result.scheduleAssignments);
+      onClose();
+      showNotification(result.message);
+    } finally {
+      if (isMountedRef.current) {
+        setIsGenerating(false);
+      }
     }
-
-    const roomUpdatesByNumber = new Map(
-      result.rooms.map((room) => [room.number, room]),
-    );
-    const mergedRooms = rooms.map((room) => {
-      const next = roomUpdatesByNumber.get(room.number);
-      return next ? { ...room, ...next } : { ...room };
-    });
-
-    updateRooms(mergedRooms);
-    updateScheduleAssignments(result.scheduleAssignments);
-    onClose();
-    showNotification(result.message);
   };
 
   // Auto-check conflicts whenever relevant fields change
@@ -523,12 +556,14 @@ export default function ScheduleModal({ onClose }) {
           </div>
           <button
             onClick={onClose}
+            disabled={isGenerating}
             style={{
               background: "none",
               border: "none",
               fontSize: 20,
               color: "var(--text3)",
-              cursor: "pointer",
+              cursor: isGenerating ? "not-allowed" : "pointer",
+              opacity: isGenerating ? 0.6 : 1,
               padding: 0,
               lineHeight: 1,
             }}
@@ -751,10 +786,25 @@ export default function ScheduleModal({ onClose }) {
               <button className="btn btn-secondary" onClick={onClose}>
                 Cancel
               </button>
-              <button className="btn btn-primary" onClick={handleRunAuto}>
-                ⚙ Run Auto-Generate
+              <button
+                className="btn btn-primary"
+                onClick={handleRunAuto}
+                disabled={isGenerating}
+              >
+                {isGenerating ? "⏳ Generating..." : "⚙ Run Auto-Generate"}
               </button>
             </div>
+            {isGenerating && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "var(--text2)",
+                  marginTop: 8,
+                }}
+              >
+                Generating schedule. Please wait...
+              </div>
+            )}
           </div>
         )}
 
