@@ -3,9 +3,8 @@ import { useConflicts } from "../context/ConflictContext";
 
 export default function AnalyticsPage() {
   const { rooms, subjectSections, scheduleAssignments } = useData();
-  const { detectConflicts } = useConflicts();
+  const { hardConflicts } = useConflicts();
 
-  const { hard } = detectConflicts();
   const assignedScheduleCount = scheduleAssignments.filter(
     (assignment) => assignment.status === "Assigned",
   ).length;
@@ -41,7 +40,7 @@ export default function AnalyticsPage() {
   const assignedSections = assignedScheduleCount;
   const conflictRate =
     assignedSections > 0
-      ? Math.round((hard.length / assignedSections) * 100)
+      ? Math.round((hardConflicts.length / assignedSections) * 100)
       : 0;
   const conflictFree = 100 - conflictRate;
 

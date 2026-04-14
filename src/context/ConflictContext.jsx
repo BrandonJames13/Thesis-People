@@ -104,6 +104,13 @@ export function ConflictProvider({ children }) {
     new Set(),
   );
 
+  // Create a room index for O(1) lookup instead of O(n) find
+  const roomsByNumber = useMemo(() => {
+    const map = new Map();
+    rooms.forEach((room) => map.set(room.number, room));
+    return map;
+  }, [rooms]);
+
   const detectConflicts = useCallback(() => {
     const hard = [];
     const soft = [];
@@ -185,7 +192,7 @@ export function ConflictProvider({ children }) {
       }
 
       const course = scheduleAssignments[i];
-      const room = rooms.find((r) => r.number === course.room);
+      const room = roomsByNumber.get(course.room);
       if (room && course.enrolled > 0) {
         const courseIds = getAssignmentIdentifiers(course);
         const utilization = course.enrolled / room.capacity;
@@ -193,7 +200,7 @@ export function ConflictProvider({ children }) {
           const id = `UNDERUTIL|${courseIds.entityKey}`;
           if (!dismissedSoftConflicts.has(id)) {
             const pct = Math.round(utilization * 100);
-            const betterRoom = rooms.find(
+            const betterRoom = Array.from(roomsByNumber.values()).find(
               (r) =>
                 r.number !== room.number &&
                 r.type === room.type &&
@@ -220,12 +227,25 @@ export function ConflictProvider({ children }) {
     }
 
     return { hard, soft };
-  }, [scheduleAssignments, rooms, dismissedSoftConflicts]);
+  }, [scheduleAssignments, roomsByNumber, dismissedSoftConflicts]);
+
+  // Memoize conflict detection results to prevent redundant O(n²) computation
+  const { hard: hardConflicts, soft: softConflicts } = useMemo(
+    () => detectConflicts(),
+    [detectConflicts],
+  );
+
+  const hardConflictCount = hardConflicts.length;
+  const softConflictCount = softConflicts.length;
+
+  // Explicitly refresh conflict detection (called after manual actions)
+  const refreshConflicts = useCallback(() => {
+    return detectConflicts();
+  }, [detectConflicts]);
 
   const resolveConflict = useCallback(
     (conflictId) => {
-      const { hard } = detectConflicts();
-      const cf = hard.find((c) => c.id === conflictId);
+      const cf = hardConflicts.find((c) => c.id === conflictId);
       if (!cf) return "Conflict already resolved.";
 
       const targetIds = mergeIdentifiers(
@@ -244,7 +264,7 @@ export function ConflictProvider({ children }) {
 
       const targetIdentifiers = getAssignmentIdentifiers(target);
 
-      const freeRoom = rooms.find(
+      const freeRoom = Array.from(roomsByNumber.values()).find(
         (r) =>
           r.number !== courseToMove.room &&
           r.type === neededType &&
@@ -355,31 +375,34 @@ export function ConflictProvider({ children }) {
       updateScheduleAssignments(newAssignments);
       return message;
     },
-    [detectConflicts, scheduleAssignments, rooms, updateScheduleAssignments],
+    [
+      hardConflicts,
+      scheduleAssignments,
+      roomsByNumber,
+      updateScheduleAssignments,
+    ],
   );
 
   const autoResolveAll = useCallback(() => {
     if (scheduleAssignments.length === 0) {
       return "No schedule generated yet. Please generate a schedule first.";
     }
-    const { hard } = detectConflicts();
-    if (hard.length === 0) {
+    if (hardConflicts.length === 0) {
       return "No hard conflicts to resolve!";
     }
     let attempts = 0;
-    let currentHard = hard;
+    let currentHard = hardConflicts;
     while (currentHard.length > 0 && attempts < 20) {
       resolveConflict(currentHard[0].id);
-      currentHard = detectConflicts().hard;
+      currentHard = refreshConflicts().hard;
       attempts++;
     }
     return null;
-  }, [scheduleAssignments, detectConflicts, resolveConflict]);
+  }, [scheduleAssignments, hardConflicts, resolveConflict, refreshConflicts]);
 
   const suggestBetterRoom = useCallback(
     (conflictId) => {
-      const { soft } = detectConflicts();
-      const cf = soft.find((c) => c.id === conflictId);
+      const cf = softConflicts.find((c) => c.id === conflictId);
       if (!cf?.betterRoom) return null;
 
       const newAssignments = scheduleAssignments.map((s) => ({ ...s }));
@@ -431,7 +454,7 @@ export function ConflictProvider({ children }) {
       updateScheduleAssignments(newAssignments);
       return `${targetLabel} moved to ${cf.betterRoom.number} ✓`;
     },
-    [detectConflicts, scheduleAssignments, updateScheduleAssignments],
+    [softConflicts, scheduleAssignments, updateScheduleAssignments],
   );
 
   const dismissSoftConflict = useCallback((conflictId) => {
@@ -444,21 +467,40 @@ export function ConflictProvider({ children }) {
 
   const value = useMemo(
     () => ({
-      detectConflicts,
+      // Cached conflict results - use these instead of calling detectConflicts()
+      hardConflicts,
+      softConflicts,
+      hardConflictCount,
+      softConflictCount,
+
+      // Explicit refresh function for manual refresh
+      refreshConflicts,
+
+      // Action functions
       resolveConflict,
       autoResolveAll,
       suggestBetterRoom,
       dismissSoftConflict,
+
+      // Legacy - kept for compatibility but deprecated
+      detectConflicts,
+
+      // Reallocation tracking
       reallocationLog,
       buildConflictLogPayloads,
       dismissedSoftConflicts,
     }),
     [
-      detectConflicts,
+      hardConflicts,
+      softConflicts,
+      hardConflictCount,
+      softConflictCount,
+      refreshConflicts,
       resolveConflict,
       autoResolveAll,
       suggestBetterRoom,
       dismissSoftConflict,
+      detectConflicts,
       reallocationLog,
       buildConflictLogPayloads,
       dismissedSoftConflicts,

@@ -25,7 +25,7 @@ export default function DashboardPage() {
     scheduleAssignments,
     resetAllData,
   } = useData();
-  const { detectConflicts } = useConflicts();
+  const { detectConflicts, hardConflictCount } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -49,8 +49,6 @@ export default function DashboardPage() {
     subjectSections.length > 0
       ? Math.round((assignedSectionCount / subjectSections.length) * 100)
       : 0;
-  const { hard } = detectConflicts();
-  const hardCount = hard.length;
 
   // Dynamic computed values from real data
   const totalSections = subjectSections.length;
@@ -112,12 +110,17 @@ export default function DashboardPage() {
     },
     {
       status:
-        hasSchedule && hardCount > 0 ? "active" : hasSchedule ? "done" : "idle",
-      icon: hasSchedule && hardCount > 0 ? "!" : hasSchedule ? "✓" : "○",
+        hasSchedule && hardConflictCount > 0
+          ? "active"
+          : hasSchedule
+            ? "done"
+            : "idle",
+      icon:
+        hasSchedule && hardConflictCount > 0 ? "!" : hasSchedule ? "✓" : "○",
       name: "Localized Reallocation",
       desc: hasSchedule
-        ? hardCount > 0
-          ? `${hardCount} conflict${hardCount !== 1 ? "s" : ""} detected — attempting alternative section assignments`
+        ? hardConflictCount > 0
+          ? `${hardConflictCount} conflict${hardConflictCount !== 1 ? "s" : ""} detected — attempting alternative section assignments`
           : "No conflicts detected — all constraints satisfied"
         : "—",
       time: hasSchedule ? "1.3s" : "—",
@@ -214,7 +217,7 @@ export default function DashboardPage() {
         <div className="stat-card red">
           <div className="stat-icon">⚠</div>
           <div className="stat-label">Conflicts</div>
-          <div className="stat-value">{hardCount}</div>
+          <div className="stat-value">{hardConflictCount}</div>
           <div className="stat-delta">requires manual review</div>
         </div>
         <div className="stat-card purple">
@@ -368,12 +371,14 @@ export default function DashboardPage() {
                 ▶ Re-generate Schedule
               </button>
               <button
-                className={hardCount > 0 ? "btn btn-danger" : "btn btn-success"}
+                className={
+                  hardConflictCount > 0 ? "btn btn-danger" : "btn btn-success"
+                }
                 style={{ justifyContent: "center" }}
                 onClick={() => navigate("/conflicts")}
               >
-                {hardCount > 0
-                  ? `⚠ Resolve ${hardCount} Conflict${hardCount !== 1 ? "s" : ""}`
+                {hardConflictCount > 0
+                  ? `⚠ Resolve ${hardConflictCount} Conflict${hardConflictCount !== 1 ? "s" : ""}`
                   : "✓ No Conflicts"}
               </button>
               <button

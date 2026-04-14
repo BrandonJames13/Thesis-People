@@ -33,20 +33,19 @@ export default function AlgorithmPage() {
     availableSubjects,
     availableSections,
   } = useData();
-  const { detectConflicts } = useConflicts();
+  const { hardConflicts } = useConflicts();
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
 
   const [weights, setWeights] = useState(loadWeights);
 
-  const { hard } = detectConflicts();
   const assignedCount = scheduleAssignments.filter(
     (assignment) => assignment.status === "Assigned",
   ).length;
   const totalSections = subjectSections.length;
   const conflictRate =
     assignedCount > 0
-      ? ((hard.length / assignedCount) * 100).toFixed(1)
+      ? ((hardConflicts.length / assignedCount) * 100).toFixed(1)
       : "0.0";
   const occupiedRooms = new Set(
     scheduleAssignments

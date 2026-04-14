@@ -12,7 +12,8 @@ export default function ConflictsPage() {
   const navigate = useNavigate();
   const { scheduleAssignments } = useData();
   const {
-    detectConflicts,
+    hardConflicts,
+    softConflicts,
     resolveConflict,
     autoResolveAll,
     suggestBetterRoom,
@@ -22,9 +23,8 @@ export default function ConflictsPage() {
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
 
-  const { hard, soft } = detectConflicts();
-  const totalHard = hard.length;
-  const totalSoft = soft.length;
+  const totalHard = hardConflicts.length;
+  const totalSoft = softConflicts.length;
   const total = totalHard + totalSoft;
 
   let subtitleText;
@@ -108,7 +108,7 @@ export default function ConflictsPage() {
           <div className="conflict-section-label">
             🔴 Hard Constraint Violations ({totalHard})
           </div>
-          {hard.map((cf) => (
+          {hardConflicts.map((cf) => (
             <div className="conflict-card" key={cf.id}>
               <div className="conflict-icon">🔴</div>
               <div style={{ flex: 1 }}>
@@ -171,7 +171,7 @@ export default function ConflictsPage() {
           <div className="conflict-section-label">
             🟡 Soft Constraint Warnings ({totalSoft})
           </div>
-          {soft.map((cf) => (
+          {softConflicts.map((cf) => (
             <div className="conflict-card warning" key={cf.id}>
               <div className="conflict-icon">🟡</div>
               <div style={{ flex: 1 }}>

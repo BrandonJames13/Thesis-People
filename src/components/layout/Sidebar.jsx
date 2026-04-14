@@ -38,9 +38,7 @@ const navGroups = [
 
 export default function Sidebar() {
   const { isAdmin } = useAuth();
-  const { detectConflicts } = useConflicts();
-  const { hard } = detectConflicts();
-  const hardCount = hard.length;
+  const { hardConflictCount } = useConflicts();
 
   const visibleNavItems = navGroups
     .map((group) => ({
@@ -66,7 +64,7 @@ export default function Sidebar() {
               <span className={styles.icon}>{item.icon}</span>
               {item.label}
               {item.hasBadge && (
-                <span className={styles.badge}>{hardCount}</span>
+                <span className={styles.badge}>{hardConflictCount}</span>
               )}
             </NavLink>
           ))}
