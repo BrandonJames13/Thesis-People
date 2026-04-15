@@ -196,6 +196,29 @@ function addImportWarning(warnings, message) {
   warnings.push(message);
 }
 
+const ROOM_TYPE_PLACEHOLDERS = new Set(
+  ROOM_TYPE_LABELS.map((label) => label.toUpperCase()),
+);
+
+function isRoomTypePlaceholderValue(value) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toUpperCase();
+
+  if (!normalized) return false;
+  if (ROOM_TYPE_PLACEHOLDERS.has(normalized)) return true;
+
+  const slashTokens = normalized
+    .split("/")
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  return (
+    slashTokens.length > 1 &&
+    slashTokens.every((token) => ROOM_TYPE_PLACEHOLDERS.has(token))
+  );
+}
+
 function normalizeAssignmentStatus(
   value,
   fallback = DEFAULT_ASSIGNMENT_STATUS,
@@ -700,9 +723,7 @@ function parseFullListRows(rows, warnings = []) {
         );
       }
 
-      const isRoomTypePlaceholder = ROOM_TYPE_LABELS.some(
-        (label) => label.toUpperCase() === room,
-      );
+      const isRoomTypePlaceholder = isRoomTypePlaceholderValue(room);
 
       if (room && !isValidRoomNumber(room) && !isRoomTypePlaceholder) {
         addImportWarning(
@@ -888,7 +909,7 @@ function parseRoomRows(rows, warnings = []) {
         );
       }
 
-      if (!isValidRoomNumber(number)) {
+      if (!isValidRoomNumber(number) && !isRoomTypePlaceholderValue(number)) {
         addImportWarning(
           warnings,
           `Rooms row ${rowNumber}: room number "${number}" does not match expected format [LCR]###. Please verify.`,
