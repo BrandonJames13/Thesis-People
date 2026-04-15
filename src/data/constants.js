@@ -115,7 +115,13 @@ export const DEPARTMENT_ALIASES = {
   "information systems": "IS",
 };
 
-export const ROOM_TYPE_LABELS = ["Lecture", "Computer Lab"];
+export const ROOM_TYPE_LABELS = [
+  "Lecture",
+  "Computer Lab",
+  "Accreditation Room",
+  "AVR",
+  "CISCO",
+];
 
 export const ROOM_TYPE_ALIASES = {
   lecture: "Lecture",
@@ -123,6 +129,13 @@ export const ROOM_TYPE_ALIASES = {
   "computer lab": "Computer Lab",
   "computer laboratory": "Computer Lab",
   lab: "Computer Lab",
+  "accreditation room": "Accreditation Room",
+  accreditation: "Accreditation Room",
+  "accred room": "Accreditation Room",
+  avr: "AVR",
+  "audio visual room": "AVR",
+  "audio-visual room": "AVR",
+  cisco: "CISCO",
 };
 
 export const ROOM_CAPACITY_LIMITS = {
@@ -130,6 +143,15 @@ export const ROOM_CAPACITY_LIMITS = {
     max: 55,
   },
   "Computer Lab": {
+    max: 45,
+  },
+  "Accreditation Room": {
+    max: 55,
+  },
+  AVR: {
+    max: 45,
+  },
+  CISCO: {
     max: 45,
   },
 };

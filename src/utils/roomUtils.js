@@ -88,7 +88,7 @@ export function getWingFromRoomInput(roomNumber, providedWing) {
  *
  * @param {Object} payload - The room data object
  * @param {string} payload.number - Room number (e.g., "L101")
- * @param {string} payload.type - Room type (should be "Lecture" or "Computer Lab")
+ * @param {string} payload.type - Room type (must be in ROOM_TYPE_LABELS)
  * @param {number} payload.capacity - Room capacity
  * @param {string} payload.status - Room status
  * @param {string|null} payload.wing - Wing code (nullable)

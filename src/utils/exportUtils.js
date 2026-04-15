@@ -1140,7 +1140,7 @@ export function parseImportCsv(csvText, type) {
      * Maps to schedule_assignments table with normalized values:
      * - course_code, section: from CSV
      * - academic_year, semester, program, year: validated against constraint enums
-     * - room_number, room_type: room identifier and normalized type ("Lecture" or "Computer Lab")
+     * - room_number, room_type: room identifier and normalized type
      * - instructor_name: instructor identifier (references instructors table by name)
      * - pattern, time_display: schedule details
      * - status: normalized via normalizeAssignmentStatus (default: "Pending")
@@ -1208,7 +1208,7 @@ export function parseImportCsv(csvText, type) {
      * ROOMS payload: Room inventory records for rooms table.
      * dbRows: room objects with schema-compatible fields:
      * - number: unique room identifier (e.g., "L101", "C205")
-     * - type: normalized room type ("Lecture" or "Computer Lab") via normalizeRoomType
+     * - type: normalized room type via normalizeRoomType
      * - capacity: sanitized numeric value with type-based limits
      * - status: room status ("Available", "Occupied", "Maintenance") defaulting to "Available" if blank
      * - wing: optional wing/building identifier extracted from room context
@@ -1331,7 +1331,7 @@ export function parseImportCsv(csvText, type) {
      * dbRows.subjects: subject records for subjects table:
      *   - code, title: subject identifier and name
      *   - program, year: subject classification (validated against enums)
-     *   - room_type: normalized via normalizeRoomType ("Lecture" or "Computer Lab")
+     *   - room_type: normalized via normalizeRoomType
      *   - duration: hours per session (default: 1.5)
      * dbRows.subject_sections: section records for subject_sections table:
      *   - subject_ref: { code, program, year } for foreign key resolution
