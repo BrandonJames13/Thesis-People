@@ -50,6 +50,45 @@ function cloneInstructors(instructors) {
   return instructors.map((instructor) => ({ ...instructor }));
 }
 
+function normalizeInstructorSubjectsFromRows(rows, sections) {
+  const sectionById = new Map(
+    (Array.isArray(sections) ? sections : []).map((section) => [
+      String(
+        section?.sectionId ?? section?.id ?? section?.section_id ?? "",
+      ).trim(),
+      section,
+    ]),
+  );
+
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => {
+      const instructorId = String(
+        row?.instructor_id ?? row?.instructorId ?? "",
+      ).trim();
+      const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
+      if (!instructorId || !sectionId) return null;
+
+      const section = sectionById.get(sectionId);
+      const subjectId = String(
+        section?.subjectId ?? row?.subject_id ?? "",
+      ).trim();
+      if (!subjectId) return null;
+
+      return {
+        instructorId,
+        instructor_id: instructorId,
+        subjectId,
+        subject_id: subjectId,
+        sectionId,
+        section_id: sectionId,
+        academicYear:
+          row?.academic_year ?? row?.academicYear ?? ACTIVE_ACADEMIC_YEAR,
+        semester: row?.semester ?? ACTIVE_SEMESTER,
+      };
+    })
+    .filter(Boolean);
+}
+
 function normalizeSubjectFromRow(row) {
   return {
     code: row.subjectCode ?? row.code ?? "",
@@ -234,6 +273,7 @@ export function DataProvider({ children }) {
         sectionsResult,
         instructorsResult,
         assignmentsResult,
+        instructorSubjectsResult,
       ] = await Promise.all([
         supabase.from("rooms").select("*").order("number"),
         supabase
@@ -250,6 +290,11 @@ export function DataProvider({ children }) {
         supabase
           .from("schedule_assignments")
           .select("*")
+          .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+          .eq("semester", ACTIVE_SEMESTER),
+        supabase
+          .from("instructor_subject_sections")
+          .select("instructor_id, section_id, academic_year, semester")
           .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
           .eq("semester", ACTIVE_SEMESTER),
       ]);
@@ -318,11 +363,18 @@ export function DataProvider({ children }) {
             ),
           );
 
+      const normalizedInstructorSubjects = instructorSubjectsResult.error
+        ? []
+        : normalizeInstructorSubjectsFromRows(
+            instructorSubjectsResult.data ?? [],
+            normalizedSections,
+          );
+
       setRooms(roomRows);
       setSubjects(normalizedSubjects);
       setSubjectSections(normalizedSections);
       setInstructors(instructorRows);
-      setInstructorSubjects([]);
+      setInstructorSubjects(normalizedInstructorSubjects);
       setScheduleAssignments(normalizedAssignments);
     } finally {
       setIsBootstrapping(false);
@@ -561,9 +613,22 @@ export function DataProvider({ children }) {
     setInstructors(cloneInstructors(newInstructors ?? []));
   }, []);
 
-  const updateInstructorSubjects = useCallback(() => {
-    setInstructorSubjects([]);
-  }, []);
+  const updateInstructorSubjects = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("instructor_subject_sections")
+      .select("instructor_id, section_id, academic_year, semester")
+      .eq("academic_year", ACTIVE_ACADEMIC_YEAR)
+      .eq("semester", ACTIVE_SEMESTER);
+
+    if (error) {
+      console.warn("Unable to refresh instructor_subject_sections", error);
+      return;
+    }
+
+    setInstructorSubjects(
+      normalizeInstructorSubjectsFromRows(data ?? [], subjectSections),
+    );
+  }, [subjectSections]);
 
   const updateScheduleAssignments = useCallback((newAssignments) => {
     setScheduleAssignments(normalizeScheduleAssignments(newAssignments));

@@ -51,6 +51,7 @@ export default function SubjectsPage() {
         { data: subjectRows, error: subjectError },
         { data: sectionRows, error: sectionError },
         { data: instructorRows, error: instructorError },
+        { data: instructorSubjectRows, error: instructorSubjectError },
       ] = await Promise.all([
         supabase
           .from("subjects")
@@ -64,6 +65,11 @@ export default function SubjectsPage() {
           .eq("academic_year", CURRENT_ACADEMIC_YEAR)
           .eq("semester", CURRENT_SEMESTER),
         supabase.from("instructors").select("id, name").order("name"),
+        supabase
+          .from("instructor_subject_sections")
+          .select("instructor_id, section_id")
+          .eq("academic_year", CURRENT_ACADEMIC_YEAR)
+          .eq("semester", CURRENT_SEMESTER),
       ]);
 
       if (subjectError) {
@@ -84,6 +90,13 @@ export default function SubjectsPage() {
         showNotification("⚠ Instructor list could not be fully loaded.");
       }
 
+      if (instructorSubjectError) {
+        console.warn(
+          "Instructor-subject-section load failed",
+          instructorSubjectError,
+        );
+      }
+
       const sectionMap = (sectionRows ?? []).reduce((acc, row) => {
         const subjectId = String(row.subject_id ?? "").trim();
         if (!subjectId) return acc;
@@ -92,10 +105,38 @@ export default function SubjectsPage() {
         return acc;
       }, {});
 
+      const sectionSubjectIdBySectionId = new Map(
+        (sectionRows ?? []).map((row) => [
+          String(row.id ?? "").trim(),
+          String(row.subject_id ?? "").trim(),
+        ]),
+      );
+
+      const instructorIdSetBySubjectId = new Map();
+      (instructorSubjectRows ?? []).forEach((row) => {
+        const instructorId = String(row.instructor_id ?? "").trim();
+        const sectionId = String(row.section_id ?? "").trim();
+        if (!instructorId || !sectionId) return;
+
+        const subjectId = sectionSubjectIdBySectionId.get(sectionId);
+        if (!subjectId) return;
+
+        const ids = instructorIdSetBySubjectId.get(subjectId) ?? new Set();
+        ids.add(instructorId);
+        instructorIdSetBySubjectId.set(subjectId, ids);
+      });
+
+      const instructorIdsMap = {};
+      instructorIdSetBySubjectId.forEach((ids, subjectId) => {
+        instructorIdsMap[subjectId] = Array.from(ids);
+      });
+
       setSubjects(subjectRows ?? []);
       setSectionsBySubjectId(sectionError ? {} : sectionMap);
       setInstructors(instructorRows ?? []);
-      setInstructorIdsBySubjectId({});
+      setInstructorIdsBySubjectId(
+        instructorSubjectError ? {} : instructorIdsMap,
+      );
     } finally {
       setLoading(false);
     }
@@ -147,14 +188,6 @@ export default function SubjectsPage() {
         status: s?.status === "Assigned" ? "Assigned" : "Not Assigned",
       }))
       .filter((s) => s.section);
-
-    const desiredInstructorIds = Array.from(
-      new Set(
-        (subjectPayload?.instructorIds ?? [])
-          .map((id) => String(id ?? "").trim())
-          .filter(Boolean),
-      ),
-    );
 
     // Client-side duplicate section check
     if (operation !== "DELETE") {

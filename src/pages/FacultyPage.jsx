@@ -19,18 +19,33 @@ function getAssignedSubjectCount(instructor, instructorSubjects) {
   if (!instructor || !Array.isArray(instructorSubjects)) return 0;
 
   const instructorId = String(instructor?.id ?? "").trim();
+  const getSubjectKey = (row) =>
+    String(
+      row?.subjectId ??
+        row?.subject_id ??
+        row?.subjectCode ??
+        row?.subject_code ??
+        "",
+    )
+      .trim()
+      .toUpperCase();
+
   if (!instructorId) {
     // Fallback: match by name
     const instructorName = normalizeText(instructor?.name);
-    return instructorSubjects.filter(
+    const rows = instructorSubjects.filter(
       (is) =>
         normalizeText(is?.instructor_name ?? is?.name ?? "") === instructorName,
-    ).length;
+    );
+    const uniqueSubjectKeys = new Set(rows.map(getSubjectKey).filter(Boolean));
+    return uniqueSubjectKeys.size || rows.length;
   }
 
-  return instructorSubjects.filter(
+  const rows = instructorSubjects.filter(
     (is) => String(is?.instructor_id ?? "").trim() === instructorId,
-  ).length;
+  );
+  const uniqueSubjectKeys = new Set(rows.map(getSubjectKey).filter(Boolean));
+  return uniqueSubjectKeys.size || rows.length;
 }
 
 // Update buildInstructorPayload to include new fields
