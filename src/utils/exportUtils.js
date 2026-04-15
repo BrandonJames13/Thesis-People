@@ -4,6 +4,7 @@ import {
   sanitizeRoomCapacity,
   getDefaultRoomCapacity,
   isValidRoomNumber,
+  ROOM_TYPE_LABELS,
   normalizeDepartment,
   normalizeProgram,
   normalizeSemester,
@@ -699,7 +700,11 @@ function parseFullListRows(rows, warnings = []) {
         );
       }
 
-      if (room && !isValidRoomNumber(room)) {
+      const isRoomTypePlaceholder = ROOM_TYPE_LABELS.some(
+        (label) => label.toUpperCase() === room,
+      );
+
+      if (room && !isValidRoomNumber(room) && !isRoomTypePlaceholder) {
         addImportWarning(
           warnings,
           `Full list row ${rowNumber}: room number "${room}" does not match expected format [LCR]###. Please verify.`,
