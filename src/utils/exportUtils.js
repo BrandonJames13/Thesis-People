@@ -7,6 +7,7 @@ import {
   normalizeDepartment,
   normalizeProgram,
   normalizeSemester,
+  DEPARTMENT_CODES,
   PROGRAM_CODES,
 } from "../data/constants";
 import { getStartTimeText, parseTimeTextToMinutes } from "./timeUtils";
@@ -46,7 +47,7 @@ export const CSV_FORMATS = {
   [CSV_TYPES.FULL_LIST]: {
     label: "Full List",
     description:
-      "Schedule assignments with subject, room, time, duration, instructor, and status fields.",
+      "Schedule assignments with subject, room, time, duration, instructor, department, and status fields.",
     templatePath: "/csv/full-list.csv",
     templateLabel: "Full List Template",
     filename: "TSU_CCS_Subjects_Full_List_AY2025-2026.csv",
@@ -66,6 +67,7 @@ export const CSV_FORMATS = {
       "Time",
       "Duration (hrs)",
       "Instructor",
+      "Department",
       "Status",
       "Employment Status",
       "Max Units",
@@ -363,7 +365,6 @@ function assertFullListHeaderMatch(actualHeaders) {
     "time",
     "duration (hrs)",
     "instructor",
-    "status",
   ];
 
   const baseMatches = baseHeaders.every(
@@ -371,14 +372,26 @@ function assertFullListHeaderMatch(actualHeaders) {
   );
   if (!baseMatches) return false;
 
-  if (normalizedActual.length === baseHeaders.length) return true;
-  if (normalizedActual.length !== baseHeaders.length + 3) return false;
+  if (normalizedActual.length === baseHeaders.length + 5) {
+    return (
+      normalizedActual[15] === "department" &&
+      normalizedActual[16] === "status" &&
+      normalizedActual[17] === "employment status" &&
+      normalizedActual[18] === "max units" &&
+      normalizedActual[19] === "allow night class"
+    );
+  }
 
-  return (
-    normalizedActual[16] === "employment status" &&
-    normalizedActual[17] === "max units" &&
-    normalizedActual[18] === "allow night class"
-  );
+  if (normalizedActual.length === baseHeaders.length + 4) {
+    return (
+      normalizedActual[15] === "status" &&
+      normalizedActual[16] === "employment status" &&
+      normalizedActual[17] === "max units" &&
+      normalizedActual[18] === "allow night class"
+    );
+  }
+
+  return false;
 }
 
 function assertRoomHeaderMatch(actualHeaders) {
@@ -620,7 +633,12 @@ function parseFullListRows(rows, warnings = []) {
       const rawProgram = String(r[6] ?? "").trim();
       const program = normalizeProgram(rawProgram);
       const year = String(r[7] ?? "").trim();
-      const statusRaw = String(r[15] ?? "").trim();
+      const hasDepartmentColumn = (r?.length ?? 0) >= 20;
+      const rawDepartment = hasDepartmentColumn ? String(r[15] ?? "").trim() : "";
+      const department = hasDepartmentColumn
+        ? normalizeDepartment(rawDepartment)
+        : null;
+      const statusRaw = String(r[hasDepartmentColumn ? 16 : 15] ?? "").trim();
       const instructor = String(r[14] ?? "")
         .trim()
         .replace(/^—$/, "");
@@ -630,19 +648,19 @@ function parseFullListRows(rows, warnings = []) {
       const parsedTime = timeString ? parseTimeRange(timeString) : null;
 
       const employmentStatusParsed = parseEmploymentStatusCell(
-        String(r[16] ?? ""),
+        String(r[hasDepartmentColumn ? 17 : 16] ?? ""),
         rowNumber,
         warnings,
         "Full list",
       );
       const maxUnitsParsed = parseMaxUnitsCell(
-        String(r[17] ?? ""),
+        String(r[hasDepartmentColumn ? 18 : 17] ?? ""),
         rowNumber,
         warnings,
         "Full list",
       );
       const allowNightClassParsed = parseAllowNightClassCell(
-        String(r[18] ?? ""),
+        String(r[hasDepartmentColumn ? 19 : 18] ?? ""),
         rowNumber,
         warnings,
         "Full list",
@@ -664,6 +682,13 @@ function parseFullListRows(rows, warnings = []) {
         addImportWarning(
           warnings,
           `Full list row ${rowNumber}: blank status; defaulted to "Pending".`,
+        );
+      }
+
+      if (hasDepartmentColumn && rawDepartment && !department) {
+        addImportWarning(
+          warnings,
+          `Full list row ${rowNumber}: invalid department "${rawDepartment}". Use one of: ${DEPARTMENT_CODES.join(", ")}.`,
         );
       }
 
@@ -700,6 +725,7 @@ function parseFullListRows(rows, warnings = []) {
         time_end: parsedTime?.timeEnd || null,
         duration: toNumber(r[13], 0),
         instructor,
+        department,
         status: statusRaw,
         employment_status: employmentStatusParsed.value,
         max_units: maxUnitsParsed.value,
@@ -1469,6 +1495,7 @@ function serializeFullListRow(row) {
     row.time ?? "",
     row.duration ?? "",
     row.instructor ?? "",
+    row.department ?? DEFAULT_INSTRUCTOR.department ?? "",
     row.status ?? "Pending",
     employmentStatus,
     row.max_units ?? "",

@@ -860,7 +860,7 @@ export default function ImportModal({ isOpen, onClose }) {
       (row) => String(row.instructor ?? ""),
     ).map((row) => ({
       name: row.instructor,
-      department: null,
+      department: row.department ?? null,
       availability: null,
       status: "Active",
       employment_status: row.employment_status ?? null,

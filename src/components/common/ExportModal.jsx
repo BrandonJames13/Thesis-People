@@ -68,6 +68,7 @@ export default function ExportModal({ isOpen, onClose }) {
 
         return {
           ...row,
+          department: instructor?.department ?? row.department ?? "",
           employment_status: instructor?.employment_status ?? [],
           max_units: instructor?.max_units ?? "",
           allow_night_class: instructor?.allow_night_class ?? false,
