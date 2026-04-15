@@ -468,7 +468,7 @@ export default function FacultyPage() {
           <tbody>
             {paginated.length === 0 ? (
               <tr>
-                <td colSpan={6} className="empty-table">
+                <td colSpan={9} className="empty-table">
                   No instructors yet. Click <strong>"Add Instructor"</strong>
                   to add one.
                 </td>
@@ -522,8 +522,17 @@ export default function FacultyPage() {
                       return `${assignedSubjectCount} subject${assignedSubjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
+                  <td>{inst.max_units ?? "—"}</td>
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
+                  <td>
+                    {(() => {
+                      if (inst.allow_night_class === true) return "Yes";
+                      if (inst.allow_night_class === false) return "No";
+                      const value = String(inst.allow_night_class ?? "").trim();
+                      return value || "—";
+                    })()}
+                  </td>
                   <td>
                     {(() => {
                       const statusLabel = String(inst.status ?? "").trim();
