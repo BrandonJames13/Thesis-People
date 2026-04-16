@@ -12,11 +12,18 @@ const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 // ─── TSU Scheduling Rules ─────────────────────────────────────────────────────
 
 const NIGHT_START_MIN = 18 * 60; // 6:00 PM = 1080 min
-const DAY_END_MIN = 18 * 60;     // 6:00 PM = 1080 min
+const DAY_END_MIN = 18 * 60; // 6:00 PM = 1080 min
 
 const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
-  "ojt", "practicum", "fts", "thesis", "capstone",
-  "cp 1", "cp 2", "cp1", "cp2",
+  "ojt",
+  "practicum",
+  "fts",
+  "thesis",
+  "capstone",
+  "cp 1",
+  "cp 2",
+  "cp1",
+  "cp2",
 ];
 
 const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room"]);
@@ -26,11 +33,15 @@ const CISCO_ROOM_TYPE = "CISCO";
  * Returns true if the section label contains "EVE" (e.g. "BSCS-3C (EVE)").
  */
 export function isEveSection(section) {
-  return String(section ?? "").toUpperCase().includes("EVE");
+  return String(section ?? "")
+    .toUpperCase()
+    .includes("EVE");
 }
 
 function isCiscoSubject(subjectCode) {
-  return String(subjectCode ?? "").toUpperCase().includes("CCNA");
+  return String(subjectCode ?? "")
+    .toUpperCase()
+    .includes("CCNA");
 }
 
 function isSpecialRoomSubject(subjectCode, subjectTitle) {
@@ -45,7 +56,12 @@ function isSpecialRoomSubject(subjectCode, subjectTitle) {
  * - Computer Lab → only Lab/Computer Lab subjects
  * - Lecture rooms → Lecture subjects (+ AVR/Accred if subject qualifies)
  */
-function isRoomEligibleForSubject(room, requiredRoomType, subjectCode, subjectTitle) {
+function isRoomEligibleForSubject(
+  room,
+  requiredRoomType,
+  subjectCode,
+  subjectTitle,
+) {
   const roomType = normalizeRoomType(room.type);
   const required = normalizeRoomType(requiredRoomType);
   const isCisco = isCiscoSubject(subjectCode);
@@ -82,7 +98,12 @@ function isRoomEligibleForSubject(room, requiredRoomType, subjectCode, subjectTi
  * - Regular sections must end by 6PM
  * - Slots that extend into night hours require allow_night_class
  */
-function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass) {
+function isTimeSlotAllowed(
+  slotMinutes,
+  durationMinutes,
+  isEve,
+  allowNightClass,
+) {
   const endMin = slotMinutes + durationMinutes;
 
   if (isEve) {
@@ -104,7 +125,7 @@ function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)
  * Checks if assigning a candidate pattern would exceed the 2-days-per-week limit.
  * Merges unique days from the candidate pattern with already-assigned patterns
  * for a section and verifies total unique days <= maxDaysPerWeek.
- * 
+ *
  * @param {string} sectionId - Section identifier (e.g., "CS101::A::2025-2026::1")
  * @param {string} candidatePattern - Pattern to check (e.g., "MWF")
  * @param {Set<string>} alreadyAssignedPatterns - Patterns already assigned to this section
@@ -139,12 +160,14 @@ function getPatternsForSection(duration, isEve, activeDaysSet) {
   let candidates;
 
   if (isEve) {
-    if (dur <= 1.5) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TTH", "WF"];
+    if (dur <= 1.5)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TTH", "WF"];
     else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
     else candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
   } else {
     // Regular: no Saturday
-    if (dur <= 1.5) candidates = ["TTH", "WF", "MWF", "MON", "TUE", "WED", "THU", "FRI"];
+    if (dur <= 1.5)
+      candidates = ["TTH", "WF", "MWF", "MON", "TUE", "WED", "THU", "FRI"];
     else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI"];
     else candidates = ["MON", "TUE", "WED", "THU", "FRI"];
   }
@@ -421,7 +444,12 @@ function buildEligibleRooms(roomPool, assignment) {
   return roomPool.filter((room) => {
     if (room.status === "Maintenance") return false;
     if ((room.capacity ?? 0) < (assignment.enrolled ?? 0)) return false;
-    return isRoomEligibleForSubject(room, neededType, subjectCode, subjectTitle);
+    return isRoomEligibleForSubject(
+      room,
+      neededType,
+      subjectCode,
+      subjectTitle,
+    );
   });
 }
 
@@ -504,7 +532,12 @@ function chooseInstructorForPlacementOptimized({
     const endMin = slotMinutes + durationMinutes;
     const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
     if (isNightSlot && !instructor.allow_night_class && !isEve) continue;
-    if (isEve && slotMinutes >= NIGHT_START_MIN && !instructor.allow_night_class) continue;
+    if (
+      isEve &&
+      slotMinutes >= NIGHT_START_MIN &&
+      !instructor.allow_night_class
+    )
+      continue;
 
     const testAssignmentSectionTermKey = buildSectionTermKey(placementBase);
     const testAssignmentIdentityKey = getAssignmentIdentityKey(placementBase);
@@ -1121,6 +1154,77 @@ function buildPatternCache(activeDaysSet) {
   return cache;
 }
 
+// ─── Room Categorization for Special Subjects ─────────────────────────────────
+
+/**
+ * Categorizes eligible rooms by type and subject for prioritized room assignment.
+ *
+ * Special subjects (OJT, Thesis, FTS, Capstone, etc.) are prioritized into AVR and
+ * Accreditation Rooms first. Non-special subjects use regular rooms (Lecture, Computer Lab)
+ * first, with special rooms as fallback. Within each category, rooms are sorted by
+ * capacity waste (minimal difference between room capacity and enrolled count).
+ *
+ * Room assignment priority for special subjects:
+ * 1. Accreditation Room (primary special room)
+ * 2. AVR (secondary special room)
+ * 3. Regular rooms (Lecture, Computer Lab) - fallback if special rooms full
+ *
+ * Room assignment priority for non-special subjects:
+ * 1. Regular rooms (Lecture, Computer Lab)
+ * 2. Accreditation Room and AVR (fallback if regular rooms full)
+ *
+ * @param {Array} eligibleRooms - Pre-filtered rooms eligible for the subject
+ * @param {string} subjectCode - Subject code (e.g., "CS101")
+ * @param {string} subjectTitle - Subject title (e.g., "OJT in Software Development")
+ * @param {number} enrolled - Enrolled student count
+ * @returns {Array} Rooms ordered by category priority and capacity waste
+ */
+function categorizeRoomsBySubject(
+  eligibleRooms,
+  subjectCode,
+  subjectTitle,
+  enrolled,
+) {
+  if (!Array.isArray(eligibleRooms) || eligibleRooms.length === 0) {
+    return eligibleRooms;
+  }
+
+  const isSpecial = isSpecialRoomSubject(subjectCode, subjectTitle);
+
+  // Separate rooms into special (AVR, Accreditation Room) and regular (others)
+  const specialRooms = eligibleRooms.filter((room) =>
+    SPECIAL_ROOM_TYPES.has(normalizeRoomType(room.type)),
+  );
+  const regularRooms = eligibleRooms.filter(
+    (room) => !SPECIAL_ROOM_TYPES.has(normalizeRoomType(room.type)),
+  );
+
+  // Sort each category by capacity waste (least waste first)
+  const sortByWaste = (roomA, roomB) => {
+    const aWaste = Math.max(0, (roomA.capacity ?? 0) - enrolled);
+    const bWaste = Math.max(0, (roomB.capacity ?? 0) - enrolled);
+    return aWaste - bWaste;
+  };
+
+  specialRooms.sort(sortByWaste);
+  regularRooms.sort(sortByWaste);
+
+  // For special subjects, prioritize special rooms first (Accreditation Room before AVR)
+  if (isSpecial) {
+    // Prioritize Accreditation Room before AVR within special rooms
+    const accreditationRooms = specialRooms.filter(
+      (room) => normalizeRoomType(room.type) === "Accreditation Room",
+    );
+    const avrRooms = specialRooms.filter(
+      (room) => normalizeRoomType(room.type) === "AVR",
+    );
+    return [...accreditationRooms, ...avrRooms, ...regularRooms];
+  }
+
+  // For non-special subjects, regular rooms first, special rooms as fallback
+  return [...regularRooms, ...specialRooms];
+}
+
 /**
  * Updated: accepts activeDaysSet as last parameter for TSU pattern filtering.
  */
@@ -1143,11 +1247,14 @@ function buildSectionPrecompute(
   const identityKey = getAssignmentIdentityKey(row);
 
   const eligibleRooms = buildEligibleRooms(roomPool, row);
-  const orderedRooms = [...eligibleRooms].sort((a, b) => {
-    const aWaste = Math.max(0, (a.capacity ?? 0) - (row.enrolled ?? 0));
-    const bWaste = Math.max(0, (b.capacity ?? 0) - (row.enrolled ?? 0));
-    return aWaste - bWaste;
-  });
+  // Categorize rooms by subject type: special subjects get special rooms first (Accreditation Room, AVR).
+  // Non-special subjects use regular rooms first with special rooms as fallback.
+  const orderedRooms = categorizeRoomsBySubject(
+    eligibleRooms,
+    getAssignmentSubjectCode(row),
+    String(row?.title ?? row?.course_title ?? "").trim(),
+    row.enrolled ?? 0,
+  );
 
   const importedStartMinutes = importedStart
     ? parse24TextToMinutes(importedStart)
@@ -1166,7 +1273,11 @@ function buildSectionPrecompute(
   // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
   const sectionLabel = String(row?.section ?? "").trim();
   const isEve = isEveSection(sectionLabel);
-  const tsuPatterns = getPatternsForSection(courseDuration, isEve, activeDaysSet);
+  const tsuPatterns = getPatternsForSection(
+    courseDuration,
+    isEve,
+    activeDaysSet,
+  );
 
   // If we have an imported pattern, try it first, then fall back to TSU patterns
   const patternsToTry = importedPattern
@@ -1362,9 +1473,18 @@ export function runAutoSchedule({
       if (!isEve && patternDays.includes("SAT")) continue;
 
       // ── TSU Rule: enforce 2-times-per-week constraint ────────────────────────
-      const sectionId = sectionPrecompute.sectionId || getAssignmentSectionId(course);
-      const assignedForSection = assignedPatternsPerSection.get(sectionId) || new Set();
-      if (!isPatternCompatibleWithWeeklyLimit(sectionId, tryPattern, assignedForSection)) continue;
+      const sectionId =
+        sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      const assignedForSection =
+        assignedPatternsPerSection.get(sectionId) || new Set();
+      if (
+        !isPatternCompatibleWithWeeklyLimit(
+          sectionId,
+          tryPattern,
+          assignedForSection,
+        )
+      )
+        continue;
 
       for (const {
         slotMinutes,
@@ -1379,7 +1499,15 @@ export function runAutoSchedule({
           : null;
         const allowNightClass = candidateInstructor?.allow_night_class === true;
 
-        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)) continue;
+        if (
+          !isTimeSlotAllowed(
+            slotMinutes,
+            durationMinutes,
+            isEve,
+            allowNightClass,
+          )
+        )
+          continue;
 
         const candidateTime = `${tryPattern} ${formatTime(formattedSlot)}`;
 
@@ -1409,7 +1537,8 @@ export function runAutoSchedule({
 
             // ── TSU Rule: check night class eligibility for imported instructor
             const endMin = slotMinutes + durationMinutes;
-            const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
+            const isNightSlot =
+              slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
             const instAllowsNight = importedInst?.allow_night_class === true;
 
             const nightViolation = isNightSlot && !instAllowsNight && !isEve;
@@ -1511,7 +1640,8 @@ export function runAutoSchedule({
       }
 
       // ── Record pattern assignment for 2-days-per-week constraint tracking ────
-      const sectionIdForTracking = sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      const sectionIdForTracking =
+        sectionPrecompute.sectionId || getAssignmentSectionId(course);
       if (!assignedPatternsPerSection.has(sectionIdForTracking)) {
         assignedPatternsPerSection.set(sectionIdForTracking, new Set());
       }
