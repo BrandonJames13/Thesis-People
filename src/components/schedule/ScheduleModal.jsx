@@ -377,7 +377,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       });
 
       updateRooms(mergedRooms);
-      
+
       try {
         await updateScheduleAssignments(result.scheduleAssignments);
         showNotification("Schedule saved to database");
@@ -385,7 +385,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
         return;
       }
-      
+
       if (onRunComplete) onRunComplete();
       onClose();
       showNotification(result.message);
@@ -459,7 +459,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     setManualEntries((prev) => prev.filter((_, idx) => idx !== i));
   };
 
-  const handleSubmitManual = () => {
+  const handleSubmitManual = async () => {
     const toSave = [...manualEntries];
     if (selectedManualSection && manualRoom && manualTime) {
       const duration = manualDurationH + manualDurationM / 60;
@@ -534,7 +534,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       showNotification(`⚠ Failed to save assignment: ${persistError.message}`);
       return;
     }
-    
+
     if (onRunComplete) onRunComplete();
     onClose();
 
