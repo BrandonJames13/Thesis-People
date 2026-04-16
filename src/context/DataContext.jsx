@@ -767,13 +767,40 @@ export function DataProvider({ children }) {
   );
 
   // Reset back to empty state, then refresh from the database.
-  const resetAllData = useCallback(() => {
+  const resetAllData = useCallback(async () => {
+    // Synchronously clear ALL state variables before any async operations.
     setSubjects([]);
     setSubjectSections([]);
     setRooms([]);
     setInstructors([]);
     setInstructorSubjects([]);
     setScheduleAssignments([]);
+    setScheduleAssignmentsSyncing(false);
+    setScheduleAssignmentsError(null);
+    setIsGenerationInProgress(false);
+
+    try {
+      // Call RPC function to atomically delete schedule_assignments and conflicts from database.
+      const { data, error } = await supabase.rpc("reset_schedule_for_term", {
+        p_academic_year: ACTIVE_ACADEMIC_YEAR,
+        p_semester: ACTIVE_SEMESTER,
+      });
+
+      if (error) {
+        console.error(
+          "Reset schedule database cleanup encountered an issue:",
+          error,
+        );
+        // Continue anyway: local state is already cleared, proceed with bootstrap
+      } else {
+        console.log("Schedule reset result:", data);
+      }
+    } catch (err) {
+      console.error("Unexpected error during schedule reset:", err);
+      // Continue anyway: local state is already cleared, proceed with bootstrap
+    }
+
+    // Refresh all data from the database.
     bootstrapFromSupabase();
   }, [bootstrapFromSupabase]);
 
