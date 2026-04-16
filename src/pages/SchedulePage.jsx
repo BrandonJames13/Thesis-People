@@ -230,7 +230,13 @@ export default function SchedulePage() {
       const startingSlot = coveredSlots[0];
       const boundedSpan = coveredSlots.length;
 
-      const assignedDays = patternDaysMap[assignment.pattern] || [];
+const assignedDays = patternDaysMap[assignment.pattern?.toUpperCase()] || [];
+
+if (assignedDays.length === 0) {
+  console.log("No days for pattern:", assignment.pattern);
+}
+console.log("Days for pattern:", assignment.pattern, "→", assignedDays, "| timeRange:", timeRange);
+
       assignedDays.forEach((day) => {
         if (!DAYS.includes(day)) return;
         if (gridMap[day][startingSlot.hour]) return;

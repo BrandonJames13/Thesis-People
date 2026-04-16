@@ -9,6 +9,124 @@ import { normalizeRoomType, patternDaysMap } from "../data/constants";
 const DEFAULT_SECTION = "A";
 const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 
+// ─── TSU Scheduling Rules ─────────────────────────────────────────────────────
+
+const NIGHT_START_MIN = 18 * 60; // 6:00 PM = 1080 min
+const DAY_END_MIN = 18 * 60;     // 6:00 PM = 1080 min
+
+const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
+  "ojt", "practicum", "fts", "thesis", "capstone",
+  "cp 1", "cp 2", "cp1", "cp2",
+];
+
+const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room"]);
+const CISCO_ROOM_TYPE = "CISCO";
+
+/**
+ * Returns true if the section label contains "EVE" (e.g. "BSCS-3C (EVE)").
+ */
+export function isEveSection(section) {
+  return String(section ?? "").toUpperCase().includes("EVE");
+}
+
+function isCiscoSubject(subjectCode) {
+  return String(subjectCode ?? "").toUpperCase().includes("CCNA");
+}
+
+function isSpecialRoomSubject(subjectCode, subjectTitle) {
+  const combined = `${subjectCode} ${subjectTitle}`.toLowerCase();
+  return SPECIAL_ROOM_SUBJECT_KEYWORDS.some((kw) => combined.includes(kw));
+}
+
+/**
+ * Returns true if the given room is eligible for the subject based on TSU rules:
+ * - CISCO room → only CCNA subjects
+ * - AVR / Accreditation Room → only OJT, thesis, capstone, FTS subjects (never Computer Lab)
+ * - Computer Lab → only Lab/Computer Lab subjects
+ * - Lecture rooms → Lecture subjects (+ AVR/Accred if subject qualifies)
+ */
+function isRoomEligibleForSubject(room, requiredRoomType, subjectCode, subjectTitle) {
+  const roomType = normalizeRoomType(room.type);
+  const required = normalizeRoomType(requiredRoomType);
+  const isCisco = isCiscoSubject(subjectCode);
+  const isSpecial = isSpecialRoomSubject(subjectCode, subjectTitle);
+
+  // CISCO room → only CCNA subjects
+  if (roomType === CISCO_ROOM_TYPE) return isCisco;
+  // CCNA subjects → only CISCO room
+  if (isCisco) return roomType === CISCO_ROOM_TYPE;
+
+  // AVR / Accreditation Room → only special subjects, never Computer Lab subjects
+  if (SPECIAL_ROOM_TYPES.has(roomType)) {
+    return isSpecial && required !== "Computer Lab";
+  }
+
+  // Computer Lab subjects → only Computer Lab rooms
+  if (required === "Computer Lab") {
+    return roomType === "Computer Lab";
+  }
+
+  // Lecture subjects → Lecture rooms, or special rooms if subject qualifies
+  if (required === "Lecture") {
+    if (roomType === "Lecture") return true;
+    if (SPECIAL_ROOM_TYPES.has(roomType) && isSpecial) return true;
+    return false;
+  }
+
+  return roomType === required;
+}
+
+/**
+ * Returns true if the time slot is allowed given EVE/night class rules:
+ * - EVE sections MUST start at 6PM or later (or use Saturday)
+ * - Regular sections must end by 6PM
+ * - Slots that extend into night hours require allow_night_class
+ */
+function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass) {
+  const endMin = slotMinutes + durationMinutes;
+
+  if (isEve) {
+    // EVE sections: must start at 6PM+ on weekdays, or any time on Saturday
+    // Saturday slots are handled separately via pattern filtering
+    return slotMinutes >= NIGHT_START_MIN;
+  }
+
+  // Regular sections: must end by 6PM
+  if (endMin > DAY_END_MIN) return false;
+
+  // If slot starts at or after 6PM, instructor must allow night class
+  if (slotMinutes >= NIGHT_START_MIN && !allowNightClass) return false;
+
+  return true;
+}
+
+/**
+ * Returns ordered candidate patterns for a section based on duration and EVE status.
+ * Filters to only patterns whose days are all in activeDaysSet.
+ * EVE sections: prefer single-day night + Saturday patterns.
+ * Regular sections: exclude Saturday entirely.
+ */
+function getPatternsForSection(duration, isEve, activeDaysSet) {
+  const dur = Number(duration ?? 1.5);
+  let candidates;
+
+  if (isEve) {
+    if (dur <= 1.5) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TTH", "WF"];
+    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    else candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
+  } else {
+    // Regular: no Saturday
+    if (dur <= 1.5) candidates = ["TTH", "WF", "MWF", "MON", "TUE", "WED", "THU", "FRI"];
+    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+    else candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+  }
+
+  return candidates.filter((p) => {
+    const days = patternDaysMap[p] ?? [];
+    return days.length > 0 && days.every((d) => activeDaysSet.has(d));
+  });
+}
+
 // ─── Identity helpers ────────────────────────────────────────────────────────
 
 function normalizeIdentityPart(value) {
@@ -76,21 +194,12 @@ export function formatAssignmentLabel(row) {
 
 // ─── Schema mapping helpers ───────────────────────────────────────────────────
 
-/**
- * Extracts the normalized (base) section_id by stripping Lec/Lab suffixes.
- * Used to resolve the actual database section_id from UI section identities.
- */
 export function getNormalizedSectionId(row) {
   const sectionId = String(row?.sectionId ?? row?.section_id ?? "").trim();
   if (!sectionId) return "";
-  // Strip __LEC or __LAB suffixes used for split components
   return sectionId.replace(/__(LEC|LAB)$/, "");
 }
 
-/**
- * Resolves a room number/name to a room ID by looking up in the room pool.
- * Returns the room object if found, or null.
- */
 export function resolveRoomByNumber(roomNumber, roomPool) {
   if (!roomNumber) return null;
   const normalized = String(roomNumber).trim();
@@ -99,10 +208,6 @@ export function resolveRoomByNumber(roomNumber, roomPool) {
   );
 }
 
-/**
- * Formats a time range for display in 12-hour format.
- * Example: "7:00 AM – 8:30 AM"
- */
 export function formatTimeDisplay(startTime24, durationHours) {
   const startMinutes = parse24TextToMinutes(startTime24);
   if (startMinutes == null) return "";
@@ -114,9 +219,6 @@ export function formatTimeDisplay(startTime24, durationHours) {
   return `${startFormatted} – ${endFormatted}`;
 }
 
-/**
- * Converts 24-hour time string to SQL TIME format (HH:MM:SS).
- */
 export function parseTimeToSQL(time24String) {
   const minutes = parse24TextToMinutes(time24String);
   if (minutes == null) return "00:00:00";
@@ -125,10 +227,6 @@ export function parseTimeToSQL(time24String) {
   return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}:00`;
 }
 
-/**
- * Builds a normalized assignment object with proper FK columns and display columns.
- * Ensures the schema matches schedule_assignments table structure.
- */
 export function buildNormalizedAssignment({
   sectionRow,
   roomNumber,
@@ -159,13 +257,10 @@ export function buildNormalizedAssignment({
   const endTime24 = minutesTo24Text(endMinutes);
 
   return {
-    // FK columns (map to schedule_assignments table)
     section_id: baseSectionId || sectionRow.sectionId,
     subject_id: sectionRow.subjectId,
     room_id: room?.id || null,
     instructor_id: instructorId || null,
-
-    // Display columns
     course_code: getAssignmentSubjectCode(sectionRow),
     course_title: sectionRow.title,
     section: sectionRow.section,
@@ -183,8 +278,6 @@ export function buildNormalizedAssignment({
     status: normalizedStatus,
     academic_year: normalizedAcademicYear,
     semester: normalizedSemester,
-
-    // Audit fields (populated by backend on insert)
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -247,7 +340,6 @@ function minutesTo24Text(totalMinutes) {
 export function extractStartTime24(row, fallback = "") {
   const raw = String(row?.time ?? "").trim();
   if (!raw) return fallback;
-  // Strip leading "PATTERN " prefix like "TTH 8:00 AM"
   const withoutPattern = raw.replace(/^[A-Z/]+\s+/i, "");
   const startToken = getStartTimeText(withoutPattern);
   const fromTimeText = parseTimeTextToMinutes(startToken);
@@ -264,6 +356,7 @@ const PATTERN_FALLBACK_ORDER = [
   "TTH",
   "MW",
   "TF",
+  "WF",
   "MON",
   "TUE",
   "WED",
@@ -287,12 +380,20 @@ function alternativePatterns(original) {
 
 // ─── Room helpers ─────────────────────────────────────────────────────────────
 
+/**
+ * Updated: uses isRoomEligibleForSubject to enforce TSU room-type rules.
+ */
 function buildEligibleRooms(roomPool, assignment) {
   const neededType = normalizeRoomType(assignment.roomType);
+  const subjectCode = getAssignmentSubjectCode(assignment);
+  const subjectTitle = String(
+    assignment.title ?? assignment.course_title ?? "",
+  ).trim();
+
   return roomPool.filter((room) => {
     if (room.status === "Maintenance") return false;
     if ((room.capacity ?? 0) < (assignment.enrolled ?? 0)) return false;
-    return normalizeRoomType(room.type) === neededType;
+    return isRoomEligibleForSubject(room, neededType, subjectCode, subjectTitle);
   });
 }
 
@@ -326,6 +427,7 @@ function buildInstructorPoolMap(instructors) {
     map.set(id, {
       id,
       name: String(row?.name ?? row?.instructor_name ?? "").trim(),
+      allow_night_class: row?.allow_night_class === true,
     });
   });
   return map;
@@ -354,6 +456,7 @@ function chooseInstructorForPlacementOptimized({
   eligibleInstructorIdsBySubjectId,
   instructorPoolById,
   instructorLoadCount,
+  isEve,
 }) {
   const eligibleIds = eligibleInstructorIdsBySubjectId.get(courseSubjectId);
   if (!eligibleIds || eligibleIds.size === 0) return null;
@@ -368,24 +471,22 @@ function chooseInstructorForPlacementOptimized({
 
   for (const candidate of sortedCandidates) {
     const instructor = instructorPoolById.get(candidate.id);
-    const testAssignmentIdentityKey =
-      `ASSIGNMENT:${normalizeIdentityPart(
-        placementBase.assignmentId ?? placementBase.assignment_id ?? "",
-      )}` ||
-      `COMPOUND:${normalizeIdentityPart(
-        placementBase.code ?? "",
-      )}|${normalizeIdentityPart(placementBase.section ?? "")}|${normalizeIdentityPart(
-        placementBase.academicYear ?? "",
-      )}|${normalizeIdentityPart(placementBase.semester ?? "")}`;
 
+    // Night class eligibility check
+    const endMin = slotMinutes + durationMinutes;
+    const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
+    if (isNightSlot && !instructor.allow_night_class && !isEve) continue;
+    if (isEve && slotMinutes >= NIGHT_START_MIN && !instructor.allow_night_class) continue;
+
+    const testAssignmentSectionTermKey = buildSectionTermKey(placementBase);
+    const testAssignmentIdentityKey = getAssignmentIdentityKey(placementBase);
     const testRoom = placementBase.room ?? "";
-    const testSectionTermKey = buildSectionTermKey(placementBase);
 
     if (
       !hasIndexedCoverageConflictOptimized(
         occupiedPool,
         occupancyIndexes,
-        testSectionTermKey,
+        testAssignmentSectionTermKey,
         testAssignmentIdentityKey,
         testRoom,
         candidate.id,
@@ -703,12 +804,6 @@ function dedupeBySectionTerm(assignments) {
   return Array.from(byKey.values());
 }
 
-/**
- * Check if placement has any coverage conflicts using indexed occupancy.
- * Optimized: accepts precomputed keys/values to avoid re-deriving them.
- * Checks: section-term uniqueness, room occupancy, instructor occupancy.
- * Much faster than hasCoverageConflict (O(1) index lookups vs O(n) array scan).
- */
 function hasIndexedCoverageConflictOptimized(
   occupiedPool,
   occupancyIndexes,
@@ -724,7 +819,6 @@ function hasIndexedCoverageConflictOptimized(
 ) {
   const { roomIndex, instructorIndex } = occupancyIndexes;
 
-  // Check section-term uniqueness in occupiedPool
   if (testAssignmentSectionTermKey) {
     const hasConflictingSectionTerm = occupiedPool.some((assignment) => {
       const existingKey = getAssignmentIdentityKey(assignment);
@@ -741,7 +835,6 @@ function hasIndexedCoverageConflictOptimized(
     if (hasConflictingSectionTerm) return true;
   }
 
-  // Check room occupancy via index
   if (testRoom) {
     const patternDays = patternDaysMap[pattern] ?? [];
     if (slotMinutes != null && patternDays.length > 0) {
@@ -761,7 +854,6 @@ function hasIndexedCoverageConflictOptimized(
     }
   }
 
-  // Check instructor occupancy via index
   if (testInstructorId) {
     const patternDays = patternDaysMap[pattern] ?? [];
     if (slotMinutes != null && patternDays.length > 0) {
@@ -784,11 +876,6 @@ function hasIndexedCoverageConflictOptimized(
   return false;
 }
 
-/**
- * Check if placement has any coverage conflicts using indexed occupancy.
- * Checks: section-term uniqueness, room occupancy, instructor occupancy.
- * Much faster than hasCoverageConflict (O(1) index lookups vs O(n) array scan).
- */
 function hasIndexedCoverageConflict(
   occupiedPool,
   occupancyIndexes,
@@ -800,7 +887,6 @@ function hasIndexedCoverageConflict(
   const testKey = getAssignmentIdentityKey(testAssignment);
   const testSectionTermKey = buildSectionTermKey(testAssignment);
 
-  // Check section-term uniqueness in occupiedPool
   if (testSectionTermKey) {
     const hasConflictingSectionTerm = occupiedPool.some((assignment) => {
       const existingKey = getAssignmentIdentityKey(assignment);
@@ -817,7 +903,6 @@ function hasIndexedCoverageConflict(
     if (hasConflictingSectionTerm) return true;
   }
 
-  // Check room occupancy via index
   const testRoom = getAssignmentRoom(testAssignment);
   if (testRoom) {
     const patternDays = patternDaysMap[pattern] ?? [];
@@ -842,7 +927,6 @@ function hasIndexedCoverageConflict(
     }
   }
 
-  // Check instructor occupancy via index
   const testInstructorId = getAssignmentInstructorId(testAssignment);
   if (testInstructorId) {
     const patternDays = patternDaysMap[pattern] ?? [];
@@ -870,14 +954,8 @@ function hasIndexedCoverageConflict(
   return false;
 }
 
-// ─── Occupancy indexing (perf optimization) ───────────────────────────────────
+// ─── Occupancy indexing ───────────────────────────────────────────────────────
 
-/**
- * Build indexed occupancy maps from assignments for O(1) conflict lookups.
- * Returns { roomIndex, instructorIndex } where:
- * - roomIndex: Map<"day_slotMinutes", Set<roomNumber>>
- * - instructorIndex: Map<"day_slotMinutes_instructorId", true>
- */
 function buildOccupancyIndex(assignments) {
   const roomIndex = new Map();
   const instructorIndex = new Map();
@@ -897,11 +975,9 @@ function buildOccupancyIndex(assignments) {
     const durationMinutes = Math.round(duration * 60);
     const endMinutes = startMinutes + durationMinutes;
 
-    // Index room occupancy for each day in pattern
     const roomNumber = getAssignmentRoom(assignment);
     if (roomNumber) {
       patternDays.forEach((day) => {
-        // For each 30-minute slot during the class, mark room as occupied
         for (let slot = startMinutes; slot < endMinutes; slot += 30) {
           const key = `${day}_${slot}`;
           if (!roomIndex.has(key)) roomIndex.set(key, new Set());
@@ -910,7 +986,6 @@ function buildOccupancyIndex(assignments) {
       });
     }
 
-    // Index instructor occupancy
     const instructorId = getAssignmentInstructorId(assignment);
     if (instructorId) {
       patternDays.forEach((day) => {
@@ -925,10 +1000,6 @@ function buildOccupancyIndex(assignments) {
   return { roomIndex, instructorIndex };
 }
 
-/**
- * Check if room is occupied at any overlapping slot for given day/time/duration.
- * O(duration_minutes / 30) lookup.
- */
 function hasRoomConflictAtSlot(
   roomOccupancyIndex,
   day,
@@ -948,10 +1019,6 @@ function hasRoomConflictAtSlot(
   return false;
 }
 
-/**
- * Check if instructor is occupied at any overlapping slot for given day/time/duration.
- * O(duration_minutes / 30) lookup.
- */
 function hasInstructorConflictAtSlot(
   instructorOccupancyIndex,
   day,
@@ -970,10 +1037,6 @@ function hasInstructorConflictAtSlot(
   return false;
 }
 
-/**
- * Update occupancy indexes when a new assignment is placed.
- * Mutates indexes in place.
- */
 function updateOccupancyIndex(indexes, assignment, pattern) {
   if (normalizeAssignmentStatus(assignment?.status) !== "Assigned") return;
 
@@ -988,7 +1051,6 @@ function updateOccupancyIndex(indexes, assignment, pattern) {
   const duration = Number(assignment.duration ?? 1.5) || 1.5;
   const durationMinutes = Math.round(duration * 60);
 
-  // Add room occupancy
   const roomNumber = getAssignmentRoom(assignment);
   if (roomNumber) {
     patternDays.forEach((day) => {
@@ -1004,7 +1066,6 @@ function updateOccupancyIndex(indexes, assignment, pattern) {
     });
   }
 
-  // Add instructor occupancy
   const instructorId = getAssignmentInstructorId(assignment);
   if (instructorId) {
     patternDays.forEach((day) => {
@@ -1020,12 +1081,8 @@ function updateOccupancyIndex(indexes, assignment, pattern) {
   }
 }
 
-// ─── Pattern cache builder for O(1) validation ────────────────────────────────
+// ─── Pattern cache ────────────────────────────────────────────────────────────
 
-/**
- * Build a cache of pattern metadata (days, active status) for fast lookup.
- * Eliminates repeated map lookups and array operations per pattern per slot.
- */
 function buildPatternCache(activeDaysSet) {
   const cache = new Map();
   PATTERN_FALLBACK_ORDER.forEach((pattern) => {
@@ -1037,8 +1094,7 @@ function buildPatternCache(activeDaysSet) {
 }
 
 /**
- * Precompute per-section values to avoid redundant parsing/lookups in nested loops.
- * Returns object with cached: sectionId, sectionTermKey, identityKey, eligible rooms, durations, times, etc.
+ * Updated: accepts activeDaysSet as last parameter for TSU pattern filtering.
  */
 function buildSectionPrecompute(
   row,
@@ -1050,6 +1106,7 @@ function buildSectionPrecompute(
   fallbackSubject,
   roomPool,
   patternCache,
+  activeDaysSet,
 ) {
   const durationMinutes = Math.round(courseDuration * 60);
   const sectionId = getAssignmentSectionId(row);
@@ -1057,7 +1114,6 @@ function buildSectionPrecompute(
   const sectionTermKey = buildSectionTermKey(row);
   const identityKey = getAssignmentIdentityKey(row);
 
-  // Precompute eligible rooms once (avoids rebuilding in room loop)
   const eligibleRooms = buildEligibleRooms(roomPool, row);
   const orderedRooms = [...eligibleRooms].sort((a, b) => {
     const aWaste = Math.max(0, (a.capacity ?? 0) - (row.enrolled ?? 0));
@@ -1065,14 +1121,10 @@ function buildSectionPrecompute(
     return aWaste - bWaste;
   });
 
-  // Precompute imported time in minutes (avoid repeated parsing)
   const importedStartMinutes = importedStart
     ? parse24TextToMinutes(importedStart)
     : null;
 
-  // Build candidate time slots once (avoid rebuilding per pattern)
-  const startMinutes = parse24TextToMinutes("07:00");
-  const endMinutes = parse24TextToMinutes("21:00");
   const candidateSlots = buildCandidateStarts({
     duration: courseDuration,
     startTime: "07:00",
@@ -1083,10 +1135,16 @@ function buildSectionPrecompute(
     formattedSlot: minutesTo24Text(slotMinutes),
   }));
 
-  // Precompute which patterns are active (avoid repeated array operations)
+  // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
+  const sectionLabel = String(row?.section ?? "").trim();
+  const isEve = isEveSection(sectionLabel);
+  const tsuPatterns = getPatternsForSection(courseDuration, isEve, activeDaysSet);
+
+  // If we have an imported pattern, try it first, then fall back to TSU patterns
   const patternsToTry = importedPattern
-    ? [importedPattern, ...alternativePatterns(importedPattern)]
-    : [pattern, ...alternativePatterns(pattern)];
+    ? [importedPattern, ...tsuPatterns.filter((p) => p !== importedPattern)]
+    : tsuPatterns;
+
   const validPatterns = patternsToTry.filter(
     (p) => patternCache.get(p)?.isActive,
   );
@@ -1107,21 +1165,11 @@ function buildSectionPrecompute(
     validPatterns,
     patternsToTry,
     patternCache,
+    isEve,
   };
 }
 
-// ─── ★ UPDATED Auto-Schedule ──────────────────────────────────────────────────
-//
-//  New behaviour:
-//  1. Each section carries imported time, pattern, and instructor.
-//  2. Algorithm only needs to find an available room.
-//  3. If room conflicts at the imported pattern, try alternative patterns
-//     at the same start time before doing a full time-window scan.
-//  4. If pattern was changed, patternAdjusted note is attached.
-//  5. Sections with no valid placement are marked "Conflict".
-//
-//  Optimization: Precomputes per-section values (duration, room lists, time slots, patterns)
-//  and passes them down through the loop hierarchy to eliminate redundant parsing/lookup.
+// ─── ★ Auto-Schedule ──────────────────────────────────────────────────────────
 
 export function runAutoSchedule({
   sectionRows,
@@ -1179,12 +1227,10 @@ export function runAutoSchedule({
     if (r.status !== "Maintenance") r.status = "Available";
   });
 
-  // ─── Build occupancy indexes once (perf optimization) ───────────────────────
   const occupancyIndexes = buildOccupancyIndex(existingAssignments);
   const occupiedPool = [...existingAssignments];
   const instructorLoadCount = buildInstructorLoadCount(existingAssignments);
 
-  // ─── Build pattern cache for O(1) validation ────────────────────────────────
   const activeDaysSet = new Set(activeDays);
   const patternCache = buildPatternCache(activeDaysSet);
 
@@ -1209,13 +1255,12 @@ export function runAutoSchedule({
     if (durationMinutes <= 0) return;
     const assignmentKey = getAssignmentIdentityKey(course);
 
-    // Resolve imported fields
     const importedStart = extractStartTime24(course, "");
     const importedPattern = getPatternForRow(course, "");
     const importedInstructor = getAssignmentInstructorName(course);
     const importedInstructorId = getAssignmentInstructorId(course);
 
-    // ─── PRECOMPUTE per-section values to avoid redundant work in loops ──────
+    // ── PRECOMPUTE — now passes activeDaysSet for TSU pattern filtering ────────
     const sectionPrecompute = buildSectionPrecompute(
       row,
       courseSubjectId,
@@ -1226,7 +1271,10 @@ export function runAutoSchedule({
       fallbackSubject,
       newRooms,
       patternCache,
+      activeDaysSet,
     );
+
+    const { isEve } = sectionPrecompute;
 
     if (sectionPrecompute.orderedRooms.length === 0) {
       generatedAssignments.push({
@@ -1275,17 +1323,28 @@ export function runAutoSchedule({
     let instructorUsed = null;
 
     outerSearch: for (const tryPattern of sectionPrecompute.validPatterns) {
-      // ─── Use cached pattern days (avoid repeated lookup) ────────────────────
       const patternDays =
         sectionPrecompute.patternCache.get(tryPattern)?.days ?? [];
       if (patternDays.length === 0) continue;
 
-      // ─── Iterate over precomputed time slots (avoid rebuilding per pattern) ──
+      // ── TSU Rule: block Saturday for non-EVE sections ──────────────────────
+      if (!isEve && patternDays.includes("SAT")) continue;
+
       for (const {
         slotMinutes,
         formattedSlot,
       } of sectionPrecompute.candidateSlots) {
         if (slotMinutes + durationMinutes > endMinutes) continue;
+
+        // ── TSU Rule: enforce EVE/night class time window ──────────────────────
+        // Get instructor's allow_night_class flag for this candidate
+        const candidateInstructor = importedInstructorId
+          ? instructorPoolById.get(importedInstructorId)
+          : null;
+        const allowNightClass = candidateInstructor?.allow_night_class === true;
+
+        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)) continue;
+
         const candidateTime = `${tryPattern} ${formatTime(formattedSlot)}`;
 
         for (const room of sectionPrecompute.orderedRooms) {
@@ -1304,26 +1363,23 @@ export function runAutoSchedule({
           };
 
           let selectedInstructor = null;
+
           if (
             importedInstructorId &&
             eligibleInstructorIds.has(importedInstructorId) &&
             instructorPoolById.has(importedInstructorId)
           ) {
-            const importedPlacement = {
-              ...placementBase,
-              instructorId: importedInstructorId,
-              instructor_id: importedInstructorId,
-              instructor:
-                importedInstructor ||
-                instructorPoolById.get(importedInstructorId)?.name ||
-                "",
-              instructor_name:
-                importedInstructor ||
-                instructorPoolById.get(importedInstructorId)?.name ||
-                "",
-            };
-            // ─── Use optimized conflict check with precomputed values ───────────
+            const importedInst = instructorPoolById.get(importedInstructorId);
+
+            // ── TSU Rule: check night class eligibility for imported instructor
+            const endMin = slotMinutes + durationMinutes;
+            const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
+            const instAllowsNight = importedInst?.allow_night_class === true;
+
+            const nightViolation = isNightSlot && !instAllowsNight && !isEve;
+
             if (
+              !nightViolation &&
               !hasIndexedCoverageConflictOptimized(
                 occupiedPool,
                 occupancyIndexes,
@@ -1349,7 +1405,6 @@ export function runAutoSchedule({
           }
 
           if (!selectedInstructor) {
-            // ─── Use optimized instructor selection with precomputed data ──────
             selectedInstructor = chooseInstructorForPlacementOptimized({
               courseSubjectId,
               placementBase,
@@ -1362,6 +1417,7 @@ export function runAutoSchedule({
               eligibleInstructorIdsBySubjectId,
               instructorPoolById,
               instructorLoadCount,
+              isEve,
             });
           }
 
@@ -1377,7 +1433,6 @@ export function runAutoSchedule({
               patternUsed = tryPattern;
               slotUsed = formattedSlot;
               instructorUsed = selectedInstructor;
-              // Perfect match (imported slot + imported pattern) — stop searching
               if (
                 tryPattern === importedPattern &&
                 slotMinutes === sectionPrecompute.importedStartMinutes
@@ -1409,7 +1464,6 @@ export function runAutoSchedule({
       };
       generatedAssignments.push(finalAssignment);
 
-      // ─── Incremental occupancy updates (perf optimization) ──────────────────
       occupiedPool.push(finalAssignment);
       updateOccupancyIndex(occupancyIndexes, finalAssignment, patternUsed);
       const instructorId = instructorUsed?.instructorId;
@@ -1419,7 +1473,6 @@ export function runAutoSchedule({
           (instructorLoadCount.get(instructorId) ?? 0) + 1,
         );
       }
-      // ─────────────────────────────────────────────────────────────────────────
 
       bestResult.room.status = "Occupied";
       assigned++;
@@ -1453,7 +1506,6 @@ export function runAutoSchedule({
     if (room && room.status !== "Maintenance") room.status = "Occupied";
   });
 
-  // Build maps for section lookup when transforming to FK-compatible rows
   const sectionRowMap = new Map(
     sectionRows.map((row) => [getAssignmentIdentityKey(row), row]),
   );
@@ -1461,9 +1513,7 @@ export function runAutoSchedule({
     sectionRows.map((row) => [buildSectionTermKey(row), row]),
   );
 
-  // Transform assignments to normalized schema with FK/display columns
   const normalizedFinalAssignments = finalAssignments.map((assignment) => {
-    // Check if already normalized
     if (
       assignment.section_id &&
       typeof assignment.section_id === "string" &&
@@ -1484,7 +1534,6 @@ export function runAutoSchedule({
       sectionTermMap.get(buildSectionTermKey(assignment));
 
     if (!associatedSectionRow) {
-      // Fallback for existing assignments or those without matching section row
       const startTime24 = extractStartTime24(assignment, "");
       const duration = Number(assignment.duration ?? 1.5) || 1.5;
       const endMinutes =
@@ -1516,7 +1565,6 @@ export function runAutoSchedule({
       };
     }
 
-    // Build normalized assignment using helper
     return buildNormalizedAssignment({
       sectionRow: associatedSectionRow,
       roomNumber: assignment.room,
@@ -1668,7 +1716,6 @@ export function applyManualAssignments({
     const assignmentKey = getAssignmentIdentityKey(sectionRow);
     const resolvedPattern = getPatternForRow({ pattern: entry.pattern }, "MWF");
 
-    // Build desired assignment with old schema for conflict detection
     const desired = {
       ...sectionRow,
       sectionId: getAssignmentSectionId(sectionRow),
@@ -1766,20 +1813,16 @@ export function applyManualAssignments({
     }
   }
 
-  // Transform assignments to normalized schema with FK/display columns
   const normalizedAssignments = nextAssignments.map((assignment) => {
-    // Check if it's already normalized (has section_id as FK)
     if (
       assignment.section_id &&
       typeof assignment.section_id === "string" &&
       assignment.section_id.length > 0 &&
       !assignment.section_id.includes("|")
     ) {
-      // Already normalized, return as-is
       return assignment;
     }
 
-    // Find the original section row for this assignment
     let associatedSectionRow = null;
     for (const sectionRow of sectionRowsByIdentity.values()) {
       if (
@@ -1792,7 +1835,6 @@ export function applyManualAssignments({
     }
 
     if (!associatedSectionRow) {
-      // Fallback: return assignment with minimal FK info
       return {
         ...assignment,
         section_id: getNormalizedSectionId(assignment),
@@ -1821,7 +1863,6 @@ export function applyManualAssignments({
       };
     }
 
-    // Build normalized assignment using helper
     return buildNormalizedAssignment({
       sectionRow: associatedSectionRow,
       roomNumber: assignment.room,
