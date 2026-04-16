@@ -101,6 +101,34 @@ function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)
 }
 
 /**
+ * Checks if assigning a candidate pattern would exceed the 2-days-per-week limit.
+ * Merges unique days from the candidate pattern with already-assigned patterns
+ * for a section and verifies total unique days <= maxDaysPerWeek.
+ * 
+ * @param {string} sectionId - Section identifier (e.g., "CS101::A::2025-2026::1")
+ * @param {string} candidatePattern - Pattern to check (e.g., "MWF")
+ * @param {Set<string>} alreadyAssignedPatterns - Patterns already assigned to this section
+ * @param {number} maxDaysPerWeek - Maximum days allowed per week (default 2)
+ * @returns {boolean} true if compatible, false if would exceed limit
+ */
+function isPatternCompatibleWithWeeklyLimit(
+  sectionId,
+  candidatePattern,
+  alreadyAssignedPatterns,
+  maxDaysPerWeek = 2,
+) {
+  const candidateDays = patternDaysMap[candidatePattern] ?? [];
+  const mergedDays = new Set(candidateDays);
+
+  for (const assignedPattern of alreadyAssignedPatterns) {
+    const assignedDays = patternDaysMap[assignedPattern] ?? [];
+    assignedDays.forEach((day) => mergedDays.add(day));
+  }
+
+  return mergedDays.size <= maxDaysPerWeek;
+}
+
+/**
  * Returns ordered candidate patterns for a section based on duration and EVE status.
  * Filters to only patterns whose days are all in activeDaysSet.
  * EVE sections: prefer single-day night + Saturday patterns.
@@ -1237,6 +1265,9 @@ export function runAutoSchedule({
   let assigned = 0;
   let conflictCount = 0;
 
+  // ── Track pattern assignments per section to enforce 2-days-per-week limit ────
+  const assignedPatternsPerSection = new Map();
+
   sectionRows.forEach((row) => {
     const course = normalizeForConflictChecks(row, pattern);
     const courseSubjectCode = getAssignmentSubjectCode(course);
@@ -1329,6 +1360,11 @@ export function runAutoSchedule({
 
       // ── TSU Rule: block Saturday for non-EVE sections ──────────────────────
       if (!isEve && patternDays.includes("SAT")) continue;
+
+      // ── TSU Rule: enforce 2-times-per-week constraint ────────────────────────
+      const sectionId = sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      const assignedForSection = assignedPatternsPerSection.get(sectionId) || new Set();
+      if (!isPatternCompatibleWithWeeklyLimit(sectionId, tryPattern, assignedForSection)) continue;
 
       for (const {
         slotMinutes,
@@ -1473,6 +1509,13 @@ export function runAutoSchedule({
           (instructorLoadCount.get(instructorId) ?? 0) + 1,
         );
       }
+
+      // ── Record pattern assignment for 2-days-per-week constraint tracking ────
+      const sectionIdForTracking = sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      if (!assignedPatternsPerSection.has(sectionIdForTracking)) {
+        assignedPatternsPerSection.set(sectionIdForTracking, new Set());
+      }
+      assignedPatternsPerSection.get(sectionIdForTracking).add(patternUsed);
 
       bestResult.room.status = "Occupied";
       assigned++;
