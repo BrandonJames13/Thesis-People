@@ -1350,6 +1350,31 @@ function buildSectionPrecompute(
   };
 }
 
+// ─── Subject Validation Helper ────────────────────────────────────────────────
+
+/**
+ * Validates and looks up a subject by its normalized code.
+ * Returns both the lookup result and validation status.
+ *
+ * @param {string} code - The subject code (should already be trimmed/uppercased)
+ * @param {Map} subjectByCode - Map of normalized codes to subject objects
+ * @returns {{found: boolean, subject: object|null, code: string}}
+ */
+function validateAndLookupSubject(code, subjectByCode) {
+  const normalizedCode = String(code ?? "")
+    .trim()
+    .toUpperCase();
+
+  const subject = subjectByCode.get(normalizedCode) ?? null;
+  const found = subject !== null && normalizedCode.length > 0;
+
+  return {
+    found,
+    subject,
+    code: normalizedCode,
+  };
+}
+
 // ─── ★ Auto-Schedule ──────────────────────────────────────────────────────────
 
 export function runAutoSchedule({
@@ -1424,7 +1449,33 @@ export function runAutoSchedule({
   sectionRows.forEach((row) => {
     const course = normalizeForConflictChecks(row, pattern);
     const courseSubjectCode = getAssignmentSubjectCode(course);
-    const fallbackSubject = subjectByCode.get(courseSubjectCode);
+
+    // ── Validate subject lookup with defensive checking ───────────────────────
+    const subjectLookup = validateAndLookupSubject(
+      courseSubjectCode,
+      subjectByCode,
+    );
+    const fallbackSubject = subjectLookup.subject;
+
+    // If subject code exists but was not found in database, mark as conflict
+    if (courseSubjectCode && !subjectLookup.found) {
+      generatedAssignments.push({
+        ...course,
+        room: "",
+        time: "",
+        duration: 1.5,
+        pattern: pattern,
+        instructor: "",
+        instructorId: "",
+        instructor_id: "",
+        status: "Conflict",
+        conflictReason: `Subject not found: ${courseSubjectCode}`,
+      });
+      conflictCount++;
+      return;
+    }
+
+    // Safe extraction of subject ID with fallbacks
     const courseSubjectId = String(
       course.subjectId ??
         fallbackSubject?.id ??
@@ -1433,6 +1484,7 @@ export function runAutoSchedule({
     ).trim();
     course.subjectId = courseSubjectId;
 
+    // Safe extraction of duration with optional chaining
     const courseDuration =
       Number(course.duration ?? fallbackSubject?.duration ?? 1.5) || 1.5;
     const durationMinutes = Math.round(courseDuration * 60);
