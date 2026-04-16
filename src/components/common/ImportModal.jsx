@@ -1068,7 +1068,7 @@ export default function ImportModal({ isOpen, onClose }) {
         subject_id: subject?.id ?? scheduleRow.subject_id ?? null,
         room_id: room?.id ?? null,
         instructor_id: instructor?.id ?? null,
-          status: "Assigned", // ! ← add this line
+        status: "Assigned", // ! ← add this line
       });
     });
 
@@ -1229,9 +1229,15 @@ export default function ImportModal({ isOpen, onClose }) {
       }
 
       resetAllData();
-      showNotification(
-        `Imported ${parsed.rowCount ?? 0} ${selectedTypeConfig.label.toLowerCase()} row(s).`,
-      );
+
+      let notificationMessage;
+      if (parsed.type === CSV_TYPES.FULL_LIST) {
+        notificationMessage =
+          "Full list imported successfully. Schedule assignments and instructor-section mappings are ready to use.";
+      } else {
+        notificationMessage = `Imported ${parsed.rowCount ?? 0} ${selectedTypeConfig.label.toLowerCase()} row(s). Generate schedules from the Dashboard when ready.`;
+      }
+      showNotification(notificationMessage);
       onClose();
     } catch (err) {
       if (isRlsViolation(err)) {
