@@ -299,7 +299,18 @@ export function DataProvider({ children }) {
           .eq("semester", ACTIVE_SEMESTER),
       ]);
 
-      if (roomsResult.error || subjectsResult.error || sectionsResult.error) {
+      const criticalError =
+        roomsResult.error ||
+        subjectsResult.error ||
+        sectionsResult.error ||
+        instructorsResult.error ||
+        assignmentsResult.error;
+
+      if (criticalError) {
+        console.error(
+          "[DataContext] Failed to load data from Supabase:",
+          criticalError,
+        );
         setSubjects([]);
         setSubjectSections([]);
         setRooms([]);

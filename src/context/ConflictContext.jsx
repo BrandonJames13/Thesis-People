@@ -406,15 +406,128 @@ export function ConflictProvider({ children }) {
     if (hardConflicts.length === 0) {
       return "No hard conflicts to resolve!";
     }
+
+    // Work on a local copy so we aren't reading stale React state between
+    // iterations. Each pass re-detects conflicts against the updated copy.
+    let workingAssignments = scheduleAssignments.map((s) => ({ ...s }));
     let attempts = 0;
-    let currentHard = hardConflicts;
-    while (currentHard.length > 0 && attempts < 20) {
-      resolveConflict(currentHard[0].id);
-      currentHard = refreshConflicts().hard;
+    const MAX_ATTEMPTS = 20;
+
+    while (attempts < MAX_ATTEMPTS) {
+      // Detect conflicts directly against the current working copy
+      const { hard: currentHard } = detectConflicts();
+
+      // Re-run detection against workingAssignments (not stale closure state)
+      const liveHard = [];
+      const seen = new Set();
+      for (let i = 0; i < workingAssignments.length; i++) {
+        for (let j = i + 1; j < workingAssignments.length; j++) {
+          const a = workingAssignments[i];
+          const b = workingAssignments[j];
+          if (!coursesOverlap(a, b)) continue;
+          const aKey = getAssignmentIdentityKey(a);
+          const bKey = getAssignmentIdentityKey(b);
+          const pairKey = [aKey, bKey].sort().join("|");
+
+          if (a.room && b.room && a.room === b.room) {
+            const id = `DOUBLE_BOOK|${pairKey}`;
+            if (!seen.has(id)) {
+              seen.add(id);
+              liveHard.push({ id, type: "DOUBLE_BOOKING", courses: [a, b] });
+            }
+          }
+          if (
+            a.instructor &&
+            b.instructor &&
+            a.instructor.trim().toLowerCase() ===
+              b.instructor.trim().toLowerCase() &&
+            a.room !== b.room
+          ) {
+            const id = `INSTRUCTOR|${pairKey}`;
+            if (!seen.has(id)) {
+              seen.add(id);
+              liveHard.push({
+                id,
+                type: "INSTRUCTOR_CONFLICT",
+                courses: [a, b],
+              });
+            }
+          }
+        }
+      }
+
+      if (liveHard.length === 0) break;
+
+      const cf = liveHard[0];
+      const targetIds = getAssignmentIdentifiers(cf.courses?.[1]);
+      const target = workingAssignments.find((s) =>
+        isSameAssignment(s, targetIds),
+      );
+      if (!target) break;
+
+      const neededType = normalizeRoomType(target.roomType);
+
+      const freeRoom = Array.from(roomsByNumber.values()).find(
+        (r) =>
+          r.number !== target.room &&
+          r.type === neededType &&
+          r.status !== "Maintenance" &&
+          r.capacity >= (target.enrolled || 0) &&
+          !workingAssignments.some(
+            (s) =>
+              !isSameAssignment(s, targetIds) &&
+              s.room === r.number &&
+              coursesOverlap(s, target),
+          ),
+      );
+
+      if (freeRoom) {
+        target.room = freeRoom.number;
+      } else {
+        const slots = [
+          "08:00",
+          "09:00",
+          "10:00",
+          "11:00",
+          "13:00",
+          "14:00",
+          "15:00",
+          "16:00",
+        ];
+        let moved = false;
+        for (const slot of slots) {
+          const testCourse = {
+            ...target,
+            time: `${target.pattern} ${formatTime(slot)}`,
+          };
+          const hasConflict = workingAssignments.some(
+            (s) =>
+              !isSameAssignment(s, targetIds) &&
+              (s.room === target.room ||
+                (s.instructor && s.instructor === target.instructor)) &&
+              coursesOverlap(s, testCourse),
+          );
+          if (!hasConflict) {
+            target.time = testCourse.time;
+            moved = true;
+            break;
+          }
+        }
+        if (!moved) break; // Can't resolve further — bail out
+      }
+
       attempts++;
     }
+
+    updateScheduleAssignments(workingAssignments);
     return null;
-  }, [scheduleAssignments, hardConflicts, resolveConflict, refreshConflicts]);
+  }, [
+    scheduleAssignments,
+    hardConflicts,
+    detectConflicts,
+    roomsByNumber,
+    updateScheduleAssignments,
+  ]);
 
   const suggestBetterRoom = useCallback(
     (conflictId) => {

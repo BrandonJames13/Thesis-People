@@ -39,7 +39,11 @@ export default function AlgorithmPage() {
 
   const [weights, setWeights] = useState(loadWeights);
 
-  const { assignedCount, hardConflictRate: conflictRate } = conflictStats;
+  const {
+    assignedCount,
+    hardConflictRate: conflictRate,
+    hardConflictCount,
+  } = conflictStats;
   const totalSections = subjectSections.length;
   // Calculate occupied rooms from assignments (not affected by optimization)
   const occupiedRooms = new Set(
@@ -439,8 +443,10 @@ export default function AlgorithmPage() {
                 [
                   "Localized Reallocation",
                   "< 30s",
-                  hard.length > 0 ? `${hard.length} pending` : "No conflicts ✓",
-                  hard.length > 0 ? "orange" : "green",
+                  hardConflictCount > 0
+                    ? `${hardConflictCount} pending`
+                    : "No conflicts ✓",
+                  hardConflictCount > 0 ? "orange" : "green",
                 ],
                 [
                   "Conflict Rate",
