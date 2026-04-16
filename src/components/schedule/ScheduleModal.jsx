@@ -377,7 +377,15 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       });
 
       updateRooms(mergedRooms);
-      updateScheduleAssignments(result.scheduleAssignments);
+      
+      try {
+        await updateScheduleAssignments(result.scheduleAssignments);
+        showNotification("Schedule saved to database");
+      } catch (persistError) {
+        showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
+        return;
+      }
+      
       if (onRunComplete) onRunComplete();
       onClose();
       showNotification(result.message);
@@ -519,7 +527,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       return;
     }
 
-    updateScheduleAssignments(result.scheduleAssignments);
+    try {
+      await updateScheduleAssignments(result.scheduleAssignments);
+      showNotification("Assignment saved to database");
+    } catch (persistError) {
+      showNotification(`⚠ Failed to save assignment: ${persistError.message}`);
+      return;
+    }
+    
     if (onRunComplete) onRunComplete();
     onClose();
 
