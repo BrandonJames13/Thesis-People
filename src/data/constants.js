@@ -156,7 +156,11 @@ export const ROOM_CAPACITY_LIMITS = {
   },
 };
 
-export const ROOM_NUMBER_PATTERN = /^[LCR]\d{3}$/;
+// Allows standard format [LCR]### OR alphanumeric names (letters, numbers, spaces, hyphens) up to 50 chars
+// Uses negative lookahead to prevent malformed attempts like L1, L10, C20, or R1
+// (must be exactly [LCR]### or an unrelated name)
+export const ROOM_NUMBER_PATTERN =
+  /^([LCR]\d{3}|(?![LCR]\d{1,2}(?!\d))[A-Za-z0-9\s-]{1,50})$/;
 
 export const ROOM_STATUSES = ["Available", "Occupied", "Maintenance"];
 

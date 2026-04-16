@@ -104,7 +104,7 @@ export function validateRoomPayload(payload) {
     return "Room number is required.";
   }
   if (!isValidRoomNumber(number)) {
-    return `Room number must match pattern [LCR]### (e.g., L101, C202, R315).`;
+    return `Room number must match pattern [LCR]### (e.g., L101, C202) or be a descriptive name (e.g., Accreditation, AVR, CISCO).`;
   }
 
   // Validate type
