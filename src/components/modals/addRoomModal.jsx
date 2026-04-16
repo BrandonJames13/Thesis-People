@@ -115,9 +115,7 @@ export function AddRoomModal({
             placeholder="e.g. L101, Accreditation, AVR"
             style={{ width: "100%" }}
             value={number}
-            onChange={(e) =>
-              setNumber(e.target.value.toUpperCase().trimStart())
-            }
+            onChange={(e) => setNumber(e.target.value.trimStart())}
           />
           <div style={{ fontSize: 11, color: "var(--text3)" }}>
             <strong>Standard:</strong> <strong>L</strong> = Left,{" "}
