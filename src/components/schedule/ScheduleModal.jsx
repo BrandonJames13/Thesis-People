@@ -67,6 +67,9 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     );
 
     const rows = [];
+    console.log(
+      `[ScheduleModal] Starting sectionRows creation with ${availableSections.length} raw sections`,
+    );
 
     availableSections.forEach((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
@@ -130,6 +133,20 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       } else {
         rows.push({ ...baseRow, roomType });
       }
+    });
+
+    console.log(
+      `[ScheduleModal] sectionRows creation complete: ${availableSections.length} raw sections → ${rows.length} rows after Lec/Lab splitting`,
+    );
+    if (rows.length === 0) {
+      console.warn(
+        "[ScheduleModal] WARNING: sectionRows is empty after creation!",
+      );
+    }
+    rows.forEach((row) => {
+      console.debug(
+        `  [ScheduleModal] Row: ${row.sectionId} | ${row.code} | ${row.section} | ${row.title} | RoomType: ${row.roomType}`,
+      );
     });
 
     return rows;
@@ -385,7 +402,11 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       });
 
       if (result.error) {
-        alert(result.error);
+        console.error(
+          `[ScheduleModal] Schedule generation error: ${result.error}`,
+        );
+        const diagnosticMessage = `${result.error}\n\nDiagnostics:\n- Sections before generation: ${sectionRows.length}\n- Check browser console (F12) for detailed logs starting with "[ScheduleModal]" and "[runAutoSchedule]"\n\nCommon causes:\n• No sections imported into the schedule\n• All active days are deselected\n• All sections have incompatible patterns (e.g., Lec/Lab split sections with no matching room types)\n• All sections have been assigned time conflicts`;
+        alert(diagnosticMessage);
         return;
       }
 

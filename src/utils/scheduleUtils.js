@@ -158,6 +158,7 @@ function isPatternCompatibleWithWeeklyLimit(
 function getPatternsForSection(duration, isEve, activeDaysSet) {
   const dur = Number(duration ?? 1.5);
   let candidates;
+  const classType = isEve ? "EVE" : "Regular";
 
   if (isEve) {
     // Evening classes: prioritize flexibility with multiple day options
@@ -213,10 +214,19 @@ function getPatternsForSection(duration, isEve, activeDaysSet) {
   // Filter candidates: only return patterns that exist in patternDaysMap and
   // have all their required days available in the section's active days set.
   // This ensures backward compatibility with legacy data while validating new patterns.
-  return candidates.filter((p) => {
+  const validPatterns = candidates.filter((p) => {
     const days = patternDaysMap[p] ?? [];
     return days.length > 0 && days.every((d) => activeDaysSet.has(d));
   });
+  console.debug(
+    `  [getPatternsForSection] Type:${classType} | Duration:${dur}h | Candidates:${candidates.length} → Valid:${validPatterns.length} | Active patterns: [${validPatterns.join(", ")}]`,
+  );
+  if (validPatterns.length === 0) {
+    console.warn(
+      `  [getPatternsForSection] WARNING: No valid patterns for ${classType} class (${dur}h)! Candidates were: [${candidates.join(", ")}]`,
+    );
+  }
+  return validPatterns;
 }
 
 // ─── Identity helpers ────────────────────────────────────────────────────────
@@ -1188,11 +1198,29 @@ function updateOccupancyIndex(indexes, assignment, pattern) {
 
 function buildPatternCache(activeDaysSet) {
   const cache = new Map();
+  const activePatterns = [];
+  const inactivePatterns = [];
   PATTERN_FALLBACK_ORDER.forEach((pattern) => {
     const days = patternDaysMap[pattern] ?? [];
     const isActive = days.length > 0 && days.every((d) => activeDaysSet.has(d));
     cache.set(pattern, { days, isActive });
+    if (isActive) {
+      activePatterns.push(pattern);
+    } else {
+      inactivePatterns.push(`${pattern}(days:[${days.join(",")}])`);
+    }
   });
+  console.log(
+    `[buildPatternCache] activeDaysSet: [${Array.from(activeDaysSet).join(", ")}] | ${activePatterns.length} active patterns | ${inactivePatterns.length} inactive`,
+  );
+  console.debug(
+    `  [buildPatternCache] Active patterns: [${activePatterns.join(", ")}]`,
+  );
+  if (inactivePatterns.length > 0) {
+    console.debug(
+      `  [buildPatternCache] Inactive patterns (filtered out): [${inactivePatterns.join(", ")}]`,
+    );
+  }
   return cache;
 }
 
@@ -1330,6 +1358,20 @@ function buildSectionPrecompute(
     (p) => patternCache.get(p)?.isActive,
   );
 
+  console.debug(
+    `[buildSectionPrecompute] Section: ${sectionId} | ${getAssignmentSubjectCode(row)}::${sectionLabel} | Duration: ${courseDuration}h | RoomType: ${row.roomType}`,
+  );
+  console.debug(
+    `  → Rooms: eligible=${eligibleRooms.length} ordered=${orderedRooms.length} | Slots: ${candidateSlots.length} | TSU patterns: ${tsuPatterns.length} | Valid patterns: ${validPatterns.length}`,
+  );
+  if (validPatterns.length === 0) {
+    console.warn(
+      `  → WARNING: No valid patterns after filtering! patternsToTry: [${patternsToTry.join(", ")}]`,
+    );
+  } else {
+    console.debug(`  → Valid patterns to try: [${validPatterns.join(", ")}]`);
+  }
+
   return {
     sectionId,
     normalizedSectionId,
@@ -1420,7 +1462,19 @@ export function runAutoSchedule({
     return { error: "Please set a valid scheduling window." };
   }
 
+  console.log(
+    `[runAutoSchedule] Entry point: ${sectionRows.length} sectionRows | activeDays: [${activeDays.join(", ")}] | timeWindow: ${startTime}-${endTime} | pattern: ${pattern}`,
+  );
+  sectionRows.forEach((row) => {
+    console.debug(
+      `  [runAutoSchedule] Input section: ${row.sectionId} | ${row.code}::${row.section} | Duration: ${row.duration}h | RoomType: ${row.roomType}`,
+    );
+  });
+
   if (sectionRows.length === 0) {
+    console.error(
+      "[runAutoSchedule] ERROR: sectionRows is empty! Cannot schedule any sections.",
+    );
     return {
       rooms: newRooms,
       scheduleAssignments: [],
