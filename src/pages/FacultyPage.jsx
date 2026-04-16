@@ -7,6 +7,10 @@ import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { InstructorModal } from "../components/modals/InstructorModal";
 
+const ACTIVE_ACADEMIC_YEAR =
+  import.meta.env.VITE_ACTIVE_ACADEMIC_YEAR ?? "2025-2026";
+const ACTIVE_SEMESTER = import.meta.env.VITE_ACTIVE_SEMESTER ?? "2nd";
+
 const PAGE_SIZE = 10;
 
 function normalizeText(value) {
@@ -168,7 +172,9 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
   const lines = [];
   lines.push("TARLAC STATE UNIVERSITY");
   lines.push("FACULTY SCHEDULE & TEACHING LOAD STATISTICS");
-  lines.push("AY 2025-2026 1ST SEMESTER");
+  lines.push(
+    `AY ${ACTIVE_ACADEMIC_YEAR} ${ACTIVE_SEMESTER.toUpperCase().includes("1") ? "1ST" : "2ND"} SEMESTER`,
+  );
   lines.push("");
   lines.push(`Faculty Name:,${instructor.name}`);
   lines.push(
@@ -225,7 +231,7 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Schedule_${instructor.name.replace(/[^a-zA-Z0-9]/g, "_")}_AY2025-2026.csv`;
+  a.download = `Schedule_${instructor.name.replace(/[^a-zA-Z0-9]/g, "_")}_AY${ACTIVE_ACADEMIC_YEAR.replace("-", "_")}.csv`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

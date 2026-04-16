@@ -32,7 +32,11 @@ export default function AnalyticsPage() {
     .sort((a, b) => b.pct - a.pct);
 
   // Summary stat cards
-  const occupiedRooms = rooms.filter((r) => r.status === "Occupied").length;
+  const occupiedRooms = new Set(
+    scheduleAssignments
+      .filter((a) => a.status === "Assigned" && a.room)
+      .map((a) => a.room),
+  ).size;
   const avgUtil =
     rooms.length > 0 ? Math.round((occupiedRooms / rooms.length) * 100) : 0;
 
@@ -126,7 +130,7 @@ export default function AnalyticsPage() {
           </div>
           <div className="stat-delta">
             {hasSchedule
-              ? `${hard.length} conflict${hard.length !== 1 ? "s" : ""} in ${assignedSections} section assignments`
+              ? `${hardConflicts.length} conflict${hardConflicts.length !== 1 ? "s" : ""} in ${assignedSections} section assignments`
               : "Generate a schedule to see data"}
           </div>
         </div>
