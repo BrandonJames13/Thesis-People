@@ -104,8 +104,8 @@ export function testScheduleOptimization() {
       scheduleAssignments: [],
       startTime: "07:00",
       endTime: "18:00",
-      pattern: "MWF",
-      activeDays: ["MON", "WED", "FRI"],
+      pattern: "MON,FRI",
+      activeDays: ["MON", "FRI"],
     });
 
     console.log(`  Assigned: ${result.assigned}`);

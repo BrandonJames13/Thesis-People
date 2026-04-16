@@ -1,16 +1,17 @@
 export const patternDaysMap = {
-  MWF: ["MON", "WED", "FRI"],
   TTH: ["TUE", "THU"],
-  WF: ["WED", "FRI"],   // ← make sure this exists
+  WF: ["WED", "FRI"], // ← make sure this exists
   MW: ["MON", "WED"],
   TF: ["TUE", "FRI"],
   SAT: ["SAT"],
-  DAILY: ["MON", "TUE", "WED", "THU", "FRI", "SAT"],
   MON: ["MON"],
   TUE: ["TUE"],
   WED: ["WED"],
   THU: ["THU"],
   FRI: ["FRI"],
+  "MON,SAT": ["MON", "SAT"], // Two-day combination: Monday & Saturday
+  "MON,FRI": ["MON", "FRI"], // Two-day combination: Monday & Friday
+  "WED,FRI": ["WED", "FRI"], // Two-day combination: Wednesday & Friday
 };
 
 export const TIME_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
@@ -18,18 +19,19 @@ export const TIME_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
 export const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 export const COLOR_MAP = {
-  MWF: "blue",
   TTH: "green",
-  WF: "blue",    // ← add
+  WF: "blue", // ← add
   MW: "purple",
   TF: "purple",
   SAT: "orange",
-  DAILY: "blue",
   MON: "blue",
   TUE: "green",
   WED: "blue",
   THU: "green",
   FRI: "blue",
+  "MON,SAT": "orange", // Saturday variety
+  "MON,FRI": "purple", // Monday-based pattern
+  "WED,FRI": "blue", // Wednesday-based pattern
 };
 
 export const DEFAULT_ROOM_TYPE = "Lecture";

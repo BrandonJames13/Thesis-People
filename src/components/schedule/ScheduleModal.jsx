@@ -48,7 +48,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const [manualDurationH, setManualDurationH] = useState(1);
   const [manualDurationM, setManualDurationM] = useState(30);
   const [manualTime, setManualTime] = useState("07:00");
-  const [manualPattern, setManualPattern] = useState("MWF");
+  const [manualPattern, setManualPattern] = useState("MON,FRI");
   const [manualEntries, setManualEntries] = useState([]);
   const [conflictMsg, setConflictMsg] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -243,7 +243,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       Number(source?.duration ?? selectedManualSection.duration ?? 1.5) || 1.5;
     const nextHours = Math.floor(duration);
     const nextMinutes = Math.round((duration - nextHours) * 60);
-    const nextPattern = String(source?.pattern ?? "").trim() || "MWF";
+    const nextPattern = String(source?.pattern ?? "").trim() || "MON,FRI";
     const importedStart = extractStartTime24(source, "");
 
     setManualDurationH(nextHours);
@@ -742,12 +742,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
                   className="search-input"
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
-                  <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                  <option value="MON,FRI">MON,FRI (Mon · Fri)</option>
                   <option value="TTH">TTH (Tue · Thu)</option>
+                  <option value="WF">WF (Wed · Fri)</option>
+                  <option value="MON,SAT">MON,SAT (Mon · Sat)</option>
                   <option value="MW">MW (Mon · Wed)</option>
                   <option value="TF">TF (Tue · Fri)</option>
+                  <option value="WED,FRI">WED,FRI (Wed · Fri)</option>
                   <option value="SAT">SAT (Saturday only)</option>
-                  <option value="DAILY">Daily (Mon–Sat)</option>
                 </select>
               </div>
             </div>
@@ -1016,12 +1018,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
                   className="search-input"
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
-                  <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                  <option value="MON,FRI">MON,FRI (Mon · Fri)</option>
                   <option value="TTH">TTH (Tue · Thu)</option>
+                  <option value="WF">WF (Wed · Fri)</option>
+                  <option value="MON,SAT">MON,SAT (Mon · Sat)</option>
                   <option value="MW">MW (Mon · Wed)</option>
                   <option value="TF">TF (Tue · Fri)</option>
+                  <option value="WED,FRI">WED,FRI (Wed · Fri)</option>
                   <option value="SAT">SAT (Saturday only)</option>
-                  <option value="DAILY">Daily (Mon–Sat)</option>
                   <option value="MON">Monday only</option>
                   <option value="TUE">Tuesday only</option>
                   <option value="WED">Wednesday only</option>

@@ -127,7 +127,7 @@ function isTimeSlotAllowed(
  * for a section and verifies total unique days <= maxDaysPerWeek.
  *
  * @param {string} sectionId - Section identifier (e.g., "CS101::A::2025-2026::1")
- * @param {string} candidatePattern - Pattern to check (e.g., "MWF")
+ * @param {string} candidatePattern - Pattern to check (e.g., "MON,FRI")
  * @param {Set<string>} alreadyAssignedPatterns - Patterns already assigned to this section
  * @param {number} maxDaysPerWeek - Maximum days allowed per week (default 2)
  * @returns {boolean} true if compatible, false if would exceed limit
@@ -160,18 +160,59 @@ function getPatternsForSection(duration, isEve, activeDaysSet) {
   let candidates;
 
   if (isEve) {
+    // Evening classes: prioritize flexibility with multiple day options
+    // Includes two-day patterns for classes that need flexibility without exceeding 2-days-per-week
     if (dur <= 1.5)
-      candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TTH", "WF"];
-    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    else candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
+      // 1.5-hour classes: prefer two-day patterns (TTH, WF) then two-day combinations (MON,FRI, MON,SAT, WED,FRI),
+      // then single days. Evening slots benefit from spread-out schedules to avoid overcrowding.
+      candidates = [
+        "TTH",
+        "WF",
+        "MON,FRI",
+        "MON,SAT",
+        "WED,FRI",
+        "MON",
+        "TUE",
+        "WED",
+        "THU",
+        "FRI",
+        "SAT",
+      ];
+    else if (dur === 2)
+      // 2-hour classes: single days only (no two-day patterns to respect scheduling constraints)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    else
+      // 3+ hour classes: prioritize Saturday (extended block) then weekdays
+      candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
   } else {
-    // Regular: no Saturday
+    // Regular (daytime) classes: strict 2-times-per-week constraint
+    // All patterns respect the 2-day-per-week maximum meeting days
     if (dur <= 1.5)
-      candidates = ["TTH", "WF", "MWF", "MON", "TUE", "WED", "THU", "FRI"];
-    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI"];
-    else candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+      // 1.5-hour classes: Two-day patterns first (TTH, WF, MON,FRI, WED,FRI, MON,SAT),
+      // then single days. Prioritizes class meetings at manageable intervals for students.
+      candidates = [
+        "TTH",
+        "WF",
+        "MON,FRI",
+        "WED,FRI",
+        "MON,SAT",
+        "MON",
+        "TUE",
+        "WED",
+        "THU",
+        "FRI",
+      ];
+    else if (dur === 2)
+      // 2-hour classes: single days only (no two-day patterns to respect 2-day limit)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+    else
+      // 3+ hour classes: single days only (long blocks on individual days)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
   }
 
+  // Filter candidates: only return patterns that exist in patternDaysMap and
+  // have all their required days available in the section's active days set.
+  // This ensures backward compatibility with legacy data while validating new patterns.
   return candidates.filter((p) => {
     const days = patternDaysMap[p] ?? [];
     return days.length > 0 && days.every((d) => activeDaysSet.has(d));
@@ -403,7 +444,9 @@ export function extractStartTime24(row, fallback = "") {
 // ─── Pattern helpers ──────────────────────────────────────────────────────────
 
 const PATTERN_FALLBACK_ORDER = [
-  "MWF",
+  "MON,FRI",
+  "MON,SAT",
+  "WED,FRI",
   "TTH",
   "MW",
   "TF",
@@ -414,10 +457,9 @@ const PATTERN_FALLBACK_ORDER = [
   "THU",
   "FRI",
   "SAT",
-  "DAILY",
 ];
 
-function getPatternForRow(row, fallback = "MWF") {
+function getPatternForRow(row, fallback = "MON,FRI") {
   const pattern = String(row?.pattern ?? "")
     .trim()
     .toUpperCase();
@@ -746,7 +788,7 @@ function findOpenPlacementForAssignment({
   preferredRoom,
 }) {
   const duration = Number(assignment.duration ?? 1.5) || 1.5;
-  const pattern = getPatternForRow(assignment, "MWF");
+  const pattern = getPatternForRow(assignment, "MON,FRI");
   const candidateStarts = buildCandidateStarts({
     duration,
     startTime,
@@ -800,7 +842,7 @@ function mergeWithExistingAssignments(
   return Array.from(mergedByKey.values());
 }
 
-function normalizeForConflictChecks(row, fallbackPattern = "MWF") {
+function normalizeForConflictChecks(row, fallbackPattern = "MON,FRI") {
   const startTime24 = extractStartTime24(row, "");
   const pattern = getPatternForRow(row, fallbackPattern);
   return {
@@ -1887,7 +1929,10 @@ export function applyManualAssignments({
     if (!sectionRow) continue;
 
     const assignmentKey = getAssignmentIdentityKey(sectionRow);
-    const resolvedPattern = getPatternForRow({ pattern: entry.pattern }, "MWF");
+    const resolvedPattern = getPatternForRow(
+      { pattern: entry.pattern },
+      "MON,FRI",
+    );
 
     const desired = {
       ...sectionRow,
@@ -1944,7 +1989,7 @@ export function applyManualAssignments({
       const contextAssignments = nextAssignments.filter(
         (_, i) => i !== conflictIndex,
       );
-      const originalPattern = getPatternForRow(conflict, "MWF");
+      const originalPattern = getPatternForRow(conflict, "MON,FRI");
       const patternsToTry = [
         originalPattern,
         ...alternativePatterns(originalPattern),
@@ -2019,7 +2064,7 @@ export function applyManualAssignments({
         course_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
         instructor_name: getAssignmentInstructorName(assignment),
-        pattern: getPatternForRow(assignment, "MWF"),
+        pattern: getPatternForRow(assignment, "MON,FRI"),
         time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
         time_end: parseTimeToSQL(
