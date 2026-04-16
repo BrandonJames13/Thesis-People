@@ -112,7 +112,7 @@ export function AddRoomModal({
           <input
             className="search-input"
             type="text"
-            placeholder="e.g. L101, C111, R112"
+            placeholder="e.g. L101, Accreditation, AVR"
             style={{ width: "100%" }}
             value={number}
             onChange={(e) =>
@@ -120,9 +120,10 @@ export function AddRoomModal({
             }
           />
           <div style={{ fontSize: 11, color: "var(--text3)" }}>
-            Format: <strong>L</strong> = Left Wing &nbsp;·&nbsp;{" "}
-            <strong>C</strong> = Center Wing &nbsp;·&nbsp; <strong>R</strong> =
-            Right Wing &nbsp;+&nbsp; 3 digits (e.g. L101, C202, R315)
+            <strong>Standard:</strong> <strong>L</strong> = Left,{" "}
+            <strong>C</strong> = Center, <strong>R</strong> = Right + 3 digits
+            (e.g. L101) &nbsp;·&nbsp; <strong>Non-standard:</strong> Descriptive
+            names (e.g. Accreditation, AVR)
           </div>
           <select
             className="search-input"
