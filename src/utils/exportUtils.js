@@ -74,11 +74,14 @@ export const CSV_FORMATS = {
       "Max Units",
       "Allow Night Class",
     ],
-    rowKey: (row) => {
-      const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
-      if (sectionId) return `id:${sectionId.toLowerCase()}`;
-      return buildSectionIdentityKey(row, { includeProgramYear: true });
-    },
+    // rowKey: (row) => {
+    //   const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
+    //   if (sectionId) return `id:${sectionId.toLowerCase()}`;
+    //   return buildSectionIdentityKey(row, { includeProgramYear: true });
+    // },
+
+    // * In CSV_FORMATS[CSV_TYPES.FULL_LIST]:
+    rowKey: (row) => buildSectionIdentityKey(row, { includeProgramYear: true }),
   },
   [CSV_TYPES.ROOMS]: {
     label: "Rooms",
@@ -1010,7 +1013,7 @@ function parseSubjectRows(rows, warnings = []) {
         roomType,
         duration: toNumber(r[9], 1.5),
         instructor,
-        status: statusRaw,
+        status: statusRaw || 'Assigned',
         room: "",
         time: timeString,
         time_start: parsedTime?.timeStart || null,
@@ -1212,7 +1215,7 @@ export function parseImportCsv(csvText, type) {
           pattern: row.pattern,
           time_display: row.time,
           duration: Number(row.duration ?? 0),
-          status: normalizeAssignmentStatus(row.status),
+          status: row.status ? normalizeAssignmentStatus(row.status) : 'Assigned',
         })),
         instructorSections,
       },

@@ -1068,6 +1068,7 @@ export default function ImportModal({ isOpen, onClose }) {
         subject_id: subject?.id ?? scheduleRow.subject_id ?? null,
         room_id: room?.id ?? null,
         instructor_id: instructor?.id ?? null,
+          status: "Assigned", // ! ← add this line
       });
     });
 
