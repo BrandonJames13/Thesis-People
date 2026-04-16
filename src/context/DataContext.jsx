@@ -878,6 +878,7 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateInstructorSubjects,
       updateScheduleAssignments,
+      clearScheduleAssignments,
       resetAllData,
     }),
     [
