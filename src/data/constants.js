@@ -1,6 +1,7 @@
 export const patternDaysMap = {
   MWF: ["MON", "WED", "FRI"],
   TTH: ["TUE", "THU"],
+  WF: ["WED", "FRI"],   // ← make sure this exists
   MW: ["MON", "WED"],
   TF: ["TUE", "FRI"],
   SAT: ["SAT"],
@@ -19,6 +20,7 @@ export const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 export const COLOR_MAP = {
   MWF: "blue",
   TTH: "green",
+  WF: "blue",    // ← add
   MW: "purple",
   TF: "purple",
   SAT: "orange",

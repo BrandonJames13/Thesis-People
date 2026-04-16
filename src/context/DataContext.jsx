@@ -211,6 +211,9 @@ function normalizeAssignmentFromDbRow(row, lookup) {
       row.instructor_name ?? instructor?.name ?? section?.instructor ?? "",
     room: row.room_number ?? room?.number ?? section?.room ?? "",
     time: row.time_display ?? section?.time ?? "",
+    time_display: row.time_display ?? section?.time ?? "",  // ← add
+    time_start: row.time_start ?? null,                     // ← add
+    time_end: row.time_end ?? null,                         // ← add
     duration:
       Number(row.duration ?? section?.duration ?? subject?.duration ?? 1.5) ||
       1.5,
