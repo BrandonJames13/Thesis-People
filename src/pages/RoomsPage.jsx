@@ -335,49 +335,88 @@ export default function RoomsPage() {
                     ? "orange"
                     : "blue";
               return (
-                <div className="room-card" key={room.id}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                    }}
-                  >
-                    <div className="room-number">{room.number}</div>
-                    {isAdmin && (
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          onClick={() => openEditModal(room)}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: "var(--text3)",
-                            cursor: "pointer",
-                            fontSize: 13,
-                            lineHeight: 1,
-                            padding: 0,
-                          }}
-                          title="Edit"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => setDeleteTarget(room)}
-                          style={{
-                            background: "none",
-                            border: "none",
-                            color: "var(--text3)",
-                            cursor: "pointer",
-                            fontSize: 16,
-                            lineHeight: 1,
-                            padding: 0,
-                          }}
-                          title="Delete"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
+                <div
+                  className="room-card"
+                  key={room.id}
+                  style={{ position: "relative" }}
+                >
+                  {isAdmin && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        right: 10,
+                        display: "flex",
+                        gap: 4,
+                        alignItems: "center",
+                      }}
+                    >
+                      <button
+                        onClick={() => openEditModal(room)}
+                        style={{
+                          background: "var(--surface3)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text2)",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 500,
+                          lineHeight: 1,
+                          padding: "4px 8px",
+                          borderRadius: 5,
+                          whiteSpace: "nowrap",
+                          transition: "background 0.15s, border-color 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "var(--accent)";
+                          e.currentTarget.style.borderColor = "var(--accent)";
+                          e.currentTarget.style.color = "#fff";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "var(--surface3)";
+                          e.currentTarget.style.borderColor = "var(--border)";
+                          e.currentTarget.style.color = "var(--text2)";
+                        }}
+                        title="Edit"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(room)}
+                        style={{
+                          background: "var(--surface3)",
+                          border: "1px solid var(--border)",
+                          color: "var(--text2)",
+                          cursor: "pointer",
+                          fontSize: 11,
+                          fontWeight: 500,
+                          lineHeight: 1,
+                          padding: "4px 7px",
+                          borderRadius: 5,
+                          transition: "background 0.15s, border-color 0.15s",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "#c0392b";
+                          e.currentTarget.style.borderColor = "#c0392b";
+                          e.currentTarget.style.color = "#fff";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "var(--surface3)";
+                          e.currentTarget.style.borderColor = "var(--border)";
+                          e.currentTarget.style.color = "var(--text2)";
+                        }}
+                        title="Delete"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  <div>
+                    <div
+                      className="room-number"
+                      style={{ paddingRight: isAdmin ? 60 : 0 }}
+                    >
+                      {room.number}
+                    </div>
                   </div>
                   <div className="room-type">
                     {normalizeRoomType(room.type)}
