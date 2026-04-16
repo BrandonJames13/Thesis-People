@@ -8,6 +8,7 @@ import {
 } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRoomType } from "../data/constants";
+import { normalizePostgresError } from "../utils/errorUtils";
 
 const DEFAULT_SECTION = "A";
 const ACTIVE_ACADEMIC_YEAR =
@@ -211,9 +212,9 @@ function normalizeAssignmentFromDbRow(row, lookup) {
       row.instructor_name ?? instructor?.name ?? section?.instructor ?? "",
     room: row.room_number ?? room?.number ?? section?.room ?? "",
     time: row.time_display ?? section?.time ?? "",
-    time_display: row.time_display ?? section?.time ?? "",  // ← add
-    time_start: row.time_start ?? null,                     // ← add
-    time_end: row.time_end ?? null,                         // ← add
+    time_display: row.time_display ?? section?.time ?? "", // ← add
+    time_start: row.time_start ?? null, // ← add
+    time_end: row.time_end ?? null, // ← add
     duration:
       Number(row.duration ?? section?.duration ?? subject?.duration ?? 1.5) ||
       1.5,
@@ -264,6 +265,10 @@ export function DataProvider({ children }) {
   const [instructors, setInstructors] = useState([]);
   const [instructorSubjects, setInstructorSubjects] = useState([]);
   const [scheduleAssignments, setScheduleAssignments] = useState([]);
+  const [scheduleAssignmentsSyncing, setScheduleAssignmentsSyncing] =
+    useState(false);
+  const [scheduleAssignmentsError, setScheduleAssignmentsError] =
+    useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
 
@@ -644,9 +649,122 @@ export function DataProvider({ children }) {
     );
   }, [subjectSections]);
 
-  const updateScheduleAssignments = useCallback((newAssignments) => {
-    setScheduleAssignments(normalizeScheduleAssignments(newAssignments));
-  }, []);
+  const persistScheduleAssignments = useCallback(
+    async (normalizedAssignments) => {
+      try {
+        // Filter to only include "Assigned" status assignments
+        const assignedOnly = (
+          Array.isArray(normalizedAssignments) ? normalizedAssignments : []
+        ).filter((a) => a.status === "Assigned");
+
+        if (assignedOnly.length === 0) {
+          return { success: true };
+        }
+
+        // Map normalized fields to database columns
+        const rowsToUpsert = assignedOnly.map((assignment) => ({
+          section_id: assignment.section_id || assignment.sectionId || "",
+          subject_id: assignment.subject_id || assignment.subjectId || "",
+          room_id: assignment.room_id || assignment.roomId || "",
+          instructor_id:
+            assignment.instructor_id || assignment.instructorId || "",
+          course_code: assignment.code || assignment.subjectCode || "",
+          course_title: assignment.course_title || assignment.title || "",
+          status: assignment.status || "Assigned",
+          pattern: assignment.pattern || "",
+          time_display: assignment.time_display || assignment.time || "",
+          time_start: assignment.time_start || null,
+          time_end: assignment.time_end || null,
+          duration: assignment.duration || 1.5,
+          academic_year:
+            assignment.academic_year ||
+            assignment.academicYear ||
+            ACTIVE_ACADEMIC_YEAR,
+          semester: assignment.semester || ACTIVE_SEMESTER,
+        }));
+
+        // Perform upsert with unique constraint on (section_id, academic_year, semester)
+        const { data, error } = await supabase
+          .from("schedule_assignments")
+          .upsert(rowsToUpsert, {
+            onConflict: "section_id,academic_year,semester",
+          })
+          .select();
+
+        if (error) {
+          const normalized = normalizePostgresError(
+            error,
+            "Failed to persist schedule assignments.",
+          );
+          console.error(
+            `[DataContext] Persistence failed for ${rowsToUpsert.length} assignments:`,
+            normalized,
+          );
+          return { success: false, error: normalized };
+        }
+
+        console.log(
+          `[DataContext] Successfully persisted ${rowsToUpsert.length} schedule assignments.`,
+        );
+        return { success: true };
+      } catch (err) {
+        const normalized = normalizePostgresError(
+          err,
+          "Failed to persist schedule assignments.",
+        );
+        console.error(
+          "[DataContext] Unexpected error during persistence:",
+          normalized,
+        );
+        return { success: false, error: normalized };
+      }
+    },
+    [],
+  );
+
+  const updateScheduleAssignments = useCallback(
+    async (newAssignments, skipPersist = false) => {
+      const previousAssignments = scheduleAssignments;
+      const normalized = normalizeScheduleAssignments(newAssignments);
+
+      setScheduleAssignmentsSyncing(true);
+      setScheduleAssignmentsError(null);
+
+      // Optimistically update local state
+      setScheduleAssignments(normalized);
+
+      if (skipPersist) {
+        setScheduleAssignmentsSyncing(false);
+        return Promise.resolve();
+      }
+
+      try {
+        const result = await persistScheduleAssignments(normalized);
+
+        if (result.success) {
+          setScheduleAssignmentsSyncing(false);
+          return Promise.resolve();
+        } else {
+          // Rollback state on persistence failure
+          setScheduleAssignments(previousAssignments);
+          setScheduleAssignmentsError(result.error);
+          setScheduleAssignmentsSyncing(false);
+          return Promise.reject(result.error);
+        }
+      } catch (err) {
+        // Rollback on unexpected error
+        setScheduleAssignments(previousAssignments);
+        setScheduleAssignmentsError({
+          code: null,
+          message: "Unexpected error during persistence.",
+          details: String(err?.message ?? err),
+        });
+        setScheduleAssignmentsSyncing(false);
+        return Promise.reject(err);
+      }
+    },
+    [scheduleAssignments, persistScheduleAssignments],
+  );
 
   // Reset back to empty state, then refresh from the database.
   const resetAllData = useCallback(() => {
@@ -678,6 +796,8 @@ export function DataProvider({ children }) {
       isBootstrapping,
       isGenerationInProgress,
       setIsGenerationInProgress,
+      scheduleAssignmentsSyncing,
+      scheduleAssignmentsError,
       addSubject,
       updateSubjects,
       addSubjectSection,
@@ -710,6 +830,8 @@ export function DataProvider({ children }) {
       conflicts,
       isBootstrapping,
       isGenerationInProgress,
+      scheduleAssignmentsSyncing,
+      scheduleAssignmentsError,
       addSubject,
       updateSubjects,
       addSubjectSection,
