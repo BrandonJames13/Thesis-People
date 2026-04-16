@@ -15,39 +15,6 @@ function normalizeText(value) {
     .toLowerCase();
 }
 
-function getAssignedSubjectCount(instructor, instructorSubjects) {
-  if (!instructor || !Array.isArray(instructorSubjects)) return 0;
-
-  const instructorId = String(instructor?.id ?? "").trim();
-  const getSubjectKey = (row) =>
-    String(
-      row?.subjectId ??
-        row?.subject_id ??
-        row?.subjectCode ??
-        row?.subject_code ??
-        "",
-    )
-      .trim()
-      .toUpperCase();
-
-  if (!instructorId) {
-    // Fallback: match by name
-    const instructorName = normalizeText(instructor?.name);
-    const rows = instructorSubjects.filter(
-      (is) =>
-        normalizeText(is?.instructor_name ?? is?.name ?? "") === instructorName,
-    );
-    const uniqueSubjectKeys = new Set(rows.map(getSubjectKey).filter(Boolean));
-    return uniqueSubjectKeys.size || rows.length;
-  }
-
-  const rows = instructorSubjects.filter(
-    (is) => String(is?.instructor_id ?? "").trim() === instructorId,
-  );
-  const uniqueSubjectKeys = new Set(rows.map(getSubjectKey).filter(Boolean));
-  return uniqueSubjectKeys.size || rows.length;
-}
-
 // Update buildInstructorPayload to include new fields
 function buildInstructorPayload(instructor) {
   const status = String(instructor?.status ?? "").trim();
@@ -237,7 +204,6 @@ export default function FacultyPage() {
   const {
     scheduleAssignments,
     getInstructorLoad,
-    instructorSubjects,
     isBootstrapping,
     isGenerationInProgress,
   } = useData();
@@ -517,26 +483,22 @@ export default function FacultyPage() {
                       </span>
                     )}
                   </td>
+
+                  {/* Scheduled Load — sourced entirely from getInstructorLoad */}
                   <td className="monospace" style={{ fontSize: 12 }}>
                     {(() => {
-                      const assignedSubjectCount = getAssignedSubjectCount(
-                        inst,
-                        instructorSubjects,
-                      );
                       const counts = getInstructorLoad(inst);
-                      if (
-                        assignedSubjectCount === 0 &&
-                        counts.sectionCount === 0
-                      ) {
+                      if (counts.sectionCount === 0) {
                         return (
                           <span style={{ color: "var(--text3)" }}>
                             No scheduled sections
                           </span>
                         );
                       }
-                      return `${assignedSubjectCount} subject${assignedSubjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
+                      return `${counts.subjectCount} subject${counts.subjectCount === 1 ? "" : "s"} / ${counts.sectionCount} section${counts.sectionCount === 1 ? "" : "s"} (${counts.totalHours.toFixed(1)} hrs/wk)`;
                     })()}
                   </td>
+
                   <td>{inst.max_units ?? "—"}</td>
                   <td>{inst.department || "TBD"}</td>
                   <td style={{ fontSize: 12 }}>{inst.availability || "TBD"}</td>
