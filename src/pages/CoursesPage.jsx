@@ -15,7 +15,11 @@ const PAGE_SIZE = 15;
 export default function SubjectsPage() {
   const { showNotification } = useNotification();
   const { isAdmin } = useAuth();
-  const { isBootstrapping, isGenerationInProgress } = useData();
+  const {
+    isBootstrapping,
+    isGenerationInProgress,
+    clearSubjects: clearSubjectsData,
+  } = useData();
 
   const notifyDbError = useCallback(
     (error, operation, entity = "subject") => {
@@ -36,6 +40,7 @@ export default function SubjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editSubject, setEditSubject] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Search & pagination
   const [search, setSearch] = useState("");
@@ -268,6 +273,23 @@ export default function SubjectsPage() {
     }
   }
 
+  async function handleClearSubjectsConfirm() {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
+    const result = await clearSubjectsData();
+    if (result.success) {
+      setSubjects([]);
+      setSectionsBySubjectId({});
+      showNotification("✓ All subjects cleared successfully.");
+    } else {
+      showNotification(`⚠ ${result.error?.details ?? result.error}`);
+    }
+    setShowClearConfirm(false);
+  }
+
   // ============================================================
   // RENDER
   // ============================================================
@@ -378,6 +400,14 @@ export default function SubjectsPage() {
               }}
             >
               + Add Subject
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowClearConfirm(true)}
+            >
+              🗑 Clear All
             </button>
           )}
         </div>
@@ -572,6 +602,16 @@ export default function SubjectsPage() {
         danger
         onConfirm={handleDeleteConfirm}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        title="🗑 Clear All Subjects"
+        message="Are you sure you want to delete ALL subjects and sections from the database? This will also delete all related schedule assignments and conflicts. This action cannot be undone."
+        confirmLabel="🗑 Yes, Delete All"
+        danger
+        onConfirm={handleClearSubjectsConfirm}
+        onClose={() => setShowClearConfirm(false)}
       />
     </div>
   );

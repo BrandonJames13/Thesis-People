@@ -212,6 +212,7 @@ export default function FacultyPage() {
     getInstructorLoad,
     isBootstrapping,
     isGenerationInProgress,
+    clearInstructors: clearInstructorsData,
   } = useData();
   const { showNotification } = useNotification();
 
@@ -231,6 +232,7 @@ export default function FacultyPage() {
   const [showModal, setShowModal] = useState(false);
   const [editInstructor, setEditInstructor] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   // Search & pagination
   const [search, setSearch] = useState("");
@@ -329,6 +331,22 @@ export default function FacultyPage() {
     );
     showNotification(`${deleteTarget.name} removed.`);
     setDeleteTarget(null);
+  }
+
+  async function handleClearInstructorsConfirm() {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
+    const result = await clearInstructorsData();
+    if (result.success) {
+      setInstructors([]);
+      showNotification("✓ All faculty members cleared successfully.");
+    } else {
+      showNotification(`⚠ ${result.error?.details ?? result.error}`);
+    }
+    setShowClearConfirm(false);
   }
 
   // --- Filtering ---
@@ -432,6 +450,14 @@ export default function FacultyPage() {
               }}
             >
               + Add Instructor
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowClearConfirm(true)}
+            >
+              🗑 Clear All
             </button>
           )}
         </div>
@@ -692,6 +718,16 @@ export default function FacultyPage() {
         danger
         onConfirm={handleDeleteConfirm}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        title="🗑 Clear All Faculty"
+        message="Are you sure you want to delete ALL faculty members from the database? This will also delete all related schedule assignments and conflicts. This action cannot be undone."
+        confirmLabel="🗑 Yes, Delete All"
+        danger
+        onConfirm={handleClearInstructorsConfirm}
+        onClose={() => setShowClearConfirm(false)}
       />
     </div>
   );

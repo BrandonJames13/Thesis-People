@@ -806,6 +806,100 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  // Clear all rooms from database (admin-only)
+  const clearRooms = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_rooms");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear rooms.",
+        );
+        console.error("[DataContext] Error clearing rooms:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setRooms([]);
+      console.log("[DataContext] Successfully cleared all rooms.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing rooms.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear rooms:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
+  }, []);
+
+  // Clear all instructors from database (admin-only)
+  const clearInstructors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_instructors");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear instructors.",
+        );
+        console.error("[DataContext] Error clearing instructors:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setInstructors([]);
+      console.log("[DataContext] Successfully cleared all instructors.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing instructors.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear instructors:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
+  }, []);
+
+  // Clear all subjects from database (admin-only)
+  const clearSubjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_subjects");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear subjects.",
+        );
+        console.error("[DataContext] Error clearing subjects:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty arrays (both subjects and sections)
+      setSubjects([]);
+      setSubjectSections([]);
+      console.log("[DataContext] Successfully cleared all subjects.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing subjects.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear subjects:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
+  }, []);
+
   // Reset back to empty state, then refresh from the database.
   const resetAllData = useCallback(async () => {
     // Synchronously clear ALL state variables before any async operations.
@@ -879,6 +973,9 @@ export function DataProvider({ children }) {
       updateInstructorSubjects,
       updateScheduleAssignments,
       clearScheduleAssignments,
+      clearRooms,
+      clearInstructors,
+      clearSubjects,
       resetAllData,
     }),
     [
@@ -914,6 +1011,9 @@ export function DataProvider({ children }) {
       updateInstructorSubjects,
       updateScheduleAssignments,
       clearScheduleAssignments,
+      clearRooms,
+      clearInstructors,
+      clearSubjects,
       resetAllData,
     ],
   );
