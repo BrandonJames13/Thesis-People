@@ -12,6 +12,111 @@ import {
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
+/**
+ * ConflictSummary component displays conflicts from schedule generation results.
+ * Shows count of conflicts and first 5-10 conflict reasons grouped by type.
+ */
+function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return null;
+  }
+
+  // Group conflicts by type for better display
+  const groupedConflicts = {};
+  conflicts.slice(0, 10).forEach((conflict) => {
+    const type = conflict.type || "Unknown";
+    if (!groupedConflicts[type]) {
+      groupedConflicts[type] = [];
+    }
+    groupedConflicts[type].push(conflict);
+  });
+
+  return (
+    <div
+      className="conflict-summary"
+      style={{
+        padding: "16px",
+        marginBottom: "16px",
+        backgroundColor: "#fff3cd",
+        border: "1px solid #ffc107",
+        borderRadius: "4px",
+      }}
+    >
+      <h4 style={{ marginTop: 0, color: "#d9534f" }}>
+        ⚠ {conflicts.length} Conflict{conflicts.length !== 1 ? "s" : ""}{" "}
+        Detected
+      </h4>
+      <p style={{ marginBottom: "12px", fontSize: "14px" }}>
+        Some sections could not be scheduled due to missing or invalid data. You
+        can review these conflicts in the Conflicts page to manually resolve
+        them.
+      </p>
+
+      <div
+        style={{
+          marginBottom: "12px",
+          fontSize: "13px",
+          maxHeight: "200px",
+          overflowY: "auto",
+        }}
+      >
+        {Object.entries(groupedConflicts).map(([type, items]) => (
+          <div key={type} style={{ marginBottom: "8px" }}>
+            <strong>{type}:</strong>
+            <ul
+              style={{
+                marginTop: "4px",
+                marginBottom: "8px",
+                paddingLeft: "20px",
+              }}
+            >
+              {items.map((conflict, idx) => (
+                <li key={idx} style={{ marginBottom: "4px", fontSize: "12px" }}>
+                  {conflict.conflictReason ||
+                    `${conflict.course_code || ""} - Unable to assign`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          onClick={onReview}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            backgroundColor: "#0066cc",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Review in Conflicts Page
+        </button>
+        <button
+          onClick={onSaveAnyway}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            backgroundColor: "#6c757d",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Save Anyway
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ScheduleModal({ onClose, onRunComplete }) {
   const {
     rooms,
@@ -53,6 +158,12 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const [manualEntries, setManualEntries] = useState([]);
   const [conflictMsg, setConflictMsg] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // State for handling conflicts from auto-generation
+  const [generationConflicts, setGenerationConflicts] = useState([]);
+  const [showConflictSummary, setShowConflictSummary] = useState(false);
+  const [pendingAssignments, setPendingAssignments] = useState(null);
+
   const isMountedRef = useRef(true);
 
   const sectionRows = useMemo(() => {
@@ -420,6 +531,42 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
       updateRooms(mergedRooms);
 
+      // ─── Check for conflicts in the result ────────────────────────────────
+      const hasConflicts =
+        Array.isArray(result.scheduleAssignments) &&
+        result.scheduleAssignments.some(
+          (a) => String(a.status || "").trim() === "Conflict",
+        );
+
+      if (hasConflicts) {
+        // Extract conflicts for display
+        const conflictAssignments = result.scheduleAssignments.filter(
+          (a) => String(a.status || "").trim() === "Conflict",
+        );
+        setGenerationConflicts(conflictAssignments);
+        setPendingAssignments(result.scheduleAssignments);
+        setShowConflictSummary(true);
+        showNotification(
+          `Generated schedule with ${conflictAssignments.length} conflict${conflictAssignments.length !== 1 ? "s" : ""}`,
+        );
+        return;
+      }
+
+      // ─── Safeguard: Prevent persisting assignments with UNKNOWN subjects ────
+      const hasUnknownSubjects = result.scheduleAssignments.some((a) => {
+        const code = String(a.course_code ?? "")
+          .trim()
+          .toUpperCase();
+        return code.startsWith("UNKNOWN");
+      });
+
+      if (hasUnknownSubjects) {
+        alert(
+          "⚠ Invalid assignments detected: Some assignments reference UNKNOWN subject codes. Schedule generation may have failed. Please check browser console and re-generate.",
+        );
+        return;
+      }
+
       try {
         await updateScheduleAssignments(result.scheduleAssignments);
         showNotification("Schedule saved to database");
@@ -436,6 +583,53 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         setIsGenerating(false);
         setIsGenerationInProgress(false);
       }
+    }
+  };
+
+  const handleSaveWithConflicts = async () => {
+    if (!pendingAssignments) return;
+
+    // Double-check for UNKNOWN subjects before saving
+    const hasUnknownSubjects = pendingAssignments.some((a) => {
+      const code = String(a.course_code ?? "")
+        .trim()
+        .toUpperCase();
+      return code.startsWith("UNKNOWN");
+    });
+
+    if (hasUnknownSubjects) {
+      alert(
+        "⚠ Cannot save: Assignments contain UNKNOWN subject codes. Please review and re-generate.",
+      );
+      return;
+    }
+
+    try {
+      await updateScheduleAssignments(pendingAssignments);
+      setShowConflictSummary(false);
+      setGenerationConflicts([]);
+      setPendingAssignments(null);
+      showNotification(
+        "Schedule saved to database with conflicts for manual review",
+      );
+
+      if (onRunComplete) onRunComplete();
+      onClose();
+    } catch (persistError) {
+      showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
+    }
+  };
+
+  const handleReviewConflicts = () => {
+    // Navigate to Conflicts page - signal parent to navigate
+    setShowConflictSummary(false);
+    setGenerationConflicts([]);
+    setPendingAssignments(null);
+
+    // Use onClose callback with a special marker to indicate navigation to conflicts page
+    // The parent component should handle this by navigating to the ConflictsPage
+    if (onClose && typeof onClose === "function") {
+      onClose({ navigationTarget: "conflicts" });
     }
   };
 
@@ -655,6 +849,16 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
             ✏ Manual Entry
           </button>
         </div>
+
+        {showConflictSummary && (
+          <div style={{ padding: "20px 28px" }}>
+            <ConflictSummary
+              conflicts={generationConflicts}
+              onReview={handleReviewConflicts}
+              onSaveAnyway={handleSaveWithConflicts}
+            />
+          </div>
+        )}
 
         {mode === "auto" && (
           <div

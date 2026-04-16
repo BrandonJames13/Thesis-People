@@ -1417,6 +1417,110 @@ function validateAndLookupSubject(code, subjectByCode) {
   };
 }
 
+/**
+ * Validates that an assignment references valid subjects, rooms, and instructors.
+ * Used to detect UNKNOWN subject codes and invalid foreign key references before persistence.
+ *
+ * @param {object} assignment - The assignment object to validate
+ * @param {Map} subjectByCode - Map of subject codes to subject objects
+ * @param {Array} rooms - Array of available rooms
+ * @param {Array} instructors - Array of available instructors
+ * @returns {{isValid: boolean, validationError?: string}}
+ */
+function validateAssignmentReferences(
+  assignment,
+  subjectByCode,
+  rooms,
+  instructors,
+) {
+  if (!assignment) {
+    return {
+      isValid: false,
+      validationError: "Assignment is null or undefined",
+    };
+  }
+
+  // Check subject validity
+  const subjectCode = String(
+    assignment.course_code ?? assignment.subject_code ?? "",
+  ).trim();
+  const subjectId = String(assignment.subject_id ?? "").trim();
+
+  if (!subjectCode && !subjectId) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing subject code and subject_id",
+    };
+  }
+
+  // Check for UNKNOWN subject codes
+  if (subjectCode.toUpperCase().startsWith("UNKNOWN")) {
+    return {
+      isValid: false,
+      validationError: `Subject code '${subjectCode}' could not be mapped. Possible causes: subject was deleted from database, CSV import failed, or data changed after sections were loaded.`,
+    };
+  }
+
+  // Check if subject exists in database
+  if (subjectCode) {
+    const normalizedCode = subjectCode.trim().toUpperCase();
+    if (!subjectByCode.has(normalizedCode)) {
+      return {
+        isValid: false,
+        validationError: `Subject '${subjectCode}' not found in database. Database may have been modified after schedule generation.`,
+      };
+    }
+  }
+
+  // Check room validity
+  const roomNumber = String(
+    assignment.room_number ?? assignment.room ?? "",
+  ).trim();
+  const roomId = String(assignment.room_id ?? "").trim();
+
+  if (!roomNumber && !roomId) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing room number and room_id",
+    };
+  }
+
+  if (
+    roomNumber &&
+    !rooms.find((r) => String(r.number).trim() === roomNumber)
+  ) {
+    return {
+      isValid: false,
+      validationError: `Room '${roomNumber}' not found in database. Room may have been deleted.`,
+    };
+  }
+
+  // Check instructor validity
+  const instructorId = String(assignment.instructor_id ?? "").trim();
+  const instructorName = String(
+    assignment.instructor_name ?? assignment.instructor ?? "",
+  ).trim();
+
+  if (!instructorId && !instructorName) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing instructor_id and instructor name",
+    };
+  }
+
+  if (
+    instructorId &&
+    !instructors.find((i) => String(i.id ?? "").trim() === instructorId)
+  ) {
+    return {
+      isValid: false,
+      validationError: `Instructor ID '${instructorId}' not found in database. Instructor may have been deleted.`,
+    };
+  }
+
+  return { isValid: true };
+}
+
 // ─── ★ Auto-Schedule ──────────────────────────────────────────────────────────
 
 export function runAutoSchedule({
@@ -1941,10 +2045,53 @@ export function runAutoSchedule({
 
   const dedupedAssignments = dedupeBySectionTerm(validatedAssignments);
 
+  // ─── Validate assignments for unknown subjects and invalid references ──────
+  const validatedAndConvertedAssignments = dedupedAssignments.map(
+    (assignment) => {
+      if (normalizeAssignmentStatus(assignment.status) !== "Assigned") {
+        return assignment; // Skip validation for non-assigned status
+      }
+
+      const validation = validateAssignmentReferences(
+        assignment,
+        subjectByCode,
+        newRooms,
+        instructors || [],
+      );
+
+      if (!validation.isValid) {
+        return {
+          ...assignment,
+          status: "Conflict",
+          conflictReason:
+            assignment.conflictReason || validation.validationError,
+          updated_at: new Date().toISOString(),
+        };
+      }
+
+      return assignment;
+    },
+  );
+
+  // Count newly converted conflicts for accurate reporting
+  const newlyConvertedConflicts = validatedAndConvertedAssignments.filter(
+    (assignment) =>
+      normalizeAssignmentStatus(assignment.status) === "Conflict" &&
+      dedupedAssignments.find(
+        (orig) =>
+          getAssignmentIdentityKey(orig) ===
+            getAssignmentIdentityKey(assignment) &&
+          normalizeAssignmentStatus(orig.status) === "Assigned",
+      ),
+  ).length;
+
+  // Update conflict count to include newly converted assignments
+  const updatedConflictCount = conflictCount + newlyConvertedConflicts;
+
   newRooms.forEach((r) => {
     if (r.status !== "Maintenance") r.status = "Available";
   });
-  dedupedAssignments.forEach((assignment) => {
+  validatedAndConvertedAssignments.forEach((assignment) => {
     if (normalizeAssignmentStatus(assignment.status) !== "Assigned") return;
     const roomNumber = getAssignmentRoom(assignment);
     if (!roomNumber) return;
@@ -1958,8 +2105,8 @@ export function runAutoSchedule({
   let message = `Auto-generated ${assigned} assignment${assigned !== 1 ? "s" : ""} using imported section data with room and instructor matching.`;
   if (patternAdjustedCount > 0)
     message += ` ${patternAdjustedCount} section${patternAdjustedCount !== 1 ? "s" : ""} had meeting pattern adjusted to avoid conflicts.`;
-  if (conflictCount > 0)
-    message += ` ${conflictCount} section${conflictCount !== 1 ? "s" : ""} flagged as conflicts — no valid room/instructor placement found.`;
+  if (updatedConflictCount > 0)
+    message += ` ${updatedConflictCount} section${updatedConflictCount !== 1 ? "s" : ""} flagged as conflicts — no valid room/instructor placement found or invalid subject/room/instructor references detected.`;
 
   const duplicateTrimmed =
     validatedAssignments.length - dedupedAssignments.length;
@@ -1969,9 +2116,9 @@ export function runAutoSchedule({
 
   return {
     rooms: newRooms,
-    scheduleAssignments: dedupedAssignments,
+    scheduleAssignments: validatedAndConvertedAssignments,
     assigned,
-    conflicts: conflictCount,
+    conflicts: updatedConflictCount,
     message,
   };
 }

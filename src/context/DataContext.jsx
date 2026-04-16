@@ -727,6 +727,69 @@ export function DataProvider({ children }) {
       const previousAssignments = scheduleAssignments;
       const normalized = normalizeScheduleAssignments(newAssignments);
 
+      // ─── Validate all assignments reference valid subjects before DB write ────
+      const validateAssignmentSubjects = (assignments) => {
+        const invalidAssignments = [];
+
+        for (const assignment of assignments) {
+          // Only validate "Assigned" status assignments that need to persist
+          if (String(assignment.status ?? "").trim() !== "Assigned") {
+            continue;
+          }
+
+          const subjectId = String(assignment.subject_id ?? "").trim();
+          const subjectCode = String(assignment.course_code ?? "").trim();
+
+          // Check if subject is in current subjects data
+          const subjectExists = subjects.some(
+            (s) =>
+              String(s.id ?? "").trim() === subjectId ||
+              String(s.code ?? "")
+                .trim()
+                .toUpperCase() === subjectCode.trim().toUpperCase(),
+          );
+
+          if (!subjectExists && subjectId) {
+            invalidAssignments.push({
+              assignmentKey: `${assignment.section_id || ""}-${assignment.course_code || ""}`,
+              subjectId,
+              subjectCode,
+              reason: `Subject '${subjectCode || subjectId}' not found in database. Database may have been modified after schedule generation.`,
+            });
+          }
+        }
+
+        return {
+          valid: invalidAssignments.length === 0,
+          invalidCount: invalidAssignments.length,
+          firstError:
+            invalidAssignments.length > 0 ? invalidAssignments[0] : null,
+          invalidAssignments,
+        };
+      };
+
+      // Perform pre-flight validation
+      const subjectValidation = validateAssignmentSubjects(normalized);
+      if (!subjectValidation.valid) {
+        console.error(
+          "[DataContext] Subject validation failed before DB write:",
+          subjectValidation,
+        );
+        const errorMsg = `Cannot save schedule: ${subjectValidation.invalidCount} assignment${
+          subjectValidation.invalidCount !== 1 ? "s" : ""
+        } reference missing subjects. First error: ${subjectValidation.firstError?.reason}. Please re-generate or manually resolve.`;
+
+        setScheduleAssignmentsError({
+          code: "INVALID_SUBJECT_REFS",
+          message: errorMsg,
+          details: JSON.stringify(subjectValidation.invalidAssignments),
+        });
+        return Promise.reject({
+          code: "INVALID_SUBJECT_REFS",
+          message: errorMsg,
+        });
+      }
+
       setScheduleAssignmentsSyncing(true);
       setScheduleAssignmentsError(null);
 
@@ -763,7 +826,7 @@ export function DataProvider({ children }) {
         return Promise.reject(err);
       }
     },
-    [scheduleAssignments, persistScheduleAssignments],
+    [scheduleAssignments, persistScheduleAssignments, subjects],
   );
 
   // Clear schedule assignments from database (for before auto-generation)
