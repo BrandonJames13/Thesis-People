@@ -23,6 +23,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
+    clearScheduleAssignments,
     setIsGenerationInProgress,
   } = useData();
   const { showNotification } = useNotification();
@@ -334,6 +335,26 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       return;
     }
 
+    // STEP 1: Clear existing schedules before generating new ones
+    try {
+      showNotification("Clearing existing schedules...");
+      const clearResult = await clearScheduleAssignments();
+
+      if (!clearResult.success) {
+        const errorMsg = clearResult.error?.message || "Unknown error";
+        showNotification(`⚠ Failed to clear existing schedules: ${errorMsg}`);
+        return;
+      }
+
+      showNotification("Existing schedules cleared, generating new ones...");
+    } catch (clearError) {
+      showNotification(
+        `⚠ Failed to clear existing schedules: ${clearError.message}`,
+      );
+      return;
+    }
+
+    // STEP 2: Set generation state and generate new schedule
     setIsGenerating(true);
     setIsGenerationInProgress(true);
 

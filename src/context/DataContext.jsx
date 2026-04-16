@@ -766,6 +766,46 @@ export function DataProvider({ children }) {
     [scheduleAssignments, persistScheduleAssignments],
   );
 
+  // Clear schedule assignments from database (for before auto-generation)
+  const clearScheduleAssignments = useCallback(async () => {
+    setScheduleAssignmentsSyncing(true);
+    setScheduleAssignmentsError(null);
+
+    try {
+      // Call RPC function to atomically delete schedule_assignments and conflicts from database
+      const { data, error } = await supabase.rpc("reset_schedule_for_term", {
+        p_academic_year: ACTIVE_ACADEMIC_YEAR,
+        p_semester: ACTIVE_SEMESTER,
+      });
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear existing schedule assignments.",
+        );
+        console.error("[DataContext] Error clearing schedules:", normalized);
+        setScheduleAssignmentsError(normalized);
+        setScheduleAssignmentsSyncing(false);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setScheduleAssignments([]);
+      setScheduleAssignmentsSyncing(false);
+      console.log("[DataContext] Successfully cleared schedule assignments.");
+      return { success: true };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing schedule assignments.",
+      );
+      console.error("[DataContext] Unexpected error during clear:", normalized);
+      setScheduleAssignmentsError(normalized);
+      setScheduleAssignmentsSyncing(false);
+      return { success: false, error: normalized };
+    }
+  }, []);
+
   // Reset back to empty state, then refresh from the database.
   const resetAllData = useCallback(async () => {
     // Synchronously clear ALL state variables before any async operations.
@@ -872,6 +912,7 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateInstructorSubjects,
       updateScheduleAssignments,
+      clearScheduleAssignments,
       resetAllData,
     ],
   );
