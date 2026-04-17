@@ -197,6 +197,7 @@ function normalizeAssignmentFromDbRow(row, lookup) {
     section_id: row.section_id,
     sectionId: row.section_id,
     subjectCode:
+      row.subject_code ??
       row.course_code ??
       row.code ??
       section?.subjectCode ??
@@ -758,8 +759,8 @@ export function DataProvider({ children }) {
           room_id: assignment.room_id || assignment.roomId || "",
           instructor_id:
             assignment.instructor_id || assignment.instructorId || "",
-          course_code: assignment.code || assignment.subjectCode || "",
-          course_title: assignment.course_title || assignment.title || "",
+          subject_code: assignment.code || assignment.subjectCode || "",
+          subject_title: assignment.course_title || assignment.title || "",
           status: assignment.status || "Assigned",
           pattern: assignment.pattern || "",
           time_display: assignment.time_display || assignment.time || "",
@@ -828,7 +829,12 @@ export function DataProvider({ children }) {
           }
 
           const subjectId = String(assignment.subject_id ?? "").trim();
-          const subjectCode = String(assignment.course_code ?? "").trim();
+          const subjectCode = String(
+            assignment.subject_code ??
+              assignment.code ??
+              assignment.subjectCode ??
+              "",
+          ).trim();
 
           // Check if subject is in current subjects data
           const subjectExists = subjects.some(
@@ -841,7 +847,7 @@ export function DataProvider({ children }) {
 
           if (!subjectExists && subjectId) {
             invalidAssignments.push({
-              assignmentKey: `${assignment.section_id || ""}-${assignment.course_code || ""}`,
+              assignmentKey: `${assignment.section_id || ""}-${assignment.subject_code || assignment.code || assignment.course_code || ""}`,
               subjectId,
               subjectCode,
               reason: `Subject '${subjectCode || subjectId}' not found in database. Database may have been modified after schedule generation.`,

@@ -56,8 +56,8 @@ function getAssignmentSectionKey(assignment) {
   if (sectionId) return `id:${sectionId.toLowerCase()}`;
 
   const code = String(
-    assignment?.course_code ??
-      assignment?.subject_code ??
+    assignment?.subject_code ??
+      assignment?.course_code ??
       assignment?.code ??
       "",
   )
@@ -86,15 +86,18 @@ function getAssignmentSectionKey(assignment) {
 
 function getAssignmentExportRow(assignment) {
   const code = String(
-    assignment?.course_code ??
-      assignment?.subject_code ??
+    assignment?.subject_code ??
+      assignment?.course_code ??
       assignment?.code ??
       "",
   )
     .trim()
     .toUpperCase();
   const title = String(
-    assignment?.course_title ?? assignment?.title ?? "",
+    assignment?.subject_title ??
+      assignment?.course_title ??
+      assignment?.title ??
+      "",
   ).trim();
   const section = String(assignment?.section ?? "").trim() || "A";
   const sectionId = String(

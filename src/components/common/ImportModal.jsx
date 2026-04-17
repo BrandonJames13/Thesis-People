@@ -643,9 +643,9 @@ export default function ImportModal({ isOpen, onClose }) {
       throw new Error("No schedule assignment rows were parsed for import.");
     }
 
-    // Fetch all courses codes, room numbers, and instructor names to resolve lookups
-    const courseCodes = Array.from(
-      new Set(dbRows.map((row) => row?.course_code).filter(Boolean)),
+    // Fetch all subjects codes, room numbers, and instructor names to resolve lookups
+    const subjectCodes = Array.from(
+      new Set(dbRows.map((row) => row?.subject_code).filter(Boolean)),
     );
     const roomNumbers = Array.from(
       new Set(dbRows.map((row) => row?.room_number).filter(Boolean)),
@@ -657,11 +657,11 @@ export default function ImportModal({ isOpen, onClose }) {
     // Query for existing data to resolve foreign keys
     // Note: .in() handles empty arrays gracefully, but we build queries safely
     const subjectPromise =
-      courseCodes.length > 0
+      subjectCodes.length > 0
         ? supabase
             .from("subjects")
             .select("id, code, program, year")
-            .in("code", courseCodes)
+            .in("code", subjectCodes)
         : Promise.resolve({ data: [], error: null });
 
     const roomPromise =
@@ -766,7 +766,7 @@ export default function ImportModal({ isOpen, onClose }) {
     // Transform dbRows into schedule_assignments upsert rows
     const scheduleUpsertRows = dbRows
       .map((row) => {
-        const subject = subjectByCode.get(normalizeLookupKey(row.course_code));
+        const subject = subjectByCode.get(normalizeLookupKey(row.subject_code));
         if (!subject) {
           return null; // Skip rows where subject cannot be resolved
         }
@@ -791,7 +791,7 @@ export default function ImportModal({ isOpen, onClose }) {
           subject_id: subject.id,
           room_id: room?.id ?? null,
           instructor_id: instructor?.id ?? null,
-          subject_code: row.course_code,
+          subject_code: row.subject_code,
           section: row.section,
           academic_year: row.academic_year,
           semester: row.semester,

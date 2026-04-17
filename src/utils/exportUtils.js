@@ -661,7 +661,9 @@ function parseFullListRows(rows, warnings = []) {
       const program = normalizeProgram(rawProgram);
       const year = String(r[7] ?? "").trim();
       const hasDepartmentColumn = (r?.length ?? 0) >= 20;
-      const rawDepartment = hasDepartmentColumn ? String(r[15] ?? "").trim() : "";
+      const rawDepartment = hasDepartmentColumn
+        ? String(r[15] ?? "").trim()
+        : "";
       const department = hasDepartmentColumn
         ? normalizeDepartment(rawDepartment)
         : null;
@@ -1013,7 +1015,7 @@ function parseSubjectRows(rows, warnings = []) {
         roomType,
         duration: toNumber(r[9], 1.5),
         instructor,
-        status: statusRaw || 'Assigned',
+        status: statusRaw || "Assigned",
         room: "",
         time: timeString,
         time_start: parsedTime?.timeStart || null,
@@ -1201,8 +1203,8 @@ export function parseImportCsv(csvText, type) {
         scheduleAssignments: rows.map((row) => ({
           section_id:
             String(row.section_id ?? row.sectionId ?? "").trim() || null,
-          course_code: row.code,
-          course_title: row.title,
+          subject_code: row.code,
+          subject_title: row.title,
           section: row.section,
           academic_year: row.academicYear,
           semester: row.semester,
@@ -1215,7 +1217,9 @@ export function parseImportCsv(csvText, type) {
           pattern: row.pattern,
           time_display: row.time,
           duration: Number(row.duration ?? 0),
-          status: row.status ? normalizeAssignmentStatus(row.status) : 'Assigned',
+          status: row.status
+            ? normalizeAssignmentStatus(row.status)
+            : "Assigned",
         })),
         instructorSections,
       },
@@ -1444,7 +1448,7 @@ export function parseImportCsv(csvText, type) {
       schedules,
       warnings,
       dbRows: schedules.map((row) => ({
-        course_code: row.code,
+        subject_code: row.code,
         section: row.section,
         academic_year: row.academicYear,
         semester: row.semester,

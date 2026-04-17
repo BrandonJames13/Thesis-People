@@ -73,7 +73,7 @@ function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
               {items.map((conflict, idx) => (
                 <li key={idx} style={{ marginBottom: "4px", fontSize: "12px" }}>
                   {conflict.conflictReason ||
-                    `${conflict.course_code || ""} - Unable to assign`}
+                    `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
                 </li>
               ))}
             </ul>
@@ -554,7 +554,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
       // ─── Safeguard: Prevent persisting assignments with UNKNOWN subjects ────
       const hasUnknownSubjects = result.scheduleAssignments.some((a) => {
-        const code = String(a.course_code ?? "")
+        const code = String(a.subject_code ?? a.course_code ?? "")
           .trim()
           .toUpperCase();
         return code.startsWith("UNKNOWN");
@@ -591,7 +591,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
     // Double-check for UNKNOWN subjects before saving
     const hasUnknownSubjects = pendingAssignments.some((a) => {
-      const code = String(a.course_code ?? "")
+      const code = String(a.subject_code ?? a.course_code ?? "")
         .trim()
         .toUpperCase();
       return code.startsWith("UNKNOWN");

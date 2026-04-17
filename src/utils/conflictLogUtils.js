@@ -33,7 +33,7 @@ export function mapReallocationEntryToConflictLog(entry) {
 
   return {
     assignment_id: String(entry.assignmentId ?? "").trim() || null,
-    course_code: resolvedCourseCode,
+    subject_code: resolvedCourseCode,
     conflict_type: normalizeConflictType(entry.type),
     type_label: String(entry.typeLabel ?? "").trim() || null,
     from_assignment: buildAssignmentSnapshot(entry.fromDetail, entry.from),

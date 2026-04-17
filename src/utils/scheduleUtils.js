@@ -378,8 +378,8 @@ export function buildNormalizedAssignment({
     subject_id: sectionRow.subjectId,
     room_id: room?.id || null,
     instructor_id: instructorId || null,
-    course_code: getAssignmentSubjectCode(sectionRow),
-    course_title: sectionRow.title,
+    subject_code: getAssignmentSubjectCode(sectionRow),
+    subject_title: sectionRow.title,
     section: sectionRow.section,
     program: sectionRow.program,
     year: sectionRow.year,
@@ -1599,7 +1599,7 @@ function validateAssignmentReferences(
 
   // Check subject validity
   const subjectCode = String(
-    assignment.course_code ?? assignment.subject_code ?? "",
+    assignment.subject_code ?? assignment.course_code ?? "",
   ).trim();
   const subjectId = String(assignment.subject_id ?? "").trim();
 
@@ -2139,7 +2139,7 @@ export function runAutoSchedule({
           resolveRoomByNumber(getAssignmentRoom(assignment), newRooms)?.id ||
           null,
         instructor_id: getAssignmentInstructorId(assignment),
-        course_code: getAssignmentSubjectCode(assignment),
+        subject_code: getAssignmentSubjectCode(assignment),
         room_number: getAssignmentRoom(assignment),
         instructor_name: getAssignmentInstructorName(assignment),
         pattern: getPatternForRow(assignment, pattern),
@@ -2483,7 +2483,7 @@ export function applyManualAssignments({
         ).trim(),
         room_id: resolveRoomByNumber(assignment.room, rooms)?.id || null,
         instructor_id: getAssignmentInstructorId(assignment),
-        course_code: getAssignmentSubjectCode(assignment),
+        subject_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
         instructor_name: getAssignmentInstructorName(assignment),
         pattern: getPatternForRow(assignment, "MON,FRI"),
