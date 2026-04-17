@@ -238,9 +238,24 @@ function normalizeIdentityPart(value) {
 }
 
 export function getAssignmentSubjectCode(row) {
-  return String(row?.code ?? row?.subjectCode ?? row?.subject_code ?? "")
+  // Enhanced lookup paths: code → subjectCode → subject_code → subject.code → subject_id → subject_title
+  let result = String(
+    row?.code ??
+      row?.subjectCode ??
+      row?.subject_code ??
+      row?.subject?.code ??
+      row?.subject_id ??
+      "",
+  )
     .trim()
     .toUpperCase();
+
+  // Fallback: if subject_title exists but no code found, use first 5 chars of title
+  if (!result && row?.subject_title) {
+    result = String(row.subject_title).trim().substring(0, 5).toUpperCase();
+  }
+
+  return result;
 }
 
 export function getAssignmentSection(row) {
@@ -1418,6 +1433,148 @@ function validateAndLookupSubject(code, subjectByCode) {
 }
 
 /**
+ * Builds an enhanced subject lookup index with multiple mapping strategies.
+ * Creates maps by code AND by id for more flexible subject resolution.
+ *
+ * @param {Array} subjects - Array of subject objects
+ * @returns {object} Object with subjectByCode and subjectById maps
+ */
+function buildSubjectLookupIndex(subjects) {
+  const subjectByCode = new Map();
+  const subjectById = new Map();
+
+  (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+    if (subject?.code) {
+      const normalizedCode = String(subject.code).trim().toUpperCase();
+      subjectByCode.set(normalizedCode, subject);
+    }
+
+    if (subject?.id) {
+      const normalizedId = String(subject.id).trim().toUpperCase();
+      subjectById.set(normalizedId, subject);
+    }
+  });
+
+  return { subjectByCode, subjectById };
+}
+
+/**
+ * Tracks subject resolution failures during scheduling for debugging.
+ * Captures unresolved identifiers and raw assignment properties.
+ */
+class SubjectResolutionCache {
+  constructor() {
+    this.failures = new Map(); // key: unresolved identifier, value: { count, examples }
+    this.failuresByRawValue = new Map(); // key: raw value from assignment, value: details
+  }
+
+  recordFailure(identifier, rawValue, assignment) {
+    // Track by normalized identifier
+    if (!this.failures.has(identifier)) {
+      this.failures.set(identifier, { count: 0, examples: [] });
+    }
+    const failure = this.failures.get(identifier);
+    failure.count += 1;
+    if (failure.examples.length < 2) {
+      failure.examples.push({
+        rawValue,
+        sectionId: assignment?.sectionId,
+        row: `${assignment?.code}::${assignment?.section}`,
+      });
+    }
+
+    // Track by raw value for detailed debugging
+    if (!this.failuresByRawValue.has(rawValue)) {
+      this.failuresByRawValue.set(rawValue, { count: 0, sources: [] });
+    }
+    const rawFailure = this.failuresByRawValue.get(rawValue);
+    rawFailure.count += 1;
+    if (rawFailure.sources.length < 1) {
+      rawFailure.sources.push(assignment?.sectionId || "unknown");
+    }
+  }
+
+  getReport() {
+    if (this.failures.size === 0) {
+      return null;
+    }
+
+    const summary = [];
+    this.failures.forEach((failure, identifier) => {
+      summary.push({
+        identifier,
+        count: failure.count,
+        examples: failure.examples,
+      });
+    });
+
+    return {
+      totalFailures: Array.from(this.failures.values()).reduce(
+        (sum, f) => sum + f.count,
+        0,
+      ),
+      uniqueIdentifiers: this.failures.size,
+      failures: summary,
+    };
+  }
+}
+
+/**
+ * Generates a human-readable report of subject resolution failures.
+ * Called after scheduling to provide debugging insights.
+ *
+ * @param {SubjectResolutionCache} cache - The resolution cache with failure data
+ * @param {number} conflictCount - Total conflicts generated
+ * @returns {void} Logs report to console
+ */
+function generateSubjectResolutionReport(cache, conflictCount) {
+  const report = cache.getReport();
+  if (!report) {
+    console.log(
+      "[scheduleUtils] [OK] Subject resolution: All subjects resolved successfully.",
+    );
+    return;
+  }
+
+  console.warn("[scheduleUtils] [WARN] Subject Resolution Report:");
+  console.warn(
+    "  Total Unresolved: " +
+      report.totalFailures +
+      " assignments | Unique Identifiers: " +
+      report.uniqueIdentifiers,
+  );
+
+  report.failures.forEach(({ identifier, count, examples }) => {
+    console.warn(
+      "  [X] '" +
+        identifier +
+        "' (" +
+        count +
+        " occurrence" +
+        (count > 1 ? "s" : "") +
+        ")",
+    );
+    if (examples.length > 0) {
+      examples.forEach((ex) => {
+        console.warn(
+          "    |-- Section: " +
+            (ex.sectionId ?? "unknown") +
+            " | " +
+            ex.row +
+            " | Raw: '" +
+            ex.rawValue +
+            "'",
+        );
+      });
+    }
+  });
+
+  console.warn(
+    "Total conflicts created from unresolved subjects: " + conflictCount,
+  );
+}
+
+/**
  * Validates that an assignment references valid subjects, rooms, and instructors.
  * Used to detect UNKNOWN subject codes and invalid foreign key references before persistence.
  *
@@ -1540,14 +1697,13 @@ export function runAutoSchedule({
 
   const weights = getSoftWeights();
   const newRooms = (Array.isArray(rooms) ? rooms : []).map((r) => ({ ...r }));
-  const subjectByCode = new Map(
-    (Array.isArray(subjects) ? subjects : []).map((subject) => [
-      String(subject?.code ?? "")
-        .trim()
-        .toUpperCase(),
-      subject,
-    ]),
-  );
+
+  // ── Build enhanced subject lookup index ────────────────────────────────────
+  const { subjectByCode, subjectById } = buildSubjectLookupIndex(subjects);
+
+  // ── Initialize subject resolution failure tracking ────────────────────────
+  const resolutionCache = new SubjectResolutionCache();
+
   const instructorPoolById = buildInstructorPoolMap(instructors);
   const eligibleInstructorIdsBySubjectId =
     buildSubjectIdToEligibleInstructors(instructorSubjects);
@@ -1617,6 +1773,16 @@ export function runAutoSchedule({
 
     // If subject code exists but was not found in database, mark as conflict
     if (courseSubjectCode && !subjectLookup.found) {
+      // Capture raw identifier for debugging
+      const rawIdentifier =
+        course?.code ?? course?.subjectCode ?? course?.subject_code ?? "???";
+
+      resolutionCache.recordFailure(courseSubjectCode, rawIdentifier, course);
+
+      console.warn(
+        `[scheduleUtils] Subject resolution failed: '${courseSubjectCode}' (raw: '${rawIdentifier}') for section ${course.sectionId}`,
+      );
+
       generatedAssignments.push({
         ...course,
         room: "",
@@ -1627,7 +1793,7 @@ export function runAutoSchedule({
         instructorId: "",
         instructor_id: "",
         status: "Conflict",
-        conflictReason: `Subject not found: ${courseSubjectCode}`,
+        conflictReason: `Subject not found: '${courseSubjectCode}' (raw identifier: '${rawIdentifier}')`,
       });
       conflictCount++;
       return;
@@ -2113,6 +2279,9 @@ export function runAutoSchedule({
   if (duplicateTrimmed > 0) {
     message += ` ${duplicateTrimmed} duplicate section-term row${duplicateTrimmed !== 1 ? "s were" : " was"} collapsed to satisfy section/term uniqueness.`;
   }
+
+  // ── Generate subject resolution report for debugging ──────────────────────
+  generateSubjectResolutionReport(resolutionCache, updatedConflictCount);
 
   return {
     rooms: newRooms,
