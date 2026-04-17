@@ -129,8 +129,12 @@ export function AddRoomModal({
     const trimmedCapacity = String(capacity ?? "").trim();
 
     // Validate basic required fields
-    if (!trimmedNumber || !normalizedType) {
-      setError("Please fill in all fields correctly.");
+    if (!trimmedNumber) {
+      setError("Room name/number is required.");
+      return;
+    }
+    if (!normalizedType) {
+      setError("Room type must be selected.");
       return;
     }
 
@@ -142,6 +146,15 @@ export function AddRoomModal({
     // Check for NaN or invalid capacity
     if (trimmedCapacity && (isNaN(cap) || cap <= 0)) {
       setError("Capacity must be a positive number.");
+      return;
+    }
+
+    // Validate capacity against type-specific limit
+    const { max: capacityMax } = getRoomCapacityLimit(normalizedType);
+    if (cap > capacityMax) {
+      setError(
+        `Capacity cannot exceed ${capacityMax} for ${normalizedType}. Got: ${cap}`,
+      );
       return;
     }
 
@@ -204,6 +217,25 @@ export function AddRoomModal({
               (e.g. L101) &nbsp;·&nbsp; <strong>Non-standard:</strong>{" "}
               Descriptive names (e.g. Accreditation, AVR)
             </div>
+            {detectedType && (
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--text3)",
+                  padding: "6px 10px",
+                  backgroundColor: "rgba(76, 175, 80, 0.1)",
+                  border: "1px solid rgba(76, 175, 80, 0.3)",
+                  borderRadius: 4,
+                }}
+              >
+                📍 <strong>Detected:</strong> {detectedType}
+                {type && type !== detectedType && (
+                  <span style={{ marginLeft: 6, color: "var(--orange)" }}>
+                    (⚠ overriding with "{type}")
+                  </span>
+                )}
+              </div>
+            )}
             <select
               className="search-input"
               style={{ width: "100%" }}
@@ -263,6 +295,21 @@ export function AddRoomModal({
             {error && (
               <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {error}</div>
             )}
+            {detectedType && type && type !== detectedType && (
+              <div
+                style={{
+                  color: "var(--orange)",
+                  fontSize: 12,
+                  padding: "8px 10px",
+                  backgroundColor: "rgba(255, 152, 0, 0.1)",
+                  border: "1px solid rgba(255, 152, 0, 0.3)",
+                  borderRadius: 4,
+                }}
+              >
+                ℹ️ <strong>Override Confirmed:</strong> This room will be saved
+                as <strong>"{type}"</strong> (detected: "{detectedType}")
+              </div>
+            )}
           </div>
           <div
             style={{
@@ -289,8 +336,8 @@ export function AddRoomModal({
         onConfirm={handleConfirmTypeOverride}
         title="Room Type Mismatch"
         message={
-          detectedType
-            ? `The room name "${number.trim()}" suggests type "${detectedType}", but you selected "${pendingTypeSelection || ""}". Are you sure you want to continue with this override?`
+          detectedType && pendingTypeSelection
+            ? `The room name "${number.trim()}" suggests type "${detectedType}", but you selected "${pendingTypeSelection}". The system will save this room as type "${pendingTypeSelection}" instead. Are you sure you want to override?`
             : "Type conflict detected. Continue?"
         }
         confirmLabel="✓ Continue Override"
