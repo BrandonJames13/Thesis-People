@@ -26,7 +26,7 @@ const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
   "cp2",
 ];
 
-const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room"]);
+const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room", "CISCO"]);
 const CISCO_ROOM_TYPE = "CISCO";
 
 /**

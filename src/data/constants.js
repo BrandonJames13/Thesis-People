@@ -262,3 +262,40 @@ export function isValidRoomNumber(number) {
     .toUpperCase();
   return ROOM_NUMBER_PATTERN.test(trimmed);
 }
+
+/**
+ * Detects special room types based on room name keywords.
+ * Performs case-insensitive partial matching with priority-based detection.
+ *
+ * Priority order: AVR > Accreditation > CISCO
+ *
+ * @param {string} roomName - The room name to check (e.g., "Lab-AVR-001", "ACCREDITATION_ROOM_5")
+ * @returns {string|null} The canonical room type ("AVR", "Accreditation Room", "CISCO") or null if no match
+ * @example
+ * detectSpecialRoomType("Lab-AVR-002") // → "AVR"
+ * detectSpecialRoomType("Accred-Room-105") // → "Accreditation Room"
+ * detectSpecialRoomType("CISCO-Lab-001") // → "CISCO"
+ * detectSpecialRoomType("Lecture-Hall-001") // → null
+ */
+export function detectSpecialRoomType(roomName) {
+  const normalized = String(roomName ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) return null;
+
+  // Check in priority order: AVR > Accreditation > CISCO
+  if (normalized.includes("avr")) {
+    return "AVR";
+  }
+
+  if (normalized.includes("accreditation")) {
+    return "Accreditation Room";
+  }
+
+  if (normalized.includes("cisco")) {
+    return "CISCO";
+  }
+
+  return null;
+}
