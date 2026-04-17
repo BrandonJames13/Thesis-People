@@ -3,7 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import { useData } from "../context/DataContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
-import { validateRoomPayload } from "../utils/roomUtils";
+import {
+  validateRoomPayload,
+  extractRoomTypeFromName,
+} from "../utils/roomUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
 import { supabase } from "../lib/supabaseClient";
@@ -11,6 +14,7 @@ import {
   getRoomCapacityLimit,
   normalizeRoomType,
   sanitizeRoomCapacity,
+  detectSpecialRoomType,
 } from "../data/constants";
 
 const WINGS = [
@@ -91,7 +95,16 @@ export default function RoomsPage() {
       return false;
     }
 
-    const normalizedType = normalizeRoomType(room.type);
+    // First normalize the type provided by form
+    let normalizedType = normalizeRoomType(room.type);
+
+    // Check if room name auto-detects a special type
+    const detectedSpecialType = detectSpecialRoomType(room.number);
+    if (detectedSpecialType && detectedSpecialType !== normalizedType) {
+      // Override with detected special type for consistency
+      normalizedType = detectedSpecialType;
+    }
+
     const normalizedCapacity = sanitizeRoomCapacity(
       normalizedType,
       room.capacity,
@@ -132,7 +145,16 @@ export default function RoomsPage() {
       return false;
     }
 
-    const normalizedType = normalizeRoomType(room.type);
+    // First normalize the type provided by form
+    let normalizedType = normalizeRoomType(room.type);
+
+    // Check if room name auto-detects a special type
+    const detectedSpecialType = detectSpecialRoomType(room.number);
+    if (detectedSpecialType && detectedSpecialType !== normalizedType) {
+      // Override with detected special type for consistency
+      normalizedType = detectedSpecialType;
+    }
+
     const normalizedCapacity = sanitizeRoomCapacity(
       normalizedType,
       room.capacity,
