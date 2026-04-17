@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import { useData } from "../context/DataContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
-import { validateRoomPayload } from "../utils/roomUtils";
+import {
+  validateRoomPayload,
+  extractRoomTypeFromName,
+} from "../utils/roomUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
+import { supabase } from "../lib/supabaseClient";
 import {
   getRoomCapacityLimit,
   normalizeRoomType,
   sanitizeRoomCapacity,
+  detectSpecialRoomType,
 } from "../data/constants";
 
 const WINGS = [
@@ -24,7 +28,11 @@ const PAGE_SIZE = 12;
 export default function RoomsPage() {
   const { isAdmin } = useAuth();
   const { showNotification } = useNotification();
-  const { isBootstrapping, isGenerationInProgress } = useData();
+  const {
+    isBootstrapping,
+    isGenerationInProgress,
+    clearRooms: clearRoomsData,
+  } = useData();
 
   const notifyDbError = useCallback(
     (error, operation, entity = "room") => {
@@ -46,6 +54,7 @@ export default function RoomsPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingRoom, setEditingRoom] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [page, setPage] = useState(1);
 
   const fetchRooms = useCallback(async () => {
@@ -86,7 +95,16 @@ export default function RoomsPage() {
       return false;
     }
 
-    const normalizedType = normalizeRoomType(room.type);
+    // First normalize the type provided by form
+    let normalizedType = normalizeRoomType(room.type);
+
+    // Check if room name auto-detects a special type
+    const detectedSpecialType = detectSpecialRoomType(room.number);
+    if (detectedSpecialType && detectedSpecialType !== normalizedType) {
+      // Override with detected special type for consistency
+      normalizedType = detectedSpecialType;
+    }
+
     const normalizedCapacity = sanitizeRoomCapacity(
       normalizedType,
       room.capacity,
@@ -127,7 +145,16 @@ export default function RoomsPage() {
       return false;
     }
 
-    const normalizedType = normalizeRoomType(room.type);
+    // First normalize the type provided by form
+    let normalizedType = normalizeRoomType(room.type);
+
+    // Check if room name auto-detects a special type
+    const detectedSpecialType = detectSpecialRoomType(room.number);
+    if (detectedSpecialType && detectedSpecialType !== normalizedType) {
+      // Override with detected special type for consistency
+      normalizedType = detectedSpecialType;
+    }
+
     const normalizedCapacity = sanitizeRoomCapacity(
       normalizedType,
       room.capacity,
@@ -208,6 +235,22 @@ export default function RoomsPage() {
     );
     showNotification(`${deleteTarget.number} deleted.`);
     setDeleteTarget(null);
+  }
+
+  async function handleClearRoomsConfirm() {
+    if (!isAdmin) {
+      showNotification("Admin access required for this action.");
+      return;
+    }
+
+    const result = await clearRoomsData();
+    if (result.success) {
+      setRooms([]);
+      showNotification("✓ All rooms cleared successfully.");
+    } else {
+      showNotification(`⚠ ${result.error?.details ?? result.error}`);
+    }
+    setShowClearConfirm(false);
   }
 
   const filtered = rooms.filter((room) => {
@@ -307,6 +350,14 @@ export default function RoomsPage() {
           {isAdmin && (
             <button className="btn btn-primary" onClick={openAddModal}>
               + Add Room
+            </button>
+          )}
+          {isAdmin && (
+            <button
+              className="btn btn-secondary"
+              onClick={() => setShowClearConfirm(true)}
+            >
+              🗑 Clear All
             </button>
           )}
         </div>
@@ -602,6 +653,16 @@ export default function RoomsPage() {
         danger
         onConfirm={handleDeleteConfirm}
         onClose={() => setDeleteTarget(null)}
+      />
+
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        title="🗑 Clear All Rooms"
+        message="Are you sure you want to delete ALL rooms from the database? This will also delete all related schedule assignments and conflicts. This action cannot be undone."
+        confirmLabel="🗑 Yes, Delete All"
+        danger
+        onConfirm={handleClearRoomsConfirm}
+        onClose={() => setShowClearConfirm(false)}
       />
     </div>
   );

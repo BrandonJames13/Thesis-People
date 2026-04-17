@@ -3,6 +3,8 @@ import {
   ROOM_TYPE_LABELS,
   ROOM_STATUSES,
   getRoomCapacityLimit,
+  detectSpecialRoomType,
+  normalizeRoomType,
 } from "../data/constants";
 
 const WING_CODES = {
@@ -148,4 +150,58 @@ export function validateRoomPayload(payload) {
   }
 
   return null; // Valid
+}
+
+/**
+ * Extracts and returns the room type detected from a room name.
+ * Uses keyword matching to identify special room types (AVR, Accreditation Room, CISCO).
+ * Returns the canonical room type or null if no special type detected.
+ *
+ * @param {string} roomName - The room name to analyze (e.g., "AVR-Lab", "Accreditation Room", "CISCO-001")
+ * @returns {string|null} The detected room type ("AVR", "Accreditation Room", "CISCO") or null if not detected
+ * @example
+ * extractRoomTypeFromName("AVR-Lab") // → "AVR"
+ * extractRoomTypeFromName("Accreditation") // → "Accreditation Room"
+ * extractRoomTypeFromName("CISCO-001") // → "CISCO"
+ * extractRoomTypeFromName("L101") // → null
+ */
+export function extractRoomTypeFromName(roomName) {
+  return detectSpecialRoomType(roomName);
+}
+
+/**
+ * Detects if there's a conflict between user's selected type and the type auto-detected from room name.
+ * Returns detailed conflict information.
+ *
+ * @param {string} roomName - The room name to check
+ * @param {string} selectedType - The type the user selected
+ * @returns {Object} Object with properties:
+ *   - conflictFound {boolean} - Whether a conflict exists
+ *   - detectedType {string|null} - The type detected from room name (or null if none)
+ * @example
+ * shouldWarnRoomTypeConflict("AVR-Lab", "Lecture")
+ * // → { conflictFound: true, detectedType: "AVR" }
+ *
+ * shouldWarnRoomTypeConflict("AVR-Lab", "AVR")
+ * // → { conflictFound: false, detectedType: "AVR" }
+ *
+ * shouldWarnRoomTypeConflict("L101", "Lecture")
+ * // → { conflictFound: false, detectedType: null }
+ */
+export function shouldWarnRoomTypeConflict(roomName, selectedType) {
+  const detectedType = extractRoomTypeFromName(roomName);
+  const normalizedSelected = normalizeRoomType(selectedType, "");
+
+  // No conflict if no special type detected
+  if (!detectedType) {
+    return { conflictFound: false, detectedType: null };
+  }
+
+  // No conflict if user selected matches detected type
+  if (detectedType === normalizedSelected) {
+    return { conflictFound: false, detectedType };
+  }
+
+  // Conflict found: detected type doesn't match user's selection
+  return { conflictFound: true, detectedType };
 }

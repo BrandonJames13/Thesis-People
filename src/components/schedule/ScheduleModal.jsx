@@ -12,6 +12,121 @@ import {
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
+/**
+ * ConflictSummary component displays conflicts from schedule generation results.
+ * Shows count of conflicts and first 5-10 conflict reasons grouped by type.
+ */
+function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
+  if (!Array.isArray(conflicts) || conflicts.length === 0) {
+    return null;
+  }
+
+  // Group conflicts by type for better display
+  const groupedConflicts = {};
+  conflicts.slice(0, 10).forEach((conflict) => {
+    const type = conflict.type || "Unknown";
+    if (!groupedConflicts[type]) {
+      groupedConflicts[type] = [];
+    }
+    groupedConflicts[type].push(conflict);
+  });
+
+  return (
+    <div
+      className="conflict-summary"
+      style={{
+        padding: "16px",
+        marginBottom: "16px",
+        backgroundColor: "#fff3cd",
+        border: "1px solid #ffc107",
+        borderRadius: "4px",
+        color: "#333",
+      }}
+    >
+      <h4 style={{ marginTop: 0, color: "#d9534f" }}>
+        ⚠ {conflicts.length} Conflict{conflicts.length !== 1 ? "s" : ""}{" "}
+        Detected
+      </h4>
+      <p style={{ marginBottom: "12px", fontSize: "14px", color: "#333" }}>
+        Some sections could not be scheduled due to missing or invalid data. You
+        can review these conflicts in the Conflicts page to manually resolve
+        them.
+      </p>
+
+      <div
+        style={{
+          marginBottom: "12px",
+          fontSize: "13px",
+          maxHeight: "200px",
+          overflowY: "auto",
+          color: "#333",
+        }}
+      >
+        {Object.entries(groupedConflicts).map(([type, items]) => (
+          <div key={type} style={{ marginBottom: "8px" }}>
+            <strong style={{ color: "#333" }}>{type}:</strong>
+            <ul
+              style={{
+                marginTop: "4px",
+                marginBottom: "8px",
+                paddingLeft: "20px",
+                color: "#333",
+              }}
+            >
+              {items.map((conflict, idx) => (
+                <li
+                  key={idx}
+                  style={{
+                    marginBottom: "4px",
+                    fontSize: "12px",
+                    color: "#333",
+                  }}
+                >
+                  {conflict.conflictReason ||
+                    `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "flex", gap: "8px" }}>
+        <button
+          onClick={onReview}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            backgroundColor: "#0066cc",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Review in Conflicts Page
+        </button>
+        <button
+          onClick={onSaveAnyway}
+          style={{
+            flex: 1,
+            padding: "8px 12px",
+            backgroundColor: "#6c757d",
+            color: "white",
+            border: "none",
+            borderRadius: "4px",
+            cursor: "pointer",
+            fontSize: "14px",
+          }}
+        >
+          Save Anyway
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function ScheduleModal({ onClose, onRunComplete }) {
   const {
     rooms,
@@ -23,6 +138,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     scheduleAssignments,
     updateRooms,
     updateScheduleAssignments,
+    clearScheduleAssignments,
     setIsGenerationInProgress,
   } = useData();
   const { showNotification } = useNotification();
@@ -48,10 +164,16 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const [manualDurationH, setManualDurationH] = useState(1);
   const [manualDurationM, setManualDurationM] = useState(30);
   const [manualTime, setManualTime] = useState("07:00");
-  const [manualPattern, setManualPattern] = useState("MWF");
+  const [manualPattern, setManualPattern] = useState("MON,FRI");
   const [manualEntries, setManualEntries] = useState([]);
   const [conflictMsg, setConflictMsg] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // State for handling conflicts from auto-generation
+  const [generationConflicts, setGenerationConflicts] = useState([]);
+  const [showConflictSummary, setShowConflictSummary] = useState(false);
+  const [pendingAssignments, setPendingAssignments] = useState(null);
+
   const isMountedRef = useRef(true);
 
   const sectionRows = useMemo(() => {
@@ -66,6 +188,9 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     );
 
     const rows = [];
+    console.log(
+      `[ScheduleModal] Starting sectionRows creation with ${availableSections.length} raw sections`,
+    );
 
     availableSections.forEach((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
@@ -78,6 +203,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       const baseRow = {
         ...section,
         code: section.subjectCode,
+        subjectCode: section.subjectCode, // Explicitly preserve for Lec/Lab splits
         section: section.section,
         sectionId: section.sectionId,
         baseSectionId, // Track the original DB section_id separately
@@ -129,6 +255,20 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       } else {
         rows.push({ ...baseRow, roomType });
       }
+    });
+
+    console.log(
+      `[ScheduleModal] sectionRows creation complete: ${availableSections.length} raw sections → ${rows.length} rows after Lec/Lab splitting`,
+    );
+    if (rows.length === 0) {
+      console.warn(
+        "[ScheduleModal] WARNING: sectionRows is empty after creation!",
+      );
+    }
+    rows.forEach((row) => {
+      console.debug(
+        `  [ScheduleModal] Row: ${row.sectionId} | ${row.code} | ${row.section} | ${row.title} | RoomType: ${row.roomType}`,
+      );
     });
 
     return rows;
@@ -243,7 +383,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       Number(source?.duration ?? selectedManualSection.duration ?? 1.5) || 1.5;
     const nextHours = Math.floor(duration);
     const nextMinutes = Math.round((duration - nextHours) * 60);
-    const nextPattern = String(source?.pattern ?? "").trim() || "MWF";
+    const nextPattern = String(source?.pattern ?? "").trim() || "MON,FRI";
     const importedStart = extractStartTime24(source, "");
 
     setManualDurationH(nextHours);
@@ -334,6 +474,26 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       return;
     }
 
+    // STEP 1: Clear existing schedules before generating new ones
+    try {
+      showNotification("Clearing existing schedules...");
+      const clearResult = await clearScheduleAssignments();
+
+      if (!clearResult.success) {
+        const errorMsg = clearResult.error?.message || "Unknown error";
+        showNotification(`⚠ Failed to clear existing schedules: ${errorMsg}`);
+        return;
+      }
+
+      showNotification("Existing schedules cleared, generating new ones...");
+    } catch (clearError) {
+      showNotification(
+        `⚠ Failed to clear existing schedules: ${clearError.message}`,
+      );
+      return;
+    }
+
+    // STEP 2: Set generation state and generate new schedule
     setIsGenerating(true);
     setIsGenerationInProgress(true);
 
@@ -364,7 +524,11 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       });
 
       if (result.error) {
-        alert(result.error);
+        console.error(
+          `[ScheduleModal] Schedule generation error: ${result.error}`,
+        );
+        const diagnosticMessage = `${result.error}\n\nDiagnostics:\n- Sections before generation: ${sectionRows.length}\n- Check browser console (F12) for detailed logs starting with "[ScheduleModal]" and "[runAutoSchedule]"\n\nCommon causes:\n• No sections imported into the schedule\n• All active days are deselected\n• All sections have incompatible patterns (e.g., Lec/Lab split sections with no matching room types)\n• All sections have been assigned time conflicts`;
+        alert(diagnosticMessage);
         return;
       }
 
@@ -377,7 +541,51 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       });
 
       updateRooms(mergedRooms);
-      updateScheduleAssignments(result.scheduleAssignments);
+
+      // ─── Check for conflicts in the result ────────────────────────────────
+      const hasConflicts =
+        Array.isArray(result.scheduleAssignments) &&
+        result.scheduleAssignments.some(
+          (a) => String(a.status || "").trim() === "Conflict",
+        );
+
+      if (hasConflicts) {
+        // Extract conflicts for display
+        const conflictAssignments = result.scheduleAssignments.filter(
+          (a) => String(a.status || "").trim() === "Conflict",
+        );
+        setGenerationConflicts(conflictAssignments);
+        setPendingAssignments(result.scheduleAssignments);
+        setShowConflictSummary(true);
+        showNotification(
+          `Generated schedule with ${conflictAssignments.length} conflict${conflictAssignments.length !== 1 ? "s" : ""}`,
+        );
+        return;
+      }
+
+      // ─── Safeguard: Prevent persisting assignments with UNKNOWN subjects ────
+      const hasUnknownSubjects = result.scheduleAssignments.some((a) => {
+        const code = String(a.subject_code ?? a.course_code ?? "")
+          .trim()
+          .toUpperCase();
+        return code.startsWith("UNKNOWN");
+      });
+
+      if (hasUnknownSubjects) {
+        alert(
+          "⚠ Invalid assignments detected: Some assignments reference UNKNOWN subject codes. Schedule generation may have failed. Please check browser console and re-generate.",
+        );
+        return;
+      }
+
+      try {
+        await updateScheduleAssignments(result.scheduleAssignments);
+        showNotification("Schedule saved to database");
+      } catch (persistError) {
+        showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
+        return;
+      }
+
       if (onRunComplete) onRunComplete();
       onClose();
       showNotification(result.message);
@@ -386,6 +594,53 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         setIsGenerating(false);
         setIsGenerationInProgress(false);
       }
+    }
+  };
+
+  const handleSaveWithConflicts = async () => {
+    if (!pendingAssignments) return;
+
+    // Double-check for UNKNOWN subjects before saving
+    const hasUnknownSubjects = pendingAssignments.some((a) => {
+      const code = String(a.subject_code ?? a.course_code ?? "")
+        .trim()
+        .toUpperCase();
+      return code.startsWith("UNKNOWN");
+    });
+
+    if (hasUnknownSubjects) {
+      alert(
+        "⚠ Cannot save: Assignments contain UNKNOWN subject codes. Please review and re-generate.",
+      );
+      return;
+    }
+
+    try {
+      await updateScheduleAssignments(pendingAssignments);
+      setShowConflictSummary(false);
+      setGenerationConflicts([]);
+      setPendingAssignments(null);
+      showNotification(
+        "Schedule saved to database with conflicts for manual review",
+      );
+
+      if (onRunComplete) onRunComplete();
+      onClose();
+    } catch (persistError) {
+      showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
+    }
+  };
+
+  const handleReviewConflicts = () => {
+    // Navigate to Conflicts page - signal parent to navigate
+    setShowConflictSummary(false);
+    setGenerationConflicts([]);
+    setPendingAssignments(null);
+
+    // Use onClose callback with a special marker to indicate navigation to conflicts page
+    // The parent component should handle this by navigating to the ConflictsPage
+    if (onClose && typeof onClose === "function") {
+      onClose({ navigationTarget: "conflicts" });
     }
   };
 
@@ -451,7 +706,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     setManualEntries((prev) => prev.filter((_, idx) => idx !== i));
   };
 
-  const handleSubmitManual = () => {
+  const handleSubmitManual = async () => {
     const toSave = [...manualEntries];
     if (selectedManualSection && manualRoom && manualTime) {
       const duration = manualDurationH + manualDurationM / 60;
@@ -519,7 +774,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       return;
     }
 
-    updateScheduleAssignments(result.scheduleAssignments);
+    try {
+      await updateScheduleAssignments(result.scheduleAssignments);
+      showNotification("Assignment saved to database");
+    } catch (persistError) {
+      showNotification(`⚠ Failed to save assignment: ${persistError.message}`);
+      return;
+    }
+
     if (onRunComplete) onRunComplete();
     onClose();
 
@@ -598,6 +860,16 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
             ✏ Manual Entry
           </button>
         </div>
+
+        {showConflictSummary && (
+          <div style={{ padding: "20px 28px" }}>
+            <ConflictSummary
+              conflicts={generationConflicts}
+              onReview={handleReviewConflicts}
+              onSaveAnyway={handleSaveWithConflicts}
+            />
+          </div>
+        )}
 
         {mode === "auto" && (
           <div
@@ -727,12 +999,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
                   className="search-input"
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
-                  <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                  <option value="MON,FRI">MON,FRI (Mon · Fri)</option>
                   <option value="TTH">TTH (Tue · Thu)</option>
+                  <option value="WF">WF (Wed · Fri)</option>
+                  <option value="MON,SAT">MON,SAT (Mon · Sat)</option>
                   <option value="MW">MW (Mon · Wed)</option>
                   <option value="TF">TF (Tue · Fri)</option>
+                  <option value="WED,FRI">WED,FRI (Wed · Fri)</option>
                   <option value="SAT">SAT (Saturday only)</option>
-                  <option value="DAILY">Daily (Mon–Sat)</option>
                 </select>
               </div>
             </div>
@@ -1001,12 +1275,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
                   className="search-input"
                   style={{ width: "100%", boxSizing: "border-box" }}
                 >
-                  <option value="MWF">MWF (Mon · Wed · Fri)</option>
+                  <option value="MON,FRI">MON,FRI (Mon · Fri)</option>
                   <option value="TTH">TTH (Tue · Thu)</option>
+                  <option value="WF">WF (Wed · Fri)</option>
+                  <option value="MON,SAT">MON,SAT (Mon · Sat)</option>
                   <option value="MW">MW (Mon · Wed)</option>
                   <option value="TF">TF (Tue · Fri)</option>
+                  <option value="WED,FRI">WED,FRI (Wed · Fri)</option>
                   <option value="SAT">SAT (Saturday only)</option>
-                  <option value="DAILY">Daily (Mon–Sat)</option>
                   <option value="MON">Monday only</option>
                   <option value="TUE">Tuesday only</option>
                   <option value="WED">Wednesday only</option>

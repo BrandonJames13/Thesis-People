@@ -12,25 +12,36 @@ const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 // ─── TSU Scheduling Rules ─────────────────────────────────────────────────────
 
 const NIGHT_START_MIN = 18 * 60; // 6:00 PM = 1080 min
-const DAY_END_MIN = 18 * 60;     // 6:00 PM = 1080 min
+const DAY_END_MIN = 18 * 60; // 6:00 PM = 1080 min
 
 const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
-  "ojt", "practicum", "fts", "thesis", "capstone",
-  "cp 1", "cp 2", "cp1", "cp2",
+  "ojt",
+  "practicum",
+  "fts",
+  "thesis",
+  "capstone",
+  "cp 1",
+  "cp 2",
+  "cp1",
+  "cp2",
 ];
 
-const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room"]);
+const SPECIAL_ROOM_TYPES = new Set(["AVR", "Accreditation Room", "CISCO"]);
 const CISCO_ROOM_TYPE = "CISCO";
 
 /**
  * Returns true if the section label contains "EVE" (e.g. "BSCS-3C (EVE)").
  */
 export function isEveSection(section) {
-  return String(section ?? "").toUpperCase().includes("EVE");
+  return String(section ?? "")
+    .toUpperCase()
+    .includes("EVE");
 }
 
 function isCiscoSubject(subjectCode) {
-  return String(subjectCode ?? "").toUpperCase().includes("CCNA");
+  return String(subjectCode ?? "")
+    .toUpperCase()
+    .includes("CCNA");
 }
 
 function isSpecialRoomSubject(subjectCode, subjectTitle) {
@@ -45,7 +56,12 @@ function isSpecialRoomSubject(subjectCode, subjectTitle) {
  * - Computer Lab → only Lab/Computer Lab subjects
  * - Lecture rooms → Lecture subjects (+ AVR/Accred if subject qualifies)
  */
-function isRoomEligibleForSubject(room, requiredRoomType, subjectCode, subjectTitle) {
+function isRoomEligibleForSubject(
+  room,
+  requiredRoomType,
+  subjectCode,
+  subjectTitle,
+) {
   const roomType = normalizeRoomType(room.type);
   const required = normalizeRoomType(requiredRoomType);
   const isCisco = isCiscoSubject(subjectCode);
@@ -82,7 +98,12 @@ function isRoomEligibleForSubject(room, requiredRoomType, subjectCode, subjectTi
  * - Regular sections must end by 6PM
  * - Slots that extend into night hours require allow_night_class
  */
-function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass) {
+function isTimeSlotAllowed(
+  slotMinutes,
+  durationMinutes,
+  isEve,
+  allowNightClass,
+) {
   const endMin = slotMinutes + durationMinutes;
 
   if (isEve) {
@@ -101,6 +122,34 @@ function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)
 }
 
 /**
+ * Checks if assigning a candidate pattern would exceed the 2-days-per-week limit.
+ * Merges unique days from the candidate pattern with already-assigned patterns
+ * for a section and verifies total unique days <= maxDaysPerWeek.
+ *
+ * @param {string} sectionId - Section identifier (e.g., "CS101::A::2025-2026::1")
+ * @param {string} candidatePattern - Pattern to check (e.g., "MON,FRI")
+ * @param {Set<string>} alreadyAssignedPatterns - Patterns already assigned to this section
+ * @param {number} maxDaysPerWeek - Maximum days allowed per week (default 2)
+ * @returns {boolean} true if compatible, false if would exceed limit
+ */
+function isPatternCompatibleWithWeeklyLimit(
+  sectionId,
+  candidatePattern,
+  alreadyAssignedPatterns,
+  maxDaysPerWeek = 2,
+) {
+  const candidateDays = patternDaysMap[candidatePattern] ?? [];
+  const mergedDays = new Set(candidateDays);
+
+  for (const assignedPattern of alreadyAssignedPatterns) {
+    const assignedDays = patternDaysMap[assignedPattern] ?? [];
+    assignedDays.forEach((day) => mergedDays.add(day));
+  }
+
+  return mergedDays.size <= maxDaysPerWeek;
+}
+
+/**
  * Returns ordered candidate patterns for a section based on duration and EVE status.
  * Filters to only patterns whose days are all in activeDaysSet.
  * EVE sections: prefer single-day night + Saturday patterns.
@@ -109,22 +158,75 @@ function isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)
 function getPatternsForSection(duration, isEve, activeDaysSet) {
   const dur = Number(duration ?? 1.5);
   let candidates;
+  const classType = isEve ? "EVE" : "Regular";
 
   if (isEve) {
-    if (dur <= 1.5) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "TTH", "WF"];
-    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
-    else candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
+    // Evening classes: prioritize flexibility with multiple day options
+    // Includes two-day patterns for classes that need flexibility without exceeding 2-days-per-week
+    if (dur <= 1.5)
+      // 1.5-hour classes: prefer two-day patterns (TTH, WF) then two-day combinations (MON,FRI, MON,SAT, WED,FRI),
+      // then single days. Evening slots benefit from spread-out schedules to avoid overcrowding.
+      candidates = [
+        "TTH",
+        "WF",
+        "MON,FRI",
+        "MON,SAT",
+        "WED,FRI",
+        "MON",
+        "TUE",
+        "WED",
+        "THU",
+        "FRI",
+        "SAT",
+      ];
+    else if (dur === 2)
+      // 2-hour classes: single days only (no two-day patterns to respect scheduling constraints)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+    else
+      // 3+ hour classes: prioritize Saturday (extended block) then weekdays
+      candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
   } else {
-    // Regular: no Saturday
-    if (dur <= 1.5) candidates = ["TTH", "WF", "MWF", "MON", "TUE", "WED", "THU", "FRI"];
-    else if (dur === 2) candidates = ["MON", "TUE", "WED", "THU", "FRI"];
-    else candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+    // Regular (daytime) classes: strict 2-times-per-week constraint
+    // All patterns respect the 2-day-per-week maximum meeting days
+    if (dur <= 1.5)
+      // 1.5-hour classes: Two-day patterns first (TTH, WF, MON,FRI, WED,FRI, MON,SAT),
+      // then single days. Prioritizes class meetings at manageable intervals for students.
+      candidates = [
+        "TTH",
+        "WF",
+        "MON,FRI",
+        "WED,FRI",
+        "MON,SAT",
+        "MON",
+        "TUE",
+        "WED",
+        "THU",
+        "FRI",
+      ];
+    else if (dur === 2)
+      // 2-hour classes: single days only (no two-day patterns to respect 2-day limit)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+    else
+      // 3+ hour classes: single days only (long blocks on individual days)
+      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
   }
 
-  return candidates.filter((p) => {
+  // Filter candidates: only return patterns that exist in patternDaysMap and
+  // have all their required days available in the section's active days set.
+  // This ensures backward compatibility with legacy data while validating new patterns.
+  const validPatterns = candidates.filter((p) => {
     const days = patternDaysMap[p] ?? [];
     return days.length > 0 && days.every((d) => activeDaysSet.has(d));
   });
+  console.debug(
+    `  [getPatternsForSection] Type:${classType} | Duration:${dur}h | Candidates:${candidates.length} → Valid:${validPatterns.length} | Active patterns: [${validPatterns.join(", ")}]`,
+  );
+  if (validPatterns.length === 0) {
+    console.warn(
+      `  [getPatternsForSection] WARNING: No valid patterns for ${classType} class (${dur}h)! Candidates were: [${candidates.join(", ")}]`,
+    );
+  }
+  return validPatterns;
 }
 
 // ─── Identity helpers ────────────────────────────────────────────────────────
@@ -136,9 +238,24 @@ function normalizeIdentityPart(value) {
 }
 
 export function getAssignmentSubjectCode(row) {
-  return String(row?.code ?? row?.subjectCode ?? row?.subject_code ?? "")
+  // Enhanced lookup paths: code → subjectCode → subject_code → subject.code → subject_id → subject_title
+  let result = String(
+    row?.code ??
+      row?.subjectCode ??
+      row?.subject_code ??
+      row?.subject?.code ??
+      row?.subject_id ??
+      "",
+  )
     .trim()
     .toUpperCase();
+
+  // Fallback: if subject_title exists but no code found, use first 5 chars of title
+  if (!result && row?.subject_title) {
+    result = String(row.subject_title).trim().substring(0, 5).toUpperCase();
+  }
+
+  return result;
 }
 
 export function getAssignmentSection(row) {
@@ -187,7 +304,18 @@ export function getAssignmentIdentityKey(row) {
 }
 
 export function formatAssignmentLabel(row) {
-  const code = getAssignmentSubjectCode(row) || "UNKNOWN";
+  let code = getAssignmentSubjectCode(row);
+  // Fallback chain if subject code is missing:
+  // 1. Try section_id (UUID format)
+  // 2. Try sectionId
+  // 3. Use "UNKNOWN" as last resort
+  if (!code) {
+    code = row?.section_id || row?.sectionId || "UNKNOWN";
+    // Truncate UUID to last 8 chars for readability
+    if (code !== "UNKNOWN" && code.length > 8) {
+      code = code.slice(-8);
+    }
+  }
   const section = getAssignmentSection(row);
   return `${code}-${section}`;
 }
@@ -261,8 +389,8 @@ export function buildNormalizedAssignment({
     subject_id: sectionRow.subjectId,
     room_id: room?.id || null,
     instructor_id: instructorId || null,
-    course_code: getAssignmentSubjectCode(sectionRow),
-    course_title: sectionRow.title,
+    subject_code: getAssignmentSubjectCode(sectionRow),
+    subject_title: sectionRow.title,
     section: sectionRow.section,
     program: sectionRow.program,
     year: sectionRow.year,
@@ -352,7 +480,9 @@ export function extractStartTime24(row, fallback = "") {
 // ─── Pattern helpers ──────────────────────────────────────────────────────────
 
 const PATTERN_FALLBACK_ORDER = [
-  "MWF",
+  "MON,FRI",
+  "MON,SAT",
+  "WED,FRI",
   "TTH",
   "MW",
   "TF",
@@ -363,10 +493,9 @@ const PATTERN_FALLBACK_ORDER = [
   "THU",
   "FRI",
   "SAT",
-  "DAILY",
 ];
 
-function getPatternForRow(row, fallback = "MWF") {
+function getPatternForRow(row, fallback = "MON,FRI") {
   const pattern = String(row?.pattern ?? "")
     .trim()
     .toUpperCase();
@@ -393,7 +522,12 @@ function buildEligibleRooms(roomPool, assignment) {
   return roomPool.filter((room) => {
     if (room.status === "Maintenance") return false;
     if ((room.capacity ?? 0) < (assignment.enrolled ?? 0)) return false;
-    return isRoomEligibleForSubject(room, neededType, subjectCode, subjectTitle);
+    return isRoomEligibleForSubject(
+      room,
+      neededType,
+      subjectCode,
+      subjectTitle,
+    );
   });
 }
 
@@ -476,7 +610,12 @@ function chooseInstructorForPlacementOptimized({
     const endMin = slotMinutes + durationMinutes;
     const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
     if (isNightSlot && !instructor.allow_night_class && !isEve) continue;
-    if (isEve && slotMinutes >= NIGHT_START_MIN && !instructor.allow_night_class) continue;
+    if (
+      isEve &&
+      slotMinutes >= NIGHT_START_MIN &&
+      !instructor.allow_night_class
+    )
+      continue;
 
     const testAssignmentSectionTermKey = buildSectionTermKey(placementBase);
     const testAssignmentIdentityKey = getAssignmentIdentityKey(placementBase);
@@ -685,7 +824,7 @@ function findOpenPlacementForAssignment({
   preferredRoom,
 }) {
   const duration = Number(assignment.duration ?? 1.5) || 1.5;
-  const pattern = getPatternForRow(assignment, "MWF");
+  const pattern = getPatternForRow(assignment, "MON,FRI");
   const candidateStarts = buildCandidateStarts({
     duration,
     startTime,
@@ -739,7 +878,7 @@ function mergeWithExistingAssignments(
   return Array.from(mergedByKey.values());
 }
 
-function normalizeForConflictChecks(row, fallbackPattern = "MWF") {
+function normalizeForConflictChecks(row, fallbackPattern = "MON,FRI") {
   const startTime24 = extractStartTime24(row, "");
   const pattern = getPatternForRow(row, fallbackPattern);
   return {
@@ -1085,12 +1224,101 @@ function updateOccupancyIndex(indexes, assignment, pattern) {
 
 function buildPatternCache(activeDaysSet) {
   const cache = new Map();
+  const activePatterns = [];
+  const inactivePatterns = [];
   PATTERN_FALLBACK_ORDER.forEach((pattern) => {
     const days = patternDaysMap[pattern] ?? [];
     const isActive = days.length > 0 && days.every((d) => activeDaysSet.has(d));
     cache.set(pattern, { days, isActive });
+    if (isActive) {
+      activePatterns.push(pattern);
+    } else {
+      inactivePatterns.push(`${pattern}(days:[${days.join(",")}])`);
+    }
   });
+  console.log(
+    `[buildPatternCache] activeDaysSet: [${Array.from(activeDaysSet).join(", ")}] | ${activePatterns.length} active patterns | ${inactivePatterns.length} inactive`,
+  );
+  console.debug(
+    `  [buildPatternCache] Active patterns: [${activePatterns.join(", ")}]`,
+  );
+  if (inactivePatterns.length > 0) {
+    console.debug(
+      `  [buildPatternCache] Inactive patterns (filtered out): [${inactivePatterns.join(", ")}]`,
+    );
+  }
   return cache;
+}
+
+// ─── Room Categorization for Special Subjects ─────────────────────────────────
+
+/**
+ * Categorizes eligible rooms by type and subject for prioritized room assignment.
+ *
+ * Special subjects (OJT, Thesis, FTS, Capstone, etc.) are prioritized into AVR and
+ * Accreditation Rooms first. Non-special subjects use regular rooms (Lecture, Computer Lab)
+ * first, with special rooms as fallback. Within each category, rooms are sorted by
+ * capacity waste (minimal difference between room capacity and enrolled count).
+ *
+ * Room assignment priority for special subjects:
+ * 1. Accreditation Room (primary special room)
+ * 2. AVR (secondary special room)
+ * 3. Regular rooms (Lecture, Computer Lab) - fallback if special rooms full
+ *
+ * Room assignment priority for non-special subjects:
+ * 1. Regular rooms (Lecture, Computer Lab)
+ * 2. Accreditation Room and AVR (fallback if regular rooms full)
+ *
+ * @param {Array} eligibleRooms - Pre-filtered rooms eligible for the subject
+ * @param {string} subjectCode - Subject code (e.g., "CS101")
+ * @param {string} subjectTitle - Subject title (e.g., "OJT in Software Development")
+ * @param {number} enrolled - Enrolled student count
+ * @returns {Array} Rooms ordered by category priority and capacity waste
+ */
+function categorizeRoomsBySubject(
+  eligibleRooms,
+  subjectCode,
+  subjectTitle,
+  enrolled,
+) {
+  if (!Array.isArray(eligibleRooms) || eligibleRooms.length === 0) {
+    return eligibleRooms;
+  }
+
+  const isSpecial = isSpecialRoomSubject(subjectCode, subjectTitle);
+
+  // Separate rooms into special (AVR, Accreditation Room) and regular (others)
+  const specialRooms = eligibleRooms.filter((room) =>
+    SPECIAL_ROOM_TYPES.has(normalizeRoomType(room.type)),
+  );
+  const regularRooms = eligibleRooms.filter(
+    (room) => !SPECIAL_ROOM_TYPES.has(normalizeRoomType(room.type)),
+  );
+
+  // Sort each category by capacity waste (least waste first)
+  const sortByWaste = (roomA, roomB) => {
+    const aWaste = Math.max(0, (roomA.capacity ?? 0) - enrolled);
+    const bWaste = Math.max(0, (roomB.capacity ?? 0) - enrolled);
+    return aWaste - bWaste;
+  };
+
+  specialRooms.sort(sortByWaste);
+  regularRooms.sort(sortByWaste);
+
+  // For special subjects, prioritize special rooms first (Accreditation Room before AVR)
+  if (isSpecial) {
+    // Prioritize Accreditation Room before AVR within special rooms
+    const accreditationRooms = specialRooms.filter(
+      (room) => normalizeRoomType(room.type) === "Accreditation Room",
+    );
+    const avrRooms = specialRooms.filter(
+      (room) => normalizeRoomType(room.type) === "AVR",
+    );
+    return [...accreditationRooms, ...avrRooms, ...regularRooms];
+  }
+
+  // For non-special subjects, regular rooms first, special rooms as fallback
+  return [...regularRooms, ...specialRooms];
 }
 
 /**
@@ -1115,11 +1343,14 @@ function buildSectionPrecompute(
   const identityKey = getAssignmentIdentityKey(row);
 
   const eligibleRooms = buildEligibleRooms(roomPool, row);
-  const orderedRooms = [...eligibleRooms].sort((a, b) => {
-    const aWaste = Math.max(0, (a.capacity ?? 0) - (row.enrolled ?? 0));
-    const bWaste = Math.max(0, (b.capacity ?? 0) - (row.enrolled ?? 0));
-    return aWaste - bWaste;
-  });
+  // Categorize rooms by subject type: special subjects get special rooms first (Accreditation Room, AVR).
+  // Non-special subjects use regular rooms first with special rooms as fallback.
+  const orderedRooms = categorizeRoomsBySubject(
+    eligibleRooms,
+    getAssignmentSubjectCode(row),
+    String(row?.title ?? row?.course_title ?? "").trim(),
+    row.enrolled ?? 0,
+  );
 
   const importedStartMinutes = importedStart
     ? parse24TextToMinutes(importedStart)
@@ -1138,7 +1369,11 @@ function buildSectionPrecompute(
   // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
   const sectionLabel = String(row?.section ?? "").trim();
   const isEve = isEveSection(sectionLabel);
-  const tsuPatterns = getPatternsForSection(courseDuration, isEve, activeDaysSet);
+  const tsuPatterns = getPatternsForSection(
+    courseDuration,
+    isEve,
+    activeDaysSet,
+  );
 
   // If we have an imported pattern, try it first, then fall back to TSU patterns
   const patternsToTry = importedPattern
@@ -1148,6 +1383,20 @@ function buildSectionPrecompute(
   const validPatterns = patternsToTry.filter(
     (p) => patternCache.get(p)?.isActive,
   );
+
+  console.debug(
+    `[buildSectionPrecompute] Section: ${sectionId} | ${getAssignmentSubjectCode(row)}::${sectionLabel} | Duration: ${courseDuration}h | RoomType: ${row.roomType}`,
+  );
+  console.debug(
+    `  → Rooms: eligible=${eligibleRooms.length} ordered=${orderedRooms.length} | Slots: ${candidateSlots.length} | TSU patterns: ${tsuPatterns.length} | Valid patterns: ${validPatterns.length}`,
+  );
+  if (validPatterns.length === 0) {
+    console.warn(
+      `  → WARNING: No valid patterns after filtering! patternsToTry: [${patternsToTry.join(", ")}]`,
+    );
+  } else {
+    console.debug(`  → Valid patterns to try: [${validPatterns.join(", ")}]`);
+  }
 
   return {
     sectionId,
@@ -1169,6 +1418,277 @@ function buildSectionPrecompute(
   };
 }
 
+// ─── Subject Validation Helper ────────────────────────────────────────────────
+
+/**
+ * Validates and looks up a subject by its normalized code.
+ * Returns both the lookup result and validation status.
+ *
+ * @param {string} code - The subject code (should already be trimmed/uppercased)
+ * @param {Map} subjectByCode - Map of normalized codes to subject objects
+ * @returns {{found: boolean, subject: object|null, code: string}}
+ */
+function validateAndLookupSubject(code, subjectByCode) {
+  const normalizedCode = String(code ?? "")
+    .trim()
+    .toUpperCase();
+
+  const subject = subjectByCode.get(normalizedCode) ?? null;
+  const found = subject !== null && normalizedCode.length > 0;
+
+  return {
+    found,
+    subject,
+    code: normalizedCode,
+  };
+}
+
+/**
+ * Builds an enhanced subject lookup index with multiple mapping strategies.
+ * Creates maps by code AND by id for more flexible subject resolution.
+ *
+ * @param {Array} subjects - Array of subject objects
+ * @returns {object} Object with subjectByCode and subjectById maps
+ */
+function buildSubjectLookupIndex(subjects) {
+  const subjectByCode = new Map();
+  const subjectById = new Map();
+
+  (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+    if (subject?.code) {
+      const normalizedCode = String(subject.code).trim().toUpperCase();
+      subjectByCode.set(normalizedCode, subject);
+    }
+
+    if (subject?.id) {
+      const normalizedId = String(subject.id).trim().toUpperCase();
+      subjectById.set(normalizedId, subject);
+    }
+  });
+
+  return { subjectByCode, subjectById };
+}
+
+/**
+ * Tracks subject resolution failures during scheduling for debugging.
+ * Captures unresolved identifiers and raw assignment properties.
+ */
+class SubjectResolutionCache {
+  constructor() {
+    this.failures = new Map(); // key: unresolved identifier, value: { count, examples }
+    this.failuresByRawValue = new Map(); // key: raw value from assignment, value: details
+  }
+
+  recordFailure(identifier, rawValue, assignment) {
+    // Track by normalized identifier
+    if (!this.failures.has(identifier)) {
+      this.failures.set(identifier, { count: 0, examples: [] });
+    }
+    const failure = this.failures.get(identifier);
+    failure.count += 1;
+    if (failure.examples.length < 2) {
+      failure.examples.push({
+        rawValue,
+        sectionId: assignment?.sectionId,
+        row: `${assignment?.code}::${assignment?.section}`,
+      });
+    }
+
+    // Track by raw value for detailed debugging
+    if (!this.failuresByRawValue.has(rawValue)) {
+      this.failuresByRawValue.set(rawValue, { count: 0, sources: [] });
+    }
+    const rawFailure = this.failuresByRawValue.get(rawValue);
+    rawFailure.count += 1;
+    if (rawFailure.sources.length < 1) {
+      rawFailure.sources.push(assignment?.sectionId || "unknown");
+    }
+  }
+
+  getReport() {
+    if (this.failures.size === 0) {
+      return null;
+    }
+
+    const summary = [];
+    this.failures.forEach((failure, identifier) => {
+      summary.push({
+        identifier,
+        count: failure.count,
+        examples: failure.examples,
+      });
+    });
+
+    return {
+      totalFailures: Array.from(this.failures.values()).reduce(
+        (sum, f) => sum + f.count,
+        0,
+      ),
+      uniqueIdentifiers: this.failures.size,
+      failures: summary,
+    };
+  }
+}
+
+/**
+ * Generates a human-readable report of subject resolution failures.
+ * Called after scheduling to provide debugging insights.
+ *
+ * @param {SubjectResolutionCache} cache - The resolution cache with failure data
+ * @param {number} conflictCount - Total conflicts generated
+ * @returns {void} Logs report to console
+ */
+function generateSubjectResolutionReport(cache, conflictCount) {
+  const report = cache.getReport();
+  if (!report) {
+    console.log(
+      "[scheduleUtils] [OK] Subject resolution: All subjects resolved successfully.",
+    );
+    return;
+  }
+
+  console.warn("[scheduleUtils] [WARN] Subject Resolution Report:");
+  console.warn(
+    "  Total Unresolved: " +
+      report.totalFailures +
+      " assignments | Unique Identifiers: " +
+      report.uniqueIdentifiers,
+  );
+
+  report.failures.forEach(({ identifier, count, examples }) => {
+    console.warn(
+      "  [X] '" +
+        identifier +
+        "' (" +
+        count +
+        " occurrence" +
+        (count > 1 ? "s" : "") +
+        ")",
+    );
+    if (examples.length > 0) {
+      examples.forEach((ex) => {
+        console.warn(
+          "    |-- Section: " +
+            (ex.sectionId ?? "unknown") +
+            " | " +
+            ex.row +
+            " | Raw: '" +
+            ex.rawValue +
+            "'",
+        );
+      });
+    }
+  });
+
+  console.warn(
+    "Total conflicts created from unresolved subjects: " + conflictCount,
+  );
+}
+
+/**
+ * Validates that an assignment references valid subjects, rooms, and instructors.
+ * Used to detect UNKNOWN subject codes and invalid foreign key references before persistence.
+ *
+ * @param {object} assignment - The assignment object to validate
+ * @param {Map} subjectByCode - Map of subject codes to subject objects
+ * @param {Array} rooms - Array of available rooms
+ * @param {Array} instructors - Array of available instructors
+ * @returns {{isValid: boolean, validationError?: string}}
+ */
+function validateAssignmentReferences(
+  assignment,
+  subjectByCode,
+  rooms,
+  instructors,
+) {
+  if (!assignment) {
+    return {
+      isValid: false,
+      validationError: "Assignment is null or undefined",
+    };
+  }
+
+  // Check subject validity
+  const subjectCode = String(
+    assignment.subject_code ?? assignment.course_code ?? "",
+  ).trim();
+  const subjectId = String(assignment.subject_id ?? "").trim();
+
+  if (!subjectCode && !subjectId) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing subject code and subject_id",
+    };
+  }
+
+  // Check for UNKNOWN subject codes
+  if (subjectCode.toUpperCase().startsWith("UNKNOWN")) {
+    return {
+      isValid: false,
+      validationError: `Subject code '${subjectCode}' could not be mapped. Possible causes: subject was deleted from database, CSV import failed, or data changed after sections were loaded.`,
+    };
+  }
+
+  // Check if subject exists in database
+  if (subjectCode) {
+    const normalizedCode = subjectCode.trim().toUpperCase();
+    if (!subjectByCode.has(normalizedCode)) {
+      return {
+        isValid: false,
+        validationError: `Subject '${subjectCode}' not found in database. Database may have been modified after schedule generation.`,
+      };
+    }
+  }
+
+  // Check room validity
+  const roomNumber = String(
+    assignment.room_number ?? assignment.room ?? "",
+  ).trim();
+  const roomId = String(assignment.room_id ?? "").trim();
+
+  if (!roomNumber && !roomId) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing room number and room_id",
+    };
+  }
+
+  if (
+    roomNumber &&
+    !rooms.find((r) => String(r.number).trim() === roomNumber)
+  ) {
+    return {
+      isValid: false,
+      validationError: `Room '${roomNumber}' not found in database. Room may have been deleted.`,
+    };
+  }
+
+  // Check instructor validity
+  const instructorId = String(assignment.instructor_id ?? "").trim();
+  const instructorName = String(
+    assignment.instructor_name ?? assignment.instructor ?? "",
+  ).trim();
+
+  if (!instructorId && !instructorName) {
+    return {
+      isValid: false,
+      validationError: "Assignment missing instructor_id and instructor name",
+    };
+  }
+
+  if (
+    instructorId &&
+    !instructors.find((i) => String(i.id ?? "").trim() === instructorId)
+  ) {
+    return {
+      isValid: false,
+      validationError: `Instructor ID '${instructorId}' not found in database. Instructor may have been deleted.`,
+    };
+  }
+
+  return { isValid: true };
+}
+
 // ─── ★ Auto-Schedule ──────────────────────────────────────────────────────────
 
 export function runAutoSchedule({
@@ -1188,14 +1708,13 @@ export function runAutoSchedule({
 
   const weights = getSoftWeights();
   const newRooms = (Array.isArray(rooms) ? rooms : []).map((r) => ({ ...r }));
-  const subjectByCode = new Map(
-    (Array.isArray(subjects) ? subjects : []).map((subject) => [
-      String(subject?.code ?? "")
-        .trim()
-        .toUpperCase(),
-      subject,
-    ]),
-  );
+
+  // ── Build enhanced subject lookup index ────────────────────────────────────
+  const { subjectByCode, subjectById } = buildSubjectLookupIndex(subjects);
+
+  // ── Initialize subject resolution failure tracking ────────────────────────
+  const resolutionCache = new SubjectResolutionCache();
+
   const instructorPoolById = buildInstructorPoolMap(instructors);
   const eligibleInstructorIdsBySubjectId =
     buildSubjectIdToEligibleInstructors(instructorSubjects);
@@ -1214,7 +1733,19 @@ export function runAutoSchedule({
     return { error: "Please set a valid scheduling window." };
   }
 
+  console.log(
+    `[runAutoSchedule] Entry point: ${sectionRows.length} sectionRows | activeDays: [${activeDays.join(", ")}] | timeWindow: ${startTime}-${endTime} | pattern: ${pattern}`,
+  );
+  sectionRows.forEach((row) => {
+    console.debug(
+      `  [runAutoSchedule] Input section: ${row.sectionId} | ${row.code}::${row.section} | Duration: ${row.duration}h | RoomType: ${row.roomType}`,
+    );
+  });
+
   if (sectionRows.length === 0) {
+    console.error(
+      "[runAutoSchedule] ERROR: sectionRows is empty! Cannot schedule any sections.",
+    );
     return {
       rooms: newRooms,
       scheduleAssignments: [],
@@ -1237,10 +1768,49 @@ export function runAutoSchedule({
   let assigned = 0;
   let conflictCount = 0;
 
+  // ── Track pattern assignments per section to enforce 2-days-per-week limit ────
+  const assignedPatternsPerSection = new Map();
+
   sectionRows.forEach((row) => {
     const course = normalizeForConflictChecks(row, pattern);
     const courseSubjectCode = getAssignmentSubjectCode(course);
-    const fallbackSubject = subjectByCode.get(courseSubjectCode);
+
+    // ── Validate subject lookup with defensive checking ───────────────────────
+    const subjectLookup = validateAndLookupSubject(
+      courseSubjectCode,
+      subjectByCode,
+    );
+    const fallbackSubject = subjectLookup.subject;
+
+    // If subject code exists but was not found in database, mark as conflict
+    if (courseSubjectCode && !subjectLookup.found) {
+      // Capture raw identifier for debugging
+      const rawIdentifier =
+        course?.code ?? course?.subjectCode ?? course?.subject_code ?? "???";
+
+      resolutionCache.recordFailure(courseSubjectCode, rawIdentifier, course);
+
+      console.warn(
+        `[scheduleUtils] Subject resolution failed: '${courseSubjectCode}' (raw: '${rawIdentifier}') for section ${course.sectionId}`,
+      );
+
+      generatedAssignments.push({
+        ...course,
+        room: "",
+        time: "",
+        duration: 1.5,
+        pattern: pattern,
+        instructor: "",
+        instructorId: "",
+        instructor_id: "",
+        status: "Conflict",
+        conflictReason: `Subject not found: '${courseSubjectCode}' (raw identifier: '${rawIdentifier}')`,
+      });
+      conflictCount++;
+      return;
+    }
+
+    // Safe extraction of subject ID with fallbacks
     const courseSubjectId = String(
       course.subjectId ??
         fallbackSubject?.id ??
@@ -1249,6 +1819,7 @@ export function runAutoSchedule({
     ).trim();
     course.subjectId = courseSubjectId;
 
+    // Safe extraction of duration with optional chaining
     const courseDuration =
       Number(course.duration ?? fallbackSubject?.duration ?? 1.5) || 1.5;
     const durationMinutes = Math.round(courseDuration * 60);
@@ -1330,6 +1901,20 @@ export function runAutoSchedule({
       // ── TSU Rule: block Saturday for non-EVE sections ──────────────────────
       if (!isEve && patternDays.includes("SAT")) continue;
 
+      // ── TSU Rule: enforce 2-times-per-week constraint ────────────────────────
+      const sectionId =
+        sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      const assignedForSection =
+        assignedPatternsPerSection.get(sectionId) || new Set();
+      if (
+        !isPatternCompatibleWithWeeklyLimit(
+          sectionId,
+          tryPattern,
+          assignedForSection,
+        )
+      )
+        continue;
+
       for (const {
         slotMinutes,
         formattedSlot,
@@ -1343,7 +1928,15 @@ export function runAutoSchedule({
           : null;
         const allowNightClass = candidateInstructor?.allow_night_class === true;
 
-        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, allowNightClass)) continue;
+        if (
+          !isTimeSlotAllowed(
+            slotMinutes,
+            durationMinutes,
+            isEve,
+            allowNightClass,
+          )
+        )
+          continue;
 
         const candidateTime = `${tryPattern} ${formatTime(formattedSlot)}`;
 
@@ -1373,7 +1966,8 @@ export function runAutoSchedule({
 
             // ── TSU Rule: check night class eligibility for imported instructor
             const endMin = slotMinutes + durationMinutes;
-            const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
+            const isNightSlot =
+              slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
             const instAllowsNight = importedInst?.allow_night_class === true;
 
             const nightViolation = isNightSlot && !instAllowsNight && !isEve;
@@ -1474,6 +2068,14 @@ export function runAutoSchedule({
         );
       }
 
+      // ── Record pattern assignment for 2-days-per-week constraint tracking ────
+      const sectionIdForTracking =
+        sectionPrecompute.sectionId || getAssignmentSectionId(course);
+      if (!assignedPatternsPerSection.has(sectionIdForTracking)) {
+        assignedPatternsPerSection.set(sectionIdForTracking, new Set());
+      }
+      assignedPatternsPerSection.get(sectionIdForTracking).add(patternUsed);
+
       bestResult.room.status = "Occupied";
       assigned++;
     } else {
@@ -1548,7 +2150,7 @@ export function runAutoSchedule({
           resolveRoomByNumber(getAssignmentRoom(assignment), newRooms)?.id ||
           null,
         instructor_id: getAssignmentInstructorId(assignment),
-        course_code: getAssignmentSubjectCode(assignment),
+        subject_code: getAssignmentSubjectCode(assignment),
         room_number: getAssignmentRoom(assignment),
         instructor_name: getAssignmentInstructorName(assignment),
         pattern: getPatternForRow(assignment, pattern),
@@ -1620,10 +2222,53 @@ export function runAutoSchedule({
 
   const dedupedAssignments = dedupeBySectionTerm(validatedAssignments);
 
+  // ─── Validate assignments for unknown subjects and invalid references ──────
+  const validatedAndConvertedAssignments = dedupedAssignments.map(
+    (assignment) => {
+      if (normalizeAssignmentStatus(assignment.status) !== "Assigned") {
+        return assignment; // Skip validation for non-assigned status
+      }
+
+      const validation = validateAssignmentReferences(
+        assignment,
+        subjectByCode,
+        newRooms,
+        instructors || [],
+      );
+
+      if (!validation.isValid) {
+        return {
+          ...assignment,
+          status: "Conflict",
+          conflictReason:
+            assignment.conflictReason || validation.validationError,
+          updated_at: new Date().toISOString(),
+        };
+      }
+
+      return assignment;
+    },
+  );
+
+  // Count newly converted conflicts for accurate reporting
+  const newlyConvertedConflicts = validatedAndConvertedAssignments.filter(
+    (assignment) =>
+      normalizeAssignmentStatus(assignment.status) === "Conflict" &&
+      dedupedAssignments.find(
+        (orig) =>
+          getAssignmentIdentityKey(orig) ===
+            getAssignmentIdentityKey(assignment) &&
+          normalizeAssignmentStatus(orig.status) === "Assigned",
+      ),
+  ).length;
+
+  // Update conflict count to include newly converted assignments
+  const updatedConflictCount = conflictCount + newlyConvertedConflicts;
+
   newRooms.forEach((r) => {
     if (r.status !== "Maintenance") r.status = "Available";
   });
-  dedupedAssignments.forEach((assignment) => {
+  validatedAndConvertedAssignments.forEach((assignment) => {
     if (normalizeAssignmentStatus(assignment.status) !== "Assigned") return;
     const roomNumber = getAssignmentRoom(assignment);
     if (!roomNumber) return;
@@ -1637,8 +2282,8 @@ export function runAutoSchedule({
   let message = `Auto-generated ${assigned} assignment${assigned !== 1 ? "s" : ""} using imported section data with room and instructor matching.`;
   if (patternAdjustedCount > 0)
     message += ` ${patternAdjustedCount} section${patternAdjustedCount !== 1 ? "s" : ""} had meeting pattern adjusted to avoid conflicts.`;
-  if (conflictCount > 0)
-    message += ` ${conflictCount} section${conflictCount !== 1 ? "s" : ""} flagged as conflicts — no valid room/instructor placement found.`;
+  if (updatedConflictCount > 0)
+    message += ` ${updatedConflictCount} section${updatedConflictCount !== 1 ? "s" : ""} flagged as conflicts — no valid room/instructor placement found or invalid subject/room/instructor references detected.`;
 
   const duplicateTrimmed =
     validatedAssignments.length - dedupedAssignments.length;
@@ -1646,11 +2291,14 @@ export function runAutoSchedule({
     message += ` ${duplicateTrimmed} duplicate section-term row${duplicateTrimmed !== 1 ? "s were" : " was"} collapsed to satisfy section/term uniqueness.`;
   }
 
+  // ── Generate subject resolution report for debugging ──────────────────────
+  generateSubjectResolutionReport(resolutionCache, updatedConflictCount);
+
   return {
     rooms: newRooms,
-    scheduleAssignments: dedupedAssignments,
+    scheduleAssignments: validatedAndConvertedAssignments,
     assigned,
-    conflicts: conflictCount,
+    conflicts: updatedConflictCount,
     message,
   };
 }
@@ -1714,7 +2362,10 @@ export function applyManualAssignments({
     if (!sectionRow) continue;
 
     const assignmentKey = getAssignmentIdentityKey(sectionRow);
-    const resolvedPattern = getPatternForRow({ pattern: entry.pattern }, "MWF");
+    const resolvedPattern = getPatternForRow(
+      { pattern: entry.pattern },
+      "MON,FRI",
+    );
 
     const desired = {
       ...sectionRow,
@@ -1771,7 +2422,7 @@ export function applyManualAssignments({
       const contextAssignments = nextAssignments.filter(
         (_, i) => i !== conflictIndex,
       );
-      const originalPattern = getPatternForRow(conflict, "MWF");
+      const originalPattern = getPatternForRow(conflict, "MON,FRI");
       const patternsToTry = [
         originalPattern,
         ...alternativePatterns(originalPattern),
@@ -1843,10 +2494,10 @@ export function applyManualAssignments({
         ).trim(),
         room_id: resolveRoomByNumber(assignment.room, rooms)?.id || null,
         instructor_id: getAssignmentInstructorId(assignment),
-        course_code: getAssignmentSubjectCode(assignment),
+        subject_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
         instructor_name: getAssignmentInstructorName(assignment),
-        pattern: getPatternForRow(assignment, "MWF"),
+        pattern: getPatternForRow(assignment, "MON,FRI"),
         time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
         time_end: parseTimeToSQL(

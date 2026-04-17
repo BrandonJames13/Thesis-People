@@ -8,6 +8,7 @@ import {
 } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { normalizeRoomType } from "../data/constants";
+import { normalizePostgresError } from "../utils/errorUtils";
 
 const DEFAULT_SECTION = "A";
 const ACTIVE_ACADEMIC_YEAR =
@@ -190,17 +191,25 @@ function normalizeAssignmentFromDbRow(row, lookup) {
   const room = lookup.roomById.get(String(row.room_id ?? ""));
   const instructor = lookup.instructorById.get(String(row.instructor_id ?? ""));
 
+  // Enhanced fallback chain for subjectCode to prevent "UNKNOWN" display:
+  // 1. DB columns: subject_code, course_code, code
+  // 2. Section lookup: always available if section_id exists
+  // 3. Subject lookup: via subject_id reference
+  // 4. Last resort: empty string (indicates data loss)
+  const subjectCodeValue =
+    row.subject_code ??
+    row.course_code ??
+    row.code ??
+    section?.subjectCode ??
+    subject?.code ??
+    "";
+
   return normalizeScheduleAssignment({
     assignment_id: row.id,
     assignmentId: row.id,
     section_id: row.section_id,
     sectionId: row.section_id,
-    subjectCode:
-      row.course_code ??
-      row.code ??
-      section?.subjectCode ??
-      subject?.code ??
-      "",
+    subjectCode: subjectCodeValue,
     section: row.section ?? section?.section ?? DEFAULT_SECTION,
     academic_year:
       row.academic_year ?? section?.academicYear ?? ACTIVE_ACADEMIC_YEAR,
@@ -211,9 +220,9 @@ function normalizeAssignmentFromDbRow(row, lookup) {
       row.instructor_name ?? instructor?.name ?? section?.instructor ?? "",
     room: row.room_number ?? room?.number ?? section?.room ?? "",
     time: row.time_display ?? section?.time ?? "",
-    time_display: row.time_display ?? section?.time ?? "",  // ← add
-    time_start: row.time_start ?? null,                     // ← add
-    time_end: row.time_end ?? null,                         // ← add
+    time_display: row.time_display ?? section?.time ?? "", // ← add
+    time_start: row.time_start ?? null, // ← add
+    time_end: row.time_end ?? null, // ← add
     duration:
       Number(row.duration ?? section?.duration ?? subject?.duration ?? 1.5) ||
       1.5,
@@ -255,6 +264,151 @@ function buildNormalizedFromCourseRows(rows) {
   };
 }
 
+/**
+ * Builds instructor loads from two sources:
+ * 1. scheduleAssignments with status "Assigned" (scheduled with hours)
+ * 2. instructorSubjects (unscheduled assignments from import)
+ *
+ * Deduplicates by section_id to avoid double-counting the same section.
+ * Counts unique subjects by subject_id.
+ * Uses duration from scheduleAssignments; defaults to 0 for unscheduled entries.
+ *
+ * @param {Array} scheduleAssignments - Schedule assignments with status and duration
+ * @param {Array} instructorSubjects - Instructor-subject-section assignments from import
+ * @param {Array} subjectSections - Subject sections for subject_id lookup
+ * @returns {Map} Map of instructor keys to load metrics
+ */
+function buildInstructorLoadsFromBothSources(
+  scheduleAssignments,
+  instructorSubjects,
+  subjectSections,
+) {
+  // Build section lookup index for instructorSubjects processing
+  const sectionById = new Map(
+    (Array.isArray(subjectSections) ? subjectSections : []).map((section) => [
+      String(section?.sectionId ?? section?.id ?? section?.section_id ?? "")
+        .trim()
+        .toLowerCase(),
+      section,
+    ]),
+  );
+
+  // Track all processed sections to deduplicate across both sources
+  const processedSectionKeys = new Set();
+  const loadMap = new Map();
+
+  // ── Phase 1: Process scheduled assignments (status="Assigned") ────
+  (Array.isArray(scheduleAssignments) ? scheduleAssignments : []).forEach(
+    (assignment) => {
+      if (assignment.status !== "Assigned") return;
+
+      const instructorKey = getInstructorLoadKey(assignment);
+      if (!instructorKey) return;
+
+      const sectionKey =
+        String(assignment.section_id ?? "").trim() ||
+        String(
+          assignment.assignmentId ?? assignment.assignment_id ?? "",
+        ).trim() ||
+        assignment.sectionIdentity;
+      if (!sectionKey) return;
+
+      // Avoid re-processing same section
+      if (processedSectionKeys.has(sectionKey)) return;
+      processedSectionKeys.add(sectionKey);
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectIds: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      current.sectionKeys.add(sectionKey);
+
+      // Track subject by ID for unique counting
+      const subjectId = String(assignment.subject_id ?? "").trim();
+      if (subjectId) {
+        current.subjectIds.add(subjectId);
+      } else {
+        // Fallback to subject code if ID not available
+        const subjectCode = String(
+          assignment.code ?? assignment.subjectCode ?? "",
+        )
+          .trim()
+          .toUpperCase();
+        if (subjectCode) {
+          current.subjectIds.add(subjectCode);
+        }
+      }
+
+      // Calculate hours by room type
+      const duration = Number(assignment.duration ?? 0) || 0;
+      const roomType = normalizeRoomType(
+        assignment.roomType ?? assignment.room_type,
+      );
+      const isLab = roomType === "Computer Lab";
+      if (isLab) current.labHours += duration;
+      else current.lectureHours += duration;
+
+      loadMap.set(instructorKey, current);
+    },
+  );
+
+  // ── Phase 2: Process unscheduled instructor-subject assignments ────
+  (Array.isArray(instructorSubjects) ? instructorSubjects : []).forEach(
+    (row) => {
+      const instructorKey = getInstructorLoadKey(row);
+      if (!instructorKey) return;
+
+      const sectionId = String(row.section_id ?? row.sectionId ?? "")
+        .trim()
+        .toLowerCase();
+      if (!sectionId) return;
+
+      // Skip if already processed from scheduleAssignments (avoid double-count)
+      if (processedSectionKeys.has(sectionId)) return;
+      processedSectionKeys.add(sectionId);
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectIds: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      current.sectionKeys.add(sectionId);
+
+      // Track subject ID from instructorSubjects
+      const subjectId = String(row.subject_id ?? row.subjectId ?? "")
+        .trim()
+        .toLowerCase();
+      if (subjectId) {
+        current.subjectIds.add(subjectId);
+      }
+
+      // Note: No hours added for unscheduled assignments (defaults to 0)
+      // Hours will be added when auto-schedule runs or manual assignment occurs
+
+      loadMap.set(instructorKey, current);
+    },
+  );
+
+  // ── Phase 3: Normalize to final load structure ────
+  const loads = new Map();
+  loadMap.forEach((load, key) => {
+    loads.set(key, {
+      subjectCount: load.subjectIds.size,
+      sectionCount: load.sectionKeys.size,
+      lectureHours: load.lectureHours,
+      labHours: load.labHours,
+      totalHours: load.lectureHours + load.labHours,
+    });
+  });
+
+  return loads;
+}
+
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
@@ -264,6 +418,10 @@ export function DataProvider({ children }) {
   const [instructors, setInstructors] = useState([]);
   const [instructorSubjects, setInstructorSubjects] = useState([]);
   const [scheduleAssignments, setScheduleAssignments] = useState([]);
+  const [scheduleAssignmentsSyncing, setScheduleAssignmentsSyncing] =
+    useState(false);
+  const [scheduleAssignmentsError, setScheduleAssignmentsError] =
+    useState(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
 
@@ -404,67 +562,12 @@ export function DataProvider({ children }) {
   }, [bootstrapFromSupabase]);
 
   const instructorLoads = useMemo(() => {
-    const loadMap = new Map();
-
-    scheduleAssignments.forEach((assignment) => {
-      if (assignment.status !== "Assigned") return;
-
-      const instructorKey = getInstructorLoadKey(assignment);
-      if (!instructorKey) return;
-
-      const sectionKey =
-        String(assignment.section_id ?? "").trim() ||
-        String(
-          assignment.assignmentId ?? assignment.assignment_id ?? "",
-        ).trim() ||
-        assignment.sectionIdentity;
-      if (!sectionKey) return;
-
-      const current = loadMap.get(instructorKey) ?? {
-        subjectKeys: new Set(),
-        sectionKeys: new Set(),
-        lectureHours: 0,
-        labHours: 0,
-      };
-
-      if (current.sectionKeys.has(sectionKey)) {
-        loadMap.set(instructorKey, current);
-        return;
-      }
-
-      current.sectionKeys.add(sectionKey);
-
-      const subjectKey = String(assignment.code ?? assignment.subjectCode ?? "")
-        .trim()
-        .toUpperCase();
-      if (subjectKey) {
-        current.subjectKeys.add(subjectKey);
-      }
-
-      const duration = Number(assignment.duration ?? 0) || 0;
-      const roomType = normalizeRoomType(
-        assignment.roomType ?? assignment.room_type,
-      );
-      const isLab = roomType === "Computer Lab";
-      if (isLab) current.labHours += duration;
-      else current.lectureHours += duration;
-
-      loadMap.set(instructorKey, current);
-    });
-
-    const loads = new Map();
-    loadMap.forEach((load, key) => {
-      loads.set(key, {
-        subjectCount: load.subjectKeys.size,
-        sectionCount: load.sectionKeys.size,
-        lectureHours: load.lectureHours,
-        labHours: load.labHours,
-        totalHours: load.lectureHours + load.labHours,
-      });
-    });
-
-    return loads;
-  }, [scheduleAssignments]);
+    return buildInstructorLoadsFromBothSources(
+      scheduleAssignments,
+      instructorSubjects,
+      subjectSections,
+    );
+  }, [scheduleAssignments, instructorSubjects, subjectSections]);
 
   const getInstructorLoad = useCallback(
     (instructor) => {
@@ -644,18 +747,370 @@ export function DataProvider({ children }) {
     );
   }, [subjectSections]);
 
-  const updateScheduleAssignments = useCallback((newAssignments) => {
-    setScheduleAssignments(normalizeScheduleAssignments(newAssignments));
+  const persistScheduleAssignments = useCallback(
+    async (normalizedAssignments) => {
+      try {
+        // Filter to only include "Assigned" status assignments
+        const assignedOnly = (
+          Array.isArray(normalizedAssignments) ? normalizedAssignments : []
+        ).filter((a) => a.status === "Assigned");
+
+        if (assignedOnly.length === 0) {
+          return { success: true };
+        }
+
+        // Map normalized fields to database columns
+        // IMPORTANT: Ensure subject_code is never NULL to prevent "UNKNOWN" display on reload
+        const rowsToUpsert = assignedOnly.map((assignment) => {
+          // Priority chain: explicit code/subjectCode > section lookup > empty string
+          const subjectCodeValue =
+            assignment.code ||
+            assignment.subjectCode ||
+            assignment.section_code ||
+            "";
+
+          return {
+            section_id: assignment.section_id || assignment.sectionId || "",
+            subject_id: assignment.subject_id || assignment.subjectId || "",
+            room_id: assignment.room_id || assignment.roomId || "",
+            instructor_id:
+              assignment.instructor_id || assignment.instructorId || "",
+            subject_code: subjectCodeValue,
+            subject_title: assignment.course_title || assignment.title || "",
+            status: assignment.status || "Assigned",
+            pattern: assignment.pattern || "",
+            time_display: assignment.time_display || assignment.time || "",
+            time_start: assignment.time_start || null,
+            time_end: assignment.time_end || null,
+            duration: assignment.duration || 1.5,
+            academic_year:
+              assignment.academic_year ||
+              assignment.academicYear ||
+              ACTIVE_ACADEMIC_YEAR,
+            semester: assignment.semester || ACTIVE_SEMESTER,
+          };
+        });
+
+        // Perform upsert with unique constraint on (section_id, academic_year, semester)
+        const { data, error } = await supabase
+          .from("schedule_assignments")
+          .upsert(rowsToUpsert, {
+            onConflict: "section_id,academic_year,semester",
+          })
+          .select();
+
+        if (error) {
+          const normalized = normalizePostgresError(
+            error,
+            "Failed to persist schedule assignments.",
+          );
+          console.error(
+            `[DataContext] Persistence failed for ${rowsToUpsert.length} assignments:`,
+            normalized,
+          );
+          return { success: false, error: normalized };
+        }
+
+        console.log(
+          `[DataContext] Successfully persisted ${rowsToUpsert.length} schedule assignments.`,
+        );
+        return { success: true };
+      } catch (err) {
+        const normalized = normalizePostgresError(
+          err,
+          "Failed to persist schedule assignments.",
+        );
+        console.error(
+          "[DataContext] Unexpected error during persistence:",
+          normalized,
+        );
+        return { success: false, error: normalized };
+      }
+    },
+    [],
+  );
+
+  const updateScheduleAssignments = useCallback(
+    async (newAssignments, skipPersist = false) => {
+      const previousAssignments = scheduleAssignments;
+      const normalized = normalizeScheduleAssignments(newAssignments);
+
+      // ─── Validate all assignments reference valid subjects before DB write ────
+      const validateAssignmentSubjects = (assignments) => {
+        const invalidAssignments = [];
+
+        for (const assignment of assignments) {
+          // Only validate "Assigned" status assignments that need to persist
+          if (String(assignment.status ?? "").trim() !== "Assigned") {
+            continue;
+          }
+
+          const subjectId = String(assignment.subject_id ?? "").trim();
+          const subjectCode = String(
+            assignment.subject_code ??
+              assignment.code ??
+              assignment.subjectCode ??
+              "",
+          ).trim();
+
+          // Check if subject is in current subjects data
+          const subjectExists = subjects.some(
+            (s) =>
+              String(s.id ?? "").trim() === subjectId ||
+              String(s.code ?? "")
+                .trim()
+                .toUpperCase() === subjectCode.trim().toUpperCase(),
+          );
+
+          if (!subjectExists && subjectId) {
+            invalidAssignments.push({
+              assignmentKey: `${assignment.section_id || ""}-${assignment.subject_code || assignment.code || assignment.course_code || ""}`,
+              subjectId,
+              subjectCode,
+              reason: `Subject '${subjectCode || subjectId}' not found in database. Database may have been modified after schedule generation.`,
+            });
+          }
+        }
+
+        return {
+          valid: invalidAssignments.length === 0,
+          invalidCount: invalidAssignments.length,
+          firstError:
+            invalidAssignments.length > 0 ? invalidAssignments[0] : null,
+          invalidAssignments,
+        };
+      };
+
+      // Perform pre-flight validation
+      const subjectValidation = validateAssignmentSubjects(normalized);
+      if (!subjectValidation.valid) {
+        console.error(
+          "[DataContext] Subject validation failed before DB write:",
+          subjectValidation,
+        );
+        const errorMsg = `Cannot save schedule: ${subjectValidation.invalidCount} assignment${
+          subjectValidation.invalidCount !== 1 ? "s" : ""
+        } reference missing subjects. First error: ${subjectValidation.firstError?.reason}. Please re-generate or manually resolve.`;
+
+        setScheduleAssignmentsError({
+          code: "INVALID_SUBJECT_REFS",
+          message: errorMsg,
+          details: JSON.stringify(subjectValidation.invalidAssignments),
+        });
+        return Promise.reject({
+          code: "INVALID_SUBJECT_REFS",
+          message: errorMsg,
+        });
+      }
+
+      setScheduleAssignmentsSyncing(true);
+      setScheduleAssignmentsError(null);
+
+      // Optimistically update local state
+      setScheduleAssignments(normalized);
+
+      if (skipPersist) {
+        setScheduleAssignmentsSyncing(false);
+        return Promise.resolve();
+      }
+
+      try {
+        const result = await persistScheduleAssignments(normalized);
+
+        if (result.success) {
+          setScheduleAssignmentsSyncing(false);
+          return Promise.resolve();
+        } else {
+          // Rollback state on persistence failure
+          setScheduleAssignments(previousAssignments);
+          setScheduleAssignmentsError(result.error);
+          setScheduleAssignmentsSyncing(false);
+          return Promise.reject(result.error);
+        }
+      } catch (err) {
+        // Rollback on unexpected error
+        setScheduleAssignments(previousAssignments);
+        setScheduleAssignmentsError({
+          code: null,
+          message: "Unexpected error during persistence.",
+          details: String(err?.message ?? err),
+        });
+        setScheduleAssignmentsSyncing(false);
+        return Promise.reject(err);
+      }
+    },
+    [scheduleAssignments, persistScheduleAssignments, subjects],
+  );
+
+  // Clear schedule assignments from database (for before auto-generation)
+  const clearScheduleAssignments = useCallback(async () => {
+    setScheduleAssignmentsSyncing(true);
+    setScheduleAssignmentsError(null);
+
+    try {
+      // Call RPC function to atomically delete schedule_assignments and conflicts from database
+      const { data, error } = await supabase.rpc("reset_schedule_for_term", {
+        p_academic_year: ACTIVE_ACADEMIC_YEAR,
+        p_semester: ACTIVE_SEMESTER,
+      });
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear existing schedule assignments.",
+        );
+        console.error("[DataContext] Error clearing schedules:", normalized);
+        setScheduleAssignmentsError(normalized);
+        setScheduleAssignmentsSyncing(false);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setScheduleAssignments([]);
+      setScheduleAssignmentsSyncing(false);
+      console.log("[DataContext] Successfully cleared schedule assignments.");
+      return { success: true };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing schedule assignments.",
+      );
+      console.error("[DataContext] Unexpected error during clear:", normalized);
+      setScheduleAssignmentsError(normalized);
+      setScheduleAssignmentsSyncing(false);
+      return { success: false, error: normalized };
+    }
+  }, []);
+
+  // Clear all rooms from database (admin-only)
+  const clearRooms = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_rooms");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear rooms.",
+        );
+        console.error("[DataContext] Error clearing rooms:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setRooms([]);
+      console.log("[DataContext] Successfully cleared all rooms.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing rooms.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear rooms:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
+  }, []);
+
+  // Clear all instructors from database (admin-only)
+  const clearInstructors = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_instructors");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear instructors.",
+        );
+        console.error("[DataContext] Error clearing instructors:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty array
+      setInstructors([]);
+      console.log("[DataContext] Successfully cleared all instructors.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing instructors.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear instructors:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
+  }, []);
+
+  // Clear all subjects from database (admin-only)
+  const clearSubjects = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc("clear_all_subjects");
+
+      if (error) {
+        const normalized = normalizePostgresError(
+          error,
+          "Failed to clear subjects.",
+        );
+        console.error("[DataContext] Error clearing subjects:", normalized);
+        return { success: false, error: normalized };
+      }
+
+      // Update local state to empty arrays (both subjects and sections)
+      setSubjects([]);
+      setSubjectSections([]);
+      console.log("[DataContext] Successfully cleared all subjects.", data);
+      return { success: true, data };
+    } catch (err) {
+      const normalized = normalizePostgresError(
+        err,
+        "Unexpected error clearing subjects.",
+      );
+      console.error(
+        "[DataContext] Unexpected error during clear subjects:",
+        normalized,
+      );
+      return { success: false, error: normalized };
+    }
   }, []);
 
   // Reset back to empty state, then refresh from the database.
-  const resetAllData = useCallback(() => {
+  const resetAllData = useCallback(async () => {
+    // Synchronously clear ALL state variables before any async operations.
     setSubjects([]);
     setSubjectSections([]);
     setRooms([]);
     setInstructors([]);
     setInstructorSubjects([]);
     setScheduleAssignments([]);
+    setScheduleAssignmentsSyncing(false);
+    setScheduleAssignmentsError(null);
+    setIsGenerationInProgress(false);
+
+    try {
+      // Call RPC function to atomically delete schedule_assignments and conflicts from database.
+      const { data, error } = await supabase.rpc("reset_schedule_for_term", {
+        p_academic_year: ACTIVE_ACADEMIC_YEAR,
+        p_semester: ACTIVE_SEMESTER,
+      });
+
+      if (error) {
+        console.error(
+          "Reset schedule database cleanup encountered an issue:",
+          error,
+        );
+        // Continue anyway: local state is already cleared, proceed with bootstrap
+      } else {
+        console.log("Schedule reset result:", data);
+      }
+    } catch (err) {
+      console.error("Unexpected error during schedule reset:", err);
+      // Continue anyway: local state is already cleared, proceed with bootstrap
+    }
+
+    // Refresh all data from the database.
     bootstrapFromSupabase();
   }, [bootstrapFromSupabase]);
 
@@ -678,6 +1133,8 @@ export function DataProvider({ children }) {
       isBootstrapping,
       isGenerationInProgress,
       setIsGenerationInProgress,
+      scheduleAssignmentsSyncing,
+      scheduleAssignmentsError,
       addSubject,
       updateSubjects,
       addSubjectSection,
@@ -691,6 +1148,10 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateInstructorSubjects,
       updateScheduleAssignments,
+      clearScheduleAssignments,
+      clearRooms,
+      clearInstructors,
+      clearSubjects,
       resetAllData,
     }),
     [
@@ -710,6 +1171,8 @@ export function DataProvider({ children }) {
       conflicts,
       isBootstrapping,
       isGenerationInProgress,
+      scheduleAssignmentsSyncing,
+      scheduleAssignmentsError,
       addSubject,
       updateSubjects,
       addSubjectSection,
@@ -723,6 +1186,10 @@ export function DataProvider({ children }) {
       updateInstructors,
       updateInstructorSubjects,
       updateScheduleAssignments,
+      clearScheduleAssignments,
+      clearRooms,
+      clearInstructors,
+      clearSubjects,
       resetAllData,
     ],
   );

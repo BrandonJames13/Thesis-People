@@ -8,7 +8,8 @@ import { formatTimeFromMin } from "../utils/timeUtils";
 
 function getAssignmentCourseCode(assignment) {
   return String(
-    assignment?.course_code ??
+    assignment?.subject_code ??
+      assignment?.course_code ??
       assignment?.code ??
       assignment?.subjectCode ??
       "",
@@ -230,12 +231,20 @@ export default function SchedulePage() {
       const startingSlot = coveredSlots[0];
       const boundedSpan = coveredSlots.length;
 
-const assignedDays = patternDaysMap[assignment.pattern?.toUpperCase()] || [];
+      const assignedDays =
+        patternDaysMap[assignment.pattern?.toUpperCase()] || [];
 
-if (assignedDays.length === 0) {
-  console.log("No days for pattern:", assignment.pattern);
-}
-console.log("Days for pattern:", assignment.pattern, "→", assignedDays, "| timeRange:", timeRange);
+      if (assignedDays.length === 0) {
+        console.log("No days for pattern:", assignment.pattern);
+      }
+      console.log(
+        "Days for pattern:",
+        assignment.pattern,
+        "→",
+        assignedDays,
+        "| timeRange:",
+        timeRange,
+      );
 
       assignedDays.forEach((day) => {
         if (!DAYS.includes(day)) return;

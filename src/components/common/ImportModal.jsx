@@ -4,6 +4,7 @@ import { useData } from "../../context/DataContext";
 import { useNotification } from "../../context/NotificationContext";
 import { supabase } from "../../lib/supabaseClient";
 import {
+  detectSpecialRoomType,
   getDefaultRoomCapacity,
   normalizeDepartment,
 } from "../../data/constants";
@@ -20,6 +21,8 @@ import {
 import {
   buildSectionIdentityKey,
   buildSubjectIdentityKey,
+  validateSubjectIdentityKey,
+  generateSubjectLookupSuggestions,
   CSV_TYPE_OPTIONS,
   CSV_TYPES,
   downloadCsvTemplate,
@@ -68,6 +71,11 @@ export default function ImportModal({ isOpen, onClose }) {
   const [isParsing, setIsParsing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [showValidationLogs, setShowValidationLogs] = useState(false);
+  const [expandedLogSections, setExpandedLogSections] = useState({
+    matched: true,
+    skipped: true,
+    errors: true,
+  });
 
   const selectedTypeConfig = useMemo(
     () => getCsvTypeConfig(importType),
@@ -320,7 +328,21 @@ export default function ImportModal({ isOpen, onClose }) {
       throw new Error("No room rows were parsed for import.");
     }
 
-    await upsertRows("rooms", dbRows, "number", "Unable to import rooms.");
+    // Apply special room type detection
+    const dbRowsWithDetection = dbRows.map((row) => {
+      const detectedType = detectSpecialRoomType(row.number);
+      return {
+        ...row,
+        type: detectedType || row.type,
+      };
+    });
+
+    await upsertRows(
+      "rooms",
+      dbRowsWithDetection,
+      "number",
+      "Unable to import rooms.",
+    );
   };
 
   const importInstructors = async (payload) => {
@@ -643,9 +665,9 @@ export default function ImportModal({ isOpen, onClose }) {
       throw new Error("No schedule assignment rows were parsed for import.");
     }
 
-    // Fetch all courses codes, room numbers, and instructor names to resolve lookups
-    const courseCodes = Array.from(
-      new Set(dbRows.map((row) => row?.course_code).filter(Boolean)),
+    // Fetch all subjects codes, room numbers, and instructor names to resolve lookups
+    const subjectCodes = Array.from(
+      new Set(dbRows.map((row) => row?.subject_code).filter(Boolean)),
     );
     const roomNumbers = Array.from(
       new Set(dbRows.map((row) => row?.room_number).filter(Boolean)),
@@ -657,11 +679,11 @@ export default function ImportModal({ isOpen, onClose }) {
     // Query for existing data to resolve foreign keys
     // Note: .in() handles empty arrays gracefully, but we build queries safely
     const subjectPromise =
-      courseCodes.length > 0
+      subjectCodes.length > 0
         ? supabase
             .from("subjects")
             .select("id, code, program, year")
-            .in("code", courseCodes)
+            .in("code", subjectCodes)
         : Promise.resolve({ data: [], error: null });
 
     const roomPromise =
@@ -766,7 +788,7 @@ export default function ImportModal({ isOpen, onClose }) {
     // Transform dbRows into schedule_assignments upsert rows
     const scheduleUpsertRows = dbRows
       .map((row) => {
-        const subject = subjectByCode.get(normalizeLookupKey(row.course_code));
+        const subject = subjectByCode.get(normalizeLookupKey(row.subject_code));
         if (!subject) {
           return null; // Skip rows where subject cannot be resolved
         }
@@ -791,7 +813,7 @@ export default function ImportModal({ isOpen, onClose }) {
           subject_id: subject.id,
           room_id: room?.id ?? null,
           instructor_id: instructor?.id ?? null,
-          course_code: row.course_code,
+          subject_code: row.subject_code,
           section: row.section,
           academic_year: row.academic_year,
           semester: row.semester,
@@ -885,17 +907,19 @@ export default function ImportModal({ isOpen, onClose }) {
       const resolvedWing = getWingFromRoomInput(row.room).resolvedWing;
       const capacity =
         existing?.capacity ?? getDefaultRoomCapacity(row.roomType);
+      const detectedType = detectSpecialRoomType(row.room);
+      const resolvedType = detectedType || row.roomType;
       return existing
         ? {
             number: row.room,
-            type: row.roomType,
+            type: resolvedType,
             capacity,
             status: existing.status ?? "Available",
             wing: existing.wing ?? resolvedWing,
           }
         : {
             number: row.room,
-            type: row.roomType,
+            type: resolvedType,
             capacity,
             status: "Available",
             wing: resolvedWing,
@@ -1068,7 +1092,7 @@ export default function ImportModal({ isOpen, onClose }) {
         subject_id: subject?.id ?? scheduleRow.subject_id ?? null,
         room_id: room?.id ?? null,
         instructor_id: instructor?.id ?? null,
-          status: "Assigned", // ! ← add this line
+        status: "Assigned", // ! ← add this line
       });
     });
 
@@ -1141,8 +1165,47 @@ export default function ImportModal({ isOpen, onClose }) {
       const subjectKey = buildSubjectIdentityKey(row);
       const subject = subjectByKey.get(subjectKey);
       if (!subject) {
+        // Enhanced error logging with full row context and smart suggestions
+        const keyValidation = validateSubjectIdentityKey(subjectKey);
+        const suggestions = generateSubjectLookupSuggestions(row, subjectByKey);
+
+        // Log to console for developer debugging
+        console.error(
+          `[ImportModal] Subject lookup failed for row ${idx + 1}`,
+          {
+            searchedKey: subjectKey,
+            rowData: { code: row.code, program: row.program, year: row.year },
+            keyValid: keyValidation.isValid,
+            keyErrors: keyValidation.errors,
+            availableKeyCount: subjectByKey.size,
+            sampleKeys: Array.from(subjectByKey.keys()).slice(0, 5),
+          },
+        );
+
+        // Log suggestions to console
+        console.warn(
+          `[ImportModal] Suggestions for row ${idx + 1}:`,
+          suggestions,
+        );
+
+        // Add comprehensive debug log for display
+        const rawCode = row.code || "(empty)";
+        const rawProgram = row.program || "(empty)";
+        const rawYear = row.year || "(empty)";
+        const sampleKeys = Array.from(subjectByKey.keys())
+          .slice(0, 3)
+          .join(" | ");
+        const availableKeysMsg =
+          sampleKeys.length > 0
+            ? `Available sample keys: ${sampleKeys}`
+            : "No subjects available in database";
+
         debugLogs.push(
-          `Row ${idx + 1}: Subject NOT FOUND - looked for key "${subjectKey}"`,
+          `Row ${idx + 1}: Subject NOT FOUND\n` +
+            `  Searched for key: "${subjectKey}"\n` +
+            `  Raw CSV values: code="${rawCode}", program="${rawProgram}", year="${rawYear}"\n` +
+            `  ${availableKeysMsg}\n` +
+            `  Suggestions: ${suggestions.join(" ")}`,
         );
         return;
       }
@@ -1229,9 +1292,15 @@ export default function ImportModal({ isOpen, onClose }) {
       }
 
       resetAllData();
-      showNotification(
-        `Imported ${parsed.rowCount ?? 0} ${selectedTypeConfig.label.toLowerCase()} row(s).`,
-      );
+
+      let notificationMessage;
+      if (parsed.type === CSV_TYPES.FULL_LIST) {
+        notificationMessage =
+          "Full list imported successfully. Schedule assignments and instructor-section mappings are ready to use.";
+      } else {
+        notificationMessage = `Imported ${parsed.rowCount ?? 0} ${selectedTypeConfig.label.toLowerCase()} row(s). Generate schedules from the Dashboard when ready.`;
+      }
+      showNotification(notificationMessage);
       onClose();
     } catch (err) {
       if (isRlsViolation(err)) {
@@ -1403,15 +1472,139 @@ export default function ImportModal({ isOpen, onClose }) {
                 onClick={() => setShowValidationLogs(!showValidationLogs)}
                 style={{ fontSize: 11, padding: "4px 8px" }}
               >
-                {showValidationLogs ? "Hide Logs" : "Show Logs"}
+                {showValidationLogs ? "Hide Details" : "Show Details"}
               </button>
             </div>
             {showValidationLogs && (
-              <ul style={{ margin: 0, paddingLeft: 18, marginTop: 6 }}>
-                {parsed.warnings.map((warning, index) => (
-                  <li key={`${warning}-${index}`}>{warning}</li>
-                ))}
-              </ul>
+              <div
+                style={{
+                  marginTop: 6,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                }}
+              >
+                {(() => {
+                  // Categorize warnings
+                  const matched = parsed.warnings.filter(
+                    (w) => w.includes("MATCH") || w.includes("✅"),
+                  );
+                  const skipped = parsed.warnings.filter(
+                    (w) =>
+                      w.includes("Missing") ||
+                      w.includes("No ") ||
+                      w.includes("Skipping"),
+                  );
+                  const errors = parsed.warnings.filter(
+                    (w) =>
+                      w.includes("NOT FOUND") ||
+                      w.includes("Error") ||
+                      (w.includes("Row") &&
+                        !matched.includes(w) &&
+                        !skipped.includes(w)),
+                  );
+
+                  const categoryConfig = [
+                    {
+                      key: "matched",
+                      label: "✅ Matched",
+                      logs: matched,
+                      color: "#10b981",
+                      bgColor: "#ecfdf5",
+                      borderColor: "#86efac",
+                    },
+                    {
+                      key: "skipped",
+                      label: "⚠️ Skipped",
+                      logs: skipped,
+                      color: "#d97706",
+                      bgColor: "#fffbeb",
+                      borderColor: "#fcd34d",
+                    },
+                    {
+                      key: "errors",
+                      label: "❌ Errors",
+                      logs: errors,
+                      color: "#dc2626",
+                      bgColor: "#fef2f2",
+                      borderColor: "#fecaca",
+                    },
+                  ];
+
+                  return categoryConfig.map(
+                    (category) =>
+                      category.logs.length > 0 && (
+                        <div key={category.key}>
+                          <button
+                            onClick={() =>
+                              setExpandedLogSections({
+                                ...expandedLogSections,
+                                [category.key]:
+                                  !expandedLogSections[category.key],
+                              })
+                            }
+                            style={{
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              padding: 0,
+                              textAlign: "left",
+                              width: "100%",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              fontSize: 11,
+                              fontWeight: 600,
+                              color: category.color,
+                            }}
+                          >
+                            <span style={{ fontSize: 10 }}>
+                              {expandedLogSections[category.key] ? "▼" : "▶"}
+                            </span>
+                            {category.label} ({category.logs.length})
+                          </button>
+                          {expandedLogSections[category.key] && (
+                            <div
+                              style={{
+                                marginTop: 6,
+                                padding: 8,
+                                backgroundColor: category.bgColor,
+                                border: `1px solid ${category.borderColor}`,
+                                borderRadius: 4,
+                                maxHeight: "250px",
+                                overflowY: "auto",
+                                fontFamily: "monospace",
+                                fontSize: 11,
+                                lineHeight: 1.5,
+                                color: "#1f2937",
+                              }}
+                            >
+                              {category.logs.map((log, idx) => (
+                                <div
+                                  key={`${category.key}-${idx}`}
+                                  style={{
+                                    marginBottom:
+                                      idx < category.logs.length - 1 ? 6 : 0,
+                                    paddingBottom:
+                                      idx < category.logs.length - 1 ? 6 : 0,
+                                    borderBottom:
+                                      idx < category.logs.length - 1
+                                        ? `1px solid ${category.borderColor}`
+                                        : "none",
+                                    whiteSpace: "pre-wrap",
+                                    wordBreak: "break-word",
+                                  }}
+                                >
+                                  {log}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ),
+                  );
+                })()}
+              </div>
             )}
           </div>
         )}

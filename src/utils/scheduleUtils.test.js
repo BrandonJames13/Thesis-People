@@ -104,8 +104,8 @@ export function testScheduleOptimization() {
       scheduleAssignments: [],
       startTime: "07:00",
       endTime: "18:00",
-      pattern: "MWF",
-      activeDays: ["MON", "WED", "FRI"],
+      pattern: "MON,FRI",
+      activeDays: ["MON", "FRI"],
     });
 
     console.log(`  Assigned: ${result.assigned}`);
@@ -152,6 +152,98 @@ export function testScheduleOptimization() {
       }
     }
 
+    // Test 5: Subject validation - missing subject code
+    console.log("\n✓ Test 5: Missing subject validation");
+    const missingSectionResult = runAutoSchedule({
+      sectionRows: [
+        {
+          subjectId: "s999",
+          code: "CS999",
+          subject_code: "CS999",
+          title: "Non-existent Course",
+          section: "A",
+          year: 1,
+          program: "BS Computer Science",
+          enrolled: 25,
+          roomType: "Lecture",
+          duration: 1.5,
+          academicYear: "2024-2025",
+          semester: "1",
+        },
+      ],
+      subjects: mockSubjects,
+      rooms: mockRooms,
+      instructors: mockInstructors,
+      instructorSubjects: mockInstructorSubjects,
+      scheduleAssignments: [],
+      startTime: "07:00",
+      endTime: "18:00",
+      pattern: "MON,FRI",
+      activeDays: ["MON", "FRI"],
+    });
+
+    const conflicts = missingSectionResult.scheduleAssignments.filter(
+      (a) => a.status === "Conflict",
+    );
+    if (conflicts.length !== 1) {
+      throw new Error(
+        `Expected 1 conflict for missing subject, got ${conflicts.length}`,
+      );
+    }
+    if (!conflicts[0].conflictReason?.includes("Subject not found")) {
+      throw new Error(
+        `Expected 'Subject not found' conflict reason, got: ${conflicts[0].conflictReason}`,
+      );
+    }
+    if (!conflicts[0].conflictReason?.includes("CS999")) {
+      throw new Error(
+        `Expected subject code in conflict reason, got: ${conflicts[0].conflictReason}`,
+      );
+    }
+    console.log(
+      `  ✓ Missing subject marked as conflict with reason: "${conflicts[0].conflictReason}"`,
+    );
+
+    // Test 6: Mixed valid and invalid subjects
+    console.log("\n✓ Test 6: Mixed valid/invalid subject codes");
+    const mixedResult = runAutoSchedule({
+      sectionRows: [
+        mockSections[0], // Valid: CS101
+        {
+          ...mockSections[1],
+          code: "INVALID_CODE",
+          subject_code: "INVALID_CODE",
+        }, // Invalid
+      ],
+      subjects: mockSubjects,
+      rooms: mockRooms,
+      instructors: mockInstructors,
+      instructorSubjects: mockInstructorSubjects,
+      scheduleAssignments: [],
+      startTime: "07:00",
+      endTime: "18:00",
+      pattern: "MON,FRI",
+      activeDays: ["MON", "FRI"],
+    });
+
+    const validCount = mixedResult.scheduleAssignments.filter(
+      (a) => a.status === "Assigned" || a.status === "Pending",
+    ).length;
+    const invalidCount = mixedResult.scheduleAssignments.filter(
+      (a) =>
+        a.status === "Conflict" &&
+        a.conflictReason?.includes("Subject not found"),
+    ).length;
+
+    if (invalidCount !== 1) {
+      throw new Error(
+        `Expected 1 'Subject not found' conflict, got ${invalidCount}`,
+      );
+    }
+    console.log(
+      `  ✓ Mixed sections: ${validCount} assigned/pending, ${invalidCount} subject not found`,
+    );
+
     console.log("\n✅ All optimization tests passed!");
     return { success: true, result };
   } catch (error) {
@@ -162,9 +254,11 @@ export function testScheduleOptimization() {
 }
 
 // Run test if executed directly
+// eslint-disable-next-line no-undef
 if (typeof module !== "undefined" && module.meta?.url) {
   const testResult = testScheduleOptimization();
   if (!testResult.success) {
+    // eslint-disable-next-line no-undef
     process.exit(1);
   }
 }
