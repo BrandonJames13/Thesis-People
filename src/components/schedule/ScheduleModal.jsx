@@ -203,6 +203,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       const baseRow = {
         ...section,
         code: section.subjectCode,
+        subjectCode: section.subjectCode, // Explicitly preserve for Lec/Lab splits
         section: section.section,
         sectionId: section.sectionId,
         baseSectionId, // Track the original DB section_id separately

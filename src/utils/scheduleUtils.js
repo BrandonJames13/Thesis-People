@@ -304,7 +304,18 @@ export function getAssignmentIdentityKey(row) {
 }
 
 export function formatAssignmentLabel(row) {
-  const code = getAssignmentSubjectCode(row) || "UNKNOWN";
+  let code = getAssignmentSubjectCode(row);
+  // Fallback chain if subject code is missing:
+  // 1. Try section_id (UUID format)
+  // 2. Try sectionId
+  // 3. Use "UNKNOWN" as last resort
+  if (!code) {
+    code = row?.section_id || row?.sectionId || "UNKNOWN";
+    // Truncate UUID to last 8 chars for readability
+    if (code !== "UNKNOWN" && code.length > 8) {
+      code = code.slice(-8);
+    }
+  }
   const section = getAssignmentSection(row);
   return `${code}-${section}`;
 }

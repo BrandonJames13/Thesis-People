@@ -191,18 +191,25 @@ function normalizeAssignmentFromDbRow(row, lookup) {
   const room = lookup.roomById.get(String(row.room_id ?? ""));
   const instructor = lookup.instructorById.get(String(row.instructor_id ?? ""));
 
+  // Enhanced fallback chain for subjectCode to prevent "UNKNOWN" display:
+  // 1. DB columns: subject_code, course_code, code
+  // 2. Section lookup: always available if section_id exists
+  // 3. Subject lookup: via subject_id reference
+  // 4. Last resort: empty string (indicates data loss)
+  const subjectCodeValue =
+    row.subject_code ??
+    row.course_code ??
+    row.code ??
+    section?.subjectCode ??
+    subject?.code ??
+    "";
+
   return normalizeScheduleAssignment({
     assignment_id: row.id,
     assignmentId: row.id,
     section_id: row.section_id,
     sectionId: row.section_id,
-    subjectCode:
-      row.subject_code ??
-      row.course_code ??
-      row.code ??
-      section?.subjectCode ??
-      subject?.code ??
-      "",
+    subjectCode: subjectCodeValue,
     section: row.section ?? section?.section ?? DEFAULT_SECTION,
     academic_year:
       row.academic_year ?? section?.academicYear ?? ACTIVE_ACADEMIC_YEAR,
@@ -753,26 +760,36 @@ export function DataProvider({ children }) {
         }
 
         // Map normalized fields to database columns
-        const rowsToUpsert = assignedOnly.map((assignment) => ({
-          section_id: assignment.section_id || assignment.sectionId || "",
-          subject_id: assignment.subject_id || assignment.subjectId || "",
-          room_id: assignment.room_id || assignment.roomId || "",
-          instructor_id:
-            assignment.instructor_id || assignment.instructorId || "",
-          subject_code: assignment.code || assignment.subjectCode || "",
-          subject_title: assignment.course_title || assignment.title || "",
-          status: assignment.status || "Assigned",
-          pattern: assignment.pattern || "",
-          time_display: assignment.time_display || assignment.time || "",
-          time_start: assignment.time_start || null,
-          time_end: assignment.time_end || null,
-          duration: assignment.duration || 1.5,
-          academic_year:
-            assignment.academic_year ||
-            assignment.academicYear ||
-            ACTIVE_ACADEMIC_YEAR,
-          semester: assignment.semester || ACTIVE_SEMESTER,
-        }));
+        // IMPORTANT: Ensure subject_code is never NULL to prevent "UNKNOWN" display on reload
+        const rowsToUpsert = assignedOnly.map((assignment) => {
+          // Priority chain: explicit code/subjectCode > section lookup > empty string
+          const subjectCodeValue =
+            assignment.code ||
+            assignment.subjectCode ||
+            assignment.section_code ||
+            "";
+
+          return {
+            section_id: assignment.section_id || assignment.sectionId || "",
+            subject_id: assignment.subject_id || assignment.subjectId || "",
+            room_id: assignment.room_id || assignment.roomId || "",
+            instructor_id:
+              assignment.instructor_id || assignment.instructorId || "",
+            subject_code: subjectCodeValue,
+            subject_title: assignment.course_title || assignment.title || "",
+            status: assignment.status || "Assigned",
+            pattern: assignment.pattern || "",
+            time_display: assignment.time_display || assignment.time || "",
+            time_start: assignment.time_start || null,
+            time_end: assignment.time_end || null,
+            duration: assignment.duration || 1.5,
+            academic_year:
+              assignment.academic_year ||
+              assignment.academicYear ||
+              ACTIVE_ACADEMIC_YEAR,
+            semester: assignment.semester || ACTIVE_SEMESTER,
+          };
+        });
 
         // Perform upsert with unique constraint on (section_id, academic_year, semester)
         const { data, error } = await supabase
