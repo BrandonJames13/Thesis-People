@@ -256,6 +256,151 @@ function buildNormalizedFromCourseRows(rows) {
   };
 }
 
+/**
+ * Builds instructor loads from two sources:
+ * 1. scheduleAssignments with status "Assigned" (scheduled with hours)
+ * 2. instructorSubjects (unscheduled assignments from import)
+ *
+ * Deduplicates by section_id to avoid double-counting the same section.
+ * Counts unique subjects by subject_id.
+ * Uses duration from scheduleAssignments; defaults to 0 for unscheduled entries.
+ *
+ * @param {Array} scheduleAssignments - Schedule assignments with status and duration
+ * @param {Array} instructorSubjects - Instructor-subject-section assignments from import
+ * @param {Array} subjectSections - Subject sections for subject_id lookup
+ * @returns {Map} Map of instructor keys to load metrics
+ */
+function buildInstructorLoadsFromBothSources(
+  scheduleAssignments,
+  instructorSubjects,
+  subjectSections,
+) {
+  // Build section lookup index for instructorSubjects processing
+  const sectionById = new Map(
+    (Array.isArray(subjectSections) ? subjectSections : []).map((section) => [
+      String(section?.sectionId ?? section?.id ?? section?.section_id ?? "")
+        .trim()
+        .toLowerCase(),
+      section,
+    ]),
+  );
+
+  // Track all processed sections to deduplicate across both sources
+  const processedSectionKeys = new Set();
+  const loadMap = new Map();
+
+  // ── Phase 1: Process scheduled assignments (status="Assigned") ────
+  (Array.isArray(scheduleAssignments) ? scheduleAssignments : []).forEach(
+    (assignment) => {
+      if (assignment.status !== "Assigned") return;
+
+      const instructorKey = getInstructorLoadKey(assignment);
+      if (!instructorKey) return;
+
+      const sectionKey =
+        String(assignment.section_id ?? "").trim() ||
+        String(
+          assignment.assignmentId ?? assignment.assignment_id ?? "",
+        ).trim() ||
+        assignment.sectionIdentity;
+      if (!sectionKey) return;
+
+      // Avoid re-processing same section
+      if (processedSectionKeys.has(sectionKey)) return;
+      processedSectionKeys.add(sectionKey);
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectIds: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      current.sectionKeys.add(sectionKey);
+
+      // Track subject by ID for unique counting
+      const subjectId = String(assignment.subject_id ?? "").trim();
+      if (subjectId) {
+        current.subjectIds.add(subjectId);
+      } else {
+        // Fallback to subject code if ID not available
+        const subjectCode = String(
+          assignment.code ?? assignment.subjectCode ?? "",
+        )
+          .trim()
+          .toUpperCase();
+        if (subjectCode) {
+          current.subjectIds.add(subjectCode);
+        }
+      }
+
+      // Calculate hours by room type
+      const duration = Number(assignment.duration ?? 0) || 0;
+      const roomType = normalizeRoomType(
+        assignment.roomType ?? assignment.room_type,
+      );
+      const isLab = roomType === "Computer Lab";
+      if (isLab) current.labHours += duration;
+      else current.lectureHours += duration;
+
+      loadMap.set(instructorKey, current);
+    },
+  );
+
+  // ── Phase 2: Process unscheduled instructor-subject assignments ────
+  (Array.isArray(instructorSubjects) ? instructorSubjects : []).forEach(
+    (row) => {
+      const instructorKey = getInstructorLoadKey(row);
+      if (!instructorKey) return;
+
+      const sectionId = String(row.section_id ?? row.sectionId ?? "")
+        .trim()
+        .toLowerCase();
+      if (!sectionId) return;
+
+      // Skip if already processed from scheduleAssignments (avoid double-count)
+      if (processedSectionKeys.has(sectionId)) return;
+      processedSectionKeys.add(sectionId);
+
+      const current = loadMap.get(instructorKey) ?? {
+        subjectIds: new Set(),
+        sectionKeys: new Set(),
+        lectureHours: 0,
+        labHours: 0,
+      };
+
+      current.sectionKeys.add(sectionId);
+
+      // Track subject ID from instructorSubjects
+      const subjectId = String(row.subject_id ?? row.subjectId ?? "")
+        .trim()
+        .toLowerCase();
+      if (subjectId) {
+        current.subjectIds.add(subjectId);
+      }
+
+      // Note: No hours added for unscheduled assignments (defaults to 0)
+      // Hours will be added when auto-schedule runs or manual assignment occurs
+
+      loadMap.set(instructorKey, current);
+    },
+  );
+
+  // ── Phase 3: Normalize to final load structure ────
+  const loads = new Map();
+  loadMap.forEach((load, key) => {
+    loads.set(key, {
+      subjectCount: load.subjectIds.size,
+      sectionCount: load.sectionKeys.size,
+      lectureHours: load.lectureHours,
+      labHours: load.labHours,
+      totalHours: load.lectureHours + load.labHours,
+    });
+  });
+
+  return loads;
+}
+
 const DataContext = createContext();
 
 export function DataProvider({ children }) {
@@ -409,67 +554,12 @@ export function DataProvider({ children }) {
   }, [bootstrapFromSupabase]);
 
   const instructorLoads = useMemo(() => {
-    const loadMap = new Map();
-
-    scheduleAssignments.forEach((assignment) => {
-      if (assignment.status !== "Assigned") return;
-
-      const instructorKey = getInstructorLoadKey(assignment);
-      if (!instructorKey) return;
-
-      const sectionKey =
-        String(assignment.section_id ?? "").trim() ||
-        String(
-          assignment.assignmentId ?? assignment.assignment_id ?? "",
-        ).trim() ||
-        assignment.sectionIdentity;
-      if (!sectionKey) return;
-
-      const current = loadMap.get(instructorKey) ?? {
-        subjectKeys: new Set(),
-        sectionKeys: new Set(),
-        lectureHours: 0,
-        labHours: 0,
-      };
-
-      if (current.sectionKeys.has(sectionKey)) {
-        loadMap.set(instructorKey, current);
-        return;
-      }
-
-      current.sectionKeys.add(sectionKey);
-
-      const subjectKey = String(assignment.code ?? assignment.subjectCode ?? "")
-        .trim()
-        .toUpperCase();
-      if (subjectKey) {
-        current.subjectKeys.add(subjectKey);
-      }
-
-      const duration = Number(assignment.duration ?? 0) || 0;
-      const roomType = normalizeRoomType(
-        assignment.roomType ?? assignment.room_type,
-      );
-      const isLab = roomType === "Computer Lab";
-      if (isLab) current.labHours += duration;
-      else current.lectureHours += duration;
-
-      loadMap.set(instructorKey, current);
-    });
-
-    const loads = new Map();
-    loadMap.forEach((load, key) => {
-      loads.set(key, {
-        subjectCount: load.subjectKeys.size,
-        sectionCount: load.sectionKeys.size,
-        lectureHours: load.lectureHours,
-        labHours: load.labHours,
-        totalHours: load.lectureHours + load.labHours,
-      });
-    });
-
-    return loads;
-  }, [scheduleAssignments]);
+    return buildInstructorLoadsFromBothSources(
+      scheduleAssignments,
+      instructorSubjects,
+      subjectSections,
+    );
+  }, [scheduleAssignments, instructorSubjects, subjectSections]);
 
   const getInstructorLoad = useCallback(
     (instructor) => {
