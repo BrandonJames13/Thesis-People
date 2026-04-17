@@ -791,7 +791,7 @@ export default function ImportModal({ isOpen, onClose }) {
           subject_id: subject.id,
           room_id: room?.id ?? null,
           instructor_id: instructor?.id ?? null,
-          course_code: row.course_code,
+          subject_code: row.course_code,
           section: row.section,
           academic_year: row.academic_year,
           semester: row.semester,
