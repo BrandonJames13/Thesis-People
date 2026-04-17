@@ -265,10 +265,205 @@ export function buildSectionIdentityKey(row, options = {}) {
   return parts.map((value) => normalizeHeader(value)).join("|");
 }
 
+/**
+ * Build a unique identity key for a subject based on code, program, and year.
+ * Handles null/undefined values gracefully by converting them to empty strings.
+ * Logs warnings when fields fall back to empty string.
+ * @param {Object} row - Row object with code, program, year fields
+ * @returns {string} Key in format "code|program|year" (all lowercase, trimmed)
+ */
 export function buildSubjectIdentityKey(row) {
-  return [row?.code, row?.program, row?.year]
-    .map((value) => normalizeHeader(value))
-    .join("|");
+  if (!row) return "||";
+
+  const { code = null, program = null, year = null } = row;
+
+  // Normalize each field and track if it's using a fallback
+  const normalizedCode = normalizeValue(code);
+  const normalizedProgram = normalizeValue(program);
+  const normalizedYear = normalizeValue(year);
+
+  // Log warnings for fields that fell back to empty string
+  if (code == null || code === "") {
+    console.warn(
+      "[buildSubjectIdentityKey] Code field is null/undefined/empty. Key will have empty code segment.",
+      { code, program, year },
+    );
+  }
+  if (program == null || program === "") {
+    console.warn(
+      "[buildSubjectIdentityKey] Program field is null/undefined/empty. Key will have empty program segment.",
+      { code, program, year },
+    );
+  }
+  if (year == null || year === "") {
+    console.warn(
+      "[buildSubjectIdentityKey] Year field is null/undefined/empty. Key will have empty year segment.",
+      { code, program, year },
+    );
+  }
+
+  const key = [normalizedCode, normalizedProgram, normalizedYear].join("|");
+  return key;
+}
+
+/**
+ * Helper function to normalize a value: convert null/undefined to empty string,
+ * trim whitespace, and convert to lowercase.
+ * @param {*} value - Value to normalize
+ * @returns {string} Normalized value
+ */
+function normalizeValue(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * Validate a subject identity key to ensure it has the correct format.
+ * Returns an object with validation status and detailed error messages.
+ * @param {string} key - The key to validate (should be in "code|program|year" format)
+ * @returns {Object} { isValid: boolean, errors: string[] }
+ */
+export function validateSubjectIdentityKey(key) {
+  const errors = [];
+
+  // Check if key is a string
+  if (typeof key !== "string") {
+    errors.push("Key must be a string");
+    return { isValid: false, errors };
+  }
+
+  // Check for correct number of pipe separators
+  const segments = key.split("|");
+  if (segments.length !== 3) {
+    errors.push(
+      `Key must have exactly 2 pipe separators (found ${segments.length - 1}). Expected format: "code|program|year"`,
+    );
+  }
+
+  // Check that code (first segment) is not empty
+  if (segments.length >= 1 && (!segments[0] || segments[0].trim() === "")) {
+    errors.push("Code (first segment) cannot be empty");
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Generate helpful suggestions for debugging a failed subject lookup.
+ * Analyzes the provided row against available keys to suggest what might be wrong.
+ * @param {Object} row - The row that failed to match (with code, program, year)
+ * @param {Map|Array} availableKeys - Map or Array of available keys in the database
+ * @returns {string[]} Array of suggestion strings
+ */
+export function generateSubjectLookupSuggestions(row, availableKeys) {
+  const suggestions = [];
+
+  if (!row) {
+    suggestions.push(
+      "Row data is missing or null. Check that the CSV row was parsed correctly.",
+    );
+    return suggestions;
+  }
+
+  // Convert Map to array of keys if needed
+  const keysArray =
+    availableKeys instanceof Map
+      ? Array.from(availableKeys.keys())
+      : Array.isArray(availableKeys)
+        ? availableKeys
+        : [];
+
+  if (keysArray.length === 0) {
+    suggestions.push(
+      "No subjects found in the database. Verify that subjects have been imported.",
+    );
+    return suggestions;
+  }
+
+  const { code = null, program = null, year = null } = row;
+  const normalizedCode = normalizeValue(code);
+  const normalizedProgram = normalizeValue(program);
+  const normalizedYear = normalizeValue(year);
+
+  // Try to find patterns in available keys that match parts of the search key
+  const codeMatches = keysArray.filter((k) =>
+    k.startsWith(normalizedCode + "|"),
+  );
+
+  // Auto-detect likely issues
+  if (normalizedCode && codeMatches.length === 0) {
+    suggestions.push(
+      `Code "${code}" not found in any subject. Check if the code is spelled correctly.`,
+    );
+  } else if (normalizedCode && codeMatches.length > 0) {
+    // Code exists but combination doesn't match
+    const programsForCode = codeMatches
+      .map((k) => k.split("|")[1])
+      .filter((p, i, arr) => arr.indexOf(p) === i && p !== "");
+
+    if (normalizedProgram && !programsForCode.includes(normalizedProgram)) {
+      if (programsForCode.length > 0) {
+        suggestions.push(
+          `Code "${code}" found but program "${program}" does not match. ` +
+            `Available programs for this code: ${programsForCode.join(", ")}. ` +
+            `Verify the program value in your CSV.`,
+        );
+      } else {
+        suggestions.push(
+          `Code "${code}" found but no subjects have a program specified for this code. ` +
+            `Check if the program value "${program}" is correct.`,
+        );
+      }
+    } else if (!normalizedProgram) {
+      suggestions.push(
+        `Code "${code}" found but program is empty. Available programs for this code: ${programsForCode.length > 0 ? programsForCode.join(", ") : "(none specified)"}. ` +
+          `The CSV may be missing the program value.`,
+      );
+    }
+  } else if (!normalizedCode) {
+    suggestions.push(
+      "Code field is empty or missing. Check that the subject code is present in the CSV.",
+    );
+  }
+
+  if (normalizedCode && normalizedProgram) {
+    const yearMatches = keysArray.filter((k) => {
+      const parts = k.split("|");
+      return parts[0] === normalizedCode && parts[1] === normalizedProgram;
+    });
+
+    if (yearMatches.length === 0 && normalizedYear) {
+      suggestions.push(
+        `No subjects found for code "${code}" with program "${program}". ` +
+          `Check if this code/program combination exists in the database.`,
+      );
+    } else if (yearMatches.length > 0 && normalizedYear) {
+      const yearsForCodeProgram = yearMatches
+        .map((k) => k.split("|")[2])
+        .filter((y, i, arr) => arr.indexOf(y) === i && y !== "");
+
+      if (normalizedYear && !yearsForCodeProgram.includes(normalizedYear)) {
+        suggestions.push(
+          `Year "${year}" not found for code "${code}" with program "${program}". ` +
+            `Available years: ${yearsForCodeProgram.length > 0 ? yearsForCodeProgram.join(", ") : "(none specified)"}. ` +
+            `Verify the year value in your CSV.`,
+        );
+      }
+    }
+  }
+
+  // Fallback generic suggestions
+  if (suggestions.length === 0) {
+    suggestions.push(
+      "Subject not found in the database. Verify that: (1) Code, program, and year values exist in the database; (2) The values are spelled correctly and match existing subjects; (3) There are no extra spaces or case differences in the CSV values.",
+    );
+  }
+
+  return suggestions;
 }
 
 /**

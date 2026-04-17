@@ -21,6 +21,8 @@ import {
 import {
   buildSectionIdentityKey,
   buildSubjectIdentityKey,
+  validateSubjectIdentityKey,
+  generateSubjectLookupSuggestions,
   CSV_TYPE_OPTIONS,
   CSV_TYPES,
   downloadCsvTemplate,
@@ -1163,7 +1165,30 @@ export default function ImportModal({ isOpen, onClose }) {
       const subjectKey = buildSubjectIdentityKey(row);
       const subject = subjectByKey.get(subjectKey);
       if (!subject) {
-        // Enhanced error logging with raw CSV values and available keys
+        // Enhanced error logging with full row context and smart suggestions
+        const keyValidation = validateSubjectIdentityKey(subjectKey);
+        const suggestions = generateSubjectLookupSuggestions(row, subjectByKey);
+
+        // Log to console for developer debugging
+        console.error(
+          `[ImportModal] Subject lookup failed for row ${idx + 1}`,
+          {
+            searchedKey: subjectKey,
+            rowData: { code: row.code, program: row.program, year: row.year },
+            keyValid: keyValidation.isValid,
+            keyErrors: keyValidation.errors,
+            availableKeyCount: subjectByKey.size,
+            sampleKeys: Array.from(subjectByKey.keys()).slice(0, 5),
+          },
+        );
+
+        // Log suggestions to console
+        console.warn(
+          `[ImportModal] Suggestions for row ${idx + 1}:`,
+          suggestions,
+        );
+
+        // Add comprehensive debug log for display
         const rawCode = row.code || "(empty)";
         const rawProgram = row.program || "(empty)";
         const rawYear = row.year || "(empty)";
@@ -1180,7 +1205,7 @@ export default function ImportModal({ isOpen, onClose }) {
             `  Searched for key: "${subjectKey}"\n` +
             `  Raw CSV values: code="${rawCode}", program="${rawProgram}", year="${rawYear}"\n` +
             `  ${availableKeysMsg}\n` +
-            `  Tip: Check spelling, case sensitivity, or program/year mismatch`,
+            `  Suggestions: ${suggestions.join(" ")}`,
         );
         return;
       }
