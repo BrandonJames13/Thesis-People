@@ -40,13 +40,14 @@ function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
         backgroundColor: "#fff3cd",
         border: "1px solid #ffc107",
         borderRadius: "4px",
+        color: "#333",
       }}
     >
       <h4 style={{ marginTop: 0, color: "#d9534f" }}>
         ⚠ {conflicts.length} Conflict{conflicts.length !== 1 ? "s" : ""}{" "}
         Detected
       </h4>
-      <p style={{ marginBottom: "12px", fontSize: "14px" }}>
+      <p style={{ marginBottom: "12px", fontSize: "14px", color: "#333" }}>
         Some sections could not be scheduled due to missing or invalid data. You
         can review these conflicts in the Conflicts page to manually resolve
         them.
@@ -58,20 +59,29 @@ function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
           fontSize: "13px",
           maxHeight: "200px",
           overflowY: "auto",
+          color: "#333",
         }}
       >
         {Object.entries(groupedConflicts).map(([type, items]) => (
           <div key={type} style={{ marginBottom: "8px" }}>
-            <strong>{type}:</strong>
+            <strong style={{ color: "#333" }}>{type}:</strong>
             <ul
               style={{
                 marginTop: "4px",
                 marginBottom: "8px",
                 paddingLeft: "20px",
+                color: "#333",
               }}
             >
               {items.map((conflict, idx) => (
-                <li key={idx} style={{ marginBottom: "4px", fontSize: "12px" }}>
+                <li
+                  key={idx}
+                  style={{
+                    marginBottom: "4px",
+                    fontSize: "12px",
+                    color: "#333",
+                  }}
+                >
                   {conflict.conflictReason ||
                     `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
                 </li>
