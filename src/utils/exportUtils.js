@@ -324,7 +324,7 @@ function normalizeValue(value) {
  * @param {string} key - The key to validate (should be in "code|program|year" format)
  * @returns {Object} { isValid: boolean, errors: string[] }
  */
-export function validateSubjectIdentityKey(key) {
+export function validateSubjectIdentityKey(key, context = {}) {
   const errors = [];
 
   // Check if key is a string
@@ -344,6 +344,31 @@ export function validateSubjectIdentityKey(key) {
   // Check that code (first segment) is not empty
   if (segments.length >= 1 && (!segments[0] || segments[0].trim() === "")) {
     errors.push("Code (first segment) cannot be empty");
+  }
+
+  // Check that program (second segment) is not empty - STRICT VALIDATION
+  if (segments.length >= 2 && (!segments[1] || segments[1].trim() === "")) {
+    errors.push("Program (second segment) cannot be empty");
+  }
+
+  // Check that year (third segment) is not empty - STRICT VALIDATION
+  if (segments.length >= 3 && (!segments[2] || segments[2].trim() === "")) {
+    errors.push("Year (third segment) cannot be empty");
+  }
+
+  // If context provided and validation fails, throw detailed error
+  if (errors.length > 0 && context && Object.keys(context).length > 0) {
+    const { rowNumber, csvType, rawCode, rawProgram, rawYear } = context;
+    const csvTypeLabel = csvType || "CSV";
+    const rowLabel = rowNumber ? `row ${rowNumber}` : "row";
+    const rawValues = `code="${rawCode}", program="${rawProgram}", year="${rawYear}"`;
+
+    throw new Error(
+      `${csvTypeLabel} ${rowLabel}: Identity key validation failed. Built key: "${key}". ` +
+        `Raw values: ${rawValues}. ` +
+        `Issues: ${errors.join("; ")}. ` +
+        `Ensure all three segments (code|program|year) are non-empty.`,
+    );
   }
 
   return {
@@ -1149,58 +1174,144 @@ function parseRoomRows(rows, warnings = []) {
     .filter((room) => room.number);
 }
 
+/**
+ * Parse SUBJECTS CSV rows into normalized subject and subject_section objects.
+ *
+ * Expected 12-column SUBJECTS CSV format:
+ * [Index 0] Subject Code - Unique subject identifier (e.g., "CS101", "WMA1")
+ * [Index 1] Subject Title - Subject name/description
+ * [Index 2] Section - Section identifier (e.g., "A", "B1")
+ * [Index 3] Academic Year - Year in format YYYY or YYYY-YYYY (e.g., "2024", "2024-2025")
+ * [Index 4] Semester - One of "1st", "2nd", or "Summer"
+ * [Index 5] Program - Program code (e.g., "CS", "IT", "WMA"); validates against PROGRAM_CODES
+ * [Index 6] Year - Year level (e.g., "1", "2", "3", "4")
+ * [Index 7] Enrolled - Number of enrolled students (numeric)
+ * [Index 8] Type Required - Room type (e.g., "Lecture", "Computer Lab"); normalized via normalizeRoomType
+ * [Index 9] Duration (hrs) - Duration in hours as numeric value (e.g., 1.5, 2, 3)
+ * [Index 10] Instructor - Instructor name or identifier
+ * [Index 11] Status - Section status ("Assigned", "Not Assigned", etc.); normalized via normalizeSectionStatusForDb
+ *
+ * Validation rules:
+ * - Code (Index 0): REQUIRED - must be non-empty string; cannot be whitespace-only; cannot contain pipe characters
+ * - Program (Index 5): REQUIRED - must be non-empty; must validate against PROGRAM_CODES (case-insensitive)
+ * - Year (Index 6): REQUIRED - must be non-empty numeric or alphanumeric value
+ * - Semester (Index 4): REQUIRED - must normalize to valid SEMESTER_CODE ("1st", "2nd", "Summer")
+ *
+ * @param {Array<Array<string>>} rows - CSV data rows (excluding header)
+ * @param {Array<string>} warnings - Warnings array to populate with non-fatal issues
+ * @returns {Array<Object>} Normalized subject and section objects with fields:
+ *   - code, title, section, academicYear, semester, program, year: identifiers and metadata
+ *   - enrolled, roomType, duration, instructor, status: subject/section properties
+ *   - room, time, time_start, time_end, pattern: schedule placeholder fields
+ *   - dedupeKey, sectionIdentityKey, subjectIdentityKey: identity keys for lookups and deduplication
+ * @throws {Error} If required fields are empty, invalid, or CSV column count mismatches expected 12 columns
+ */
 function parseSubjectRows(rows, warnings = []) {
   return rows
     .map((r, index) => {
-      const rowNumber = index + 2;
-      const rawRoomType = String(r[8] ?? "").trim();
-      const roomType = normalizeRoomType(r[8]);
-      const code = String(r[0] ?? "")
-        .trim()
-        .toUpperCase();
-      const section = String(r[2] ?? "").trim();
-      const academicYear = String(r[3] ?? "").trim();
-      const rawSemester = String(r[4] ?? "").trim();
-      const semester = normalizeSemester(rawSemester);
+      const rowNumber = index + 2; // Offset by 2 for header row and 1-based numbering
+
+      // Validate row has expected number of columns (12 for SUBJECTS format)
+      if (r.length < 12) {
+        throw new Error(
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Expected 12 columns, found ${r.length}. ` +
+            `Verify headers match template: Subject Code, Subject Title, Section, Academic Year, Semester, Program, Year, ` +
+            `Enrolled, Type Required, Duration (hrs), Instructor, Status.`,
+        );
+      }
+
+      // Extract and normalize raw values
+      const rawCode = String(r[0] ?? "").trim();
+      const code = rawCode.toUpperCase();
       const rawProgram = String(r[5] ?? "").trim();
       const program = normalizeProgram(rawProgram);
       const year = String(r[6] ?? "").trim();
-      const statusRaw = String(r[11] ?? "").trim();
-      const instructor = String(r[10] ?? "").trim();
+      const rawSemester = String(r[4] ?? "").trim();
+      const semester = normalizeSemester(rawSemester);
 
-      // Parse time range if provided (e.g., "07:00 AM - 08:30 AM")
-      const timeString = String(r[9] ?? "").trim();
-      const parsedTime = timeString ? parseTimeRange(timeString) : null;
-
-      if (!semester) {
+      // Validate REQUIRED FIELD: Code (Index 0)
+      if (!code) {
         throw new Error(
-          `Subject sections row ${rowNumber}: invalid semester "${rawSemester}". Use 1st, 2nd, or Summer.`,
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Code field (Index 0) is empty or whitespace-only. ` +
+            `Raw value: "${rawCode}". Expected non-empty subject code (e.g., "CS101", "WMA1").`,
         );
       }
 
+      if (code.includes("|")) {
+        throw new Error(
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Code field (Index 0) contains pipe character "|". ` +
+            `Raw value: "${code}". Subject codes cannot contain pipe characters.`,
+        );
+      }
+
+      // Validate REQUIRED FIELD: Program (Index 5)
       if (!program) {
         throw new Error(
-          `Subject sections row ${rowNumber}: invalid program "${rawProgram}". Use one of: ${VALID_PROGRAM_HINT}.`,
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Program field (Index 5) is empty or invalid. ` +
+            `Raw value: "${rawProgram}". Expected one of: ${VALID_PROGRAM_HINT}.`,
         );
       }
 
+      // Validate REQUIRED FIELD: Year (Index 6)
+      if (!year) {
+        throw new Error(
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Year field (Index 6) is empty. ` +
+            `Raw value: "${year}". Expected non-empty year level (e.g., "1", "2", "3", "4").`,
+        );
+      }
+
+      // Validate REQUIRED FIELD: Semester (Index 4)
+      if (!semester) {
+        throw new Error(
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Semester field (Index 4) is invalid. ` +
+            `Raw value: "${rawSemester}". Expected one of: 1st, 2nd, Summer.`,
+        );
+      }
+
+      // Extract remaining fields
+      const title = String(r[1] ?? "").trim();
+      const section = String(r[2] ?? "").trim();
+      const academicYear = String(r[3] ?? "").trim();
+      const rawRoomType = String(r[8] ?? "").trim();
+      const roomType = normalizeRoomType(r[8]);
+      // Index 9 = Duration (numeric hours), NOT time range - parse as number only
+      const durationValue = String(r[9] ?? "").trim();
+      const duration = toNumber(durationValue, 1.5);
+      const instructor = String(r[10] ?? "").trim();
+      const statusRaw = String(r[11] ?? "").trim();
+
+      // Warnings for optional fields
       if (!statusRaw) {
         addImportWarning(
           warnings,
-          `Subject sections row ${rowNumber}: blank status; defaulted to "Not Assigned".`,
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Status field (Index 11) is blank; defaulted to "Not Assigned".`,
         );
       }
 
       if (rawRoomType.toLowerCase() === "lec") {
         addImportWarning(
           warnings,
-          `Subject sections row ${rowNumber}: normalized room type "Lec" to "Lecture".`,
+          `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Room type "Lec" (Index 8) normalized to "Lecture".`,
         );
       }
 
+      // Build identity key and validate no empty segments
+      const subjectIdentityKey = buildSubjectIdentityKey({
+        code,
+        program,
+        year,
+      });
+      validateSubjectIdentityKey(subjectIdentityKey, {
+        rowNumber,
+        csvType: CSV_TYPES.SUBJECTS,
+        rawCode,
+        rawProgram,
+        rawYear: year,
+      });
+
       return {
         code,
-        title: String(r[1] ?? "").trim(),
+        title,
         section,
         academicYear,
         semester,
@@ -1208,13 +1319,13 @@ function parseSubjectRows(rows, warnings = []) {
         year,
         enrolled: toNumber(r[7], 0),
         roomType,
-        duration: toNumber(r[9], 1.5),
+        duration,
         instructor,
         status: statusRaw || "Assigned",
         room: "",
-        time: timeString,
-        time_start: parsedTime?.timeStart || null,
-        time_end: parsedTime?.timeEnd || null,
+        time: "", // No time parsing for SUBJECTS CSV - Index 9 is duration, not time
+        time_start: null,
+        time_end: null,
         pattern: "",
         dedupeKey: buildSectionIdentityKey(
           { code, program, year, section, academicYear, semester },
@@ -1224,7 +1335,7 @@ function parseSubjectRows(rows, warnings = []) {
           { code, program, year, section, academicYear, semester },
           { includeProgramYear: true },
         ),
-        subjectIdentityKey: buildSubjectIdentityKey({ code, program, year }),
+        subjectIdentityKey,
       };
     })
     .filter((course) => course.code);

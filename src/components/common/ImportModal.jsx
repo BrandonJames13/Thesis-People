@@ -464,6 +464,31 @@ export default function ImportModal({ isOpen, onClose }) {
       throw new Error("No subject section rows were parsed for import.");
     }
 
+    // PRE-IMPORT VALIDATION: Verify all subjects have non-empty required fields
+    const invalidSubjects = subjectRows.filter(
+      (row) =>
+        !row.code ||
+        !row.program ||
+        !row.year ||
+        row.code.includes("|") ||
+        String(row.code ?? "").trim() === "",
+    );
+
+    if (invalidSubjects.length > 0) {
+      const details = invalidSubjects
+        .slice(0, 3)
+        .map(
+          (row) =>
+            `code="${row.code}", program="${row.program}", year="${row.year}"`,
+        )
+        .join("; ");
+      throw new Error(
+        `Subject import validation failed. Found ${invalidSubjects.length} subjects with missing or invalid code/program/year. ` +
+          `Examples: ${details}. ` +
+          `Ensure all subjects have non-empty code, program, and year fields.`,
+      );
+    }
+
     if (subjectRows.length > 0) {
       await upsertRows(
         "subjects",
@@ -511,10 +536,32 @@ export default function ImportModal({ isOpen, onClose }) {
       ]),
     );
 
+    // DEBUG LOGGING: Show available keys in database
+    if (subjectIdByIdentity.size > 0) {
+      const availableKeys = Array.from(subjectIdByIdentity.keys()).slice(0, 5);
+      console.debug(
+        "[ImportSubjects] Available subject keys in database (first 5):",
+        availableKeys,
+      );
+    }
+
     const sectionUpsertRows = sectionRows
       .map((row) => {
-        const key = buildSubjectIdentityKey(row?.subject_ref);
-        const subjectId = subjectIdByIdentity.get(key);
+        const lookupKey = buildSubjectIdentityKey(row?.subject_ref);
+        const subjectId = subjectIdByIdentity.get(lookupKey);
+
+        // DEBUG LOGGING: Log lookup details for troubleshooting
+        if (!subjectId) {
+          const rawValues = row?.subject_ref || {};
+          console.warn("[ImportSubjects] Subject NOT FOUND - Lookup Details:", {
+            constructedKey: lookupKey,
+            rawCode: rawValues.code,
+            rawProgram: rawValues.program,
+            rawYear: rawValues.year,
+            availableKeysCount: subjectIdByIdentity.size,
+          });
+        }
+
         if (!subjectId) return null;
 
         return {
@@ -530,8 +577,31 @@ export default function ImportModal({ isOpen, onClose }) {
       .filter(Boolean);
 
     if (sectionUpsertRows.length === 0) {
+      // Enhanced error message with helpful details
+      const failedLookups = sectionRows.filter((row) => {
+        const key = buildSubjectIdentityKey(row?.subject_ref);
+        return !subjectIdByIdentity.has(key);
+      });
+
+      const failedDetails = failedLookups
+        .slice(0, 3)
+        .map((row) => {
+          const ref = row?.subject_ref || {};
+          return `code="${ref.code}", program="${ref.program}", year="${ref.year}"`;
+        })
+        .join("; ");
+
+      const availableSample = Array.from(subjectIdByIdentity.keys())
+        .slice(0, 5)
+        .join(", ");
+
       throw new Error(
-        "No subject sections could be matched to subjects. Check subject code/program/year values.",
+        `No subject sections could be matched to subjects. ` +
+          `Failed to find ${failedLookups.length} sections. ` +
+          `Examples: ${failedDetails}. ` +
+          `Available subjects in database: ${availableSample || "(none imported yet)"}. ` +
+          `Check that subject code, program, and year values match between import and database. ` +
+          `Verify program values are correctly spelled (e.g., "WMA" not "wma").`,
       );
     }
 

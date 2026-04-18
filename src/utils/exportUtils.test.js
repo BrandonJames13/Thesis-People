@@ -1,6 +1,6 @@
 /**
  * Tests for exportUtils.js - Subject key generation, validation, and error handling
- * Tests buildSubjectIdentityKey, validateSubjectIdentityKey, and generateSubjectLookupSuggestions
+ * Tests buildSubjectIdentityKey, validateSubjectIdentityKey, generateSubjectLookupSuggestions, and parseSubjectRows
  */
 
 import {
@@ -271,3 +271,68 @@ console.assert(
 console.log("✓ Test 8: Suggestion generation with array input");
 
 console.log("\n=== All tests passed! ===");
+
+// ============================================================================
+// Test: validateSubjectIdentityKey with context - Enhanced validation
+// ============================================================================
+
+console.log(
+  "\n=== Testing validateSubjectIdentityKey with context (Enhanced) ===",
+);
+
+// Test 1: Valid key with context should return valid
+const validKeyResult = validateSubjectIdentityKey("cs101|bscs|1", {
+  rowNumber: 5,
+  csvType: "SUBJECTS",
+  rawCode: "CS101",
+  rawProgram: "BSCS",
+  rawYear: "1",
+});
+console.assert(
+  validKeyResult.isValid === true,
+  `Expected valid key, got: ${JSON.stringify(validKeyResult)}`,
+);
+console.log("✓ Test 1: Valid key with context");
+
+// Test 2: Key with empty program segment should throw error with context
+let emptyProgramThrown = false;
+try {
+  validateSubjectIdentityKey("cs101||1", {
+    rowNumber: 5,
+    csvType: "SUBJECTS",
+    rawCode: "CS101",
+    rawProgram: "",
+    rawYear: "1",
+  });
+} catch (e) {
+  emptyProgramThrown = true;
+  console.assert(
+    e.message.includes("Program") && e.message.includes("row 5"),
+    `Expected error about empty program and row number, got: ${e.message}`,
+  );
+}
+console.assert(
+  emptyProgramThrown,
+  "Expected error to be thrown for empty program",
+);
+console.log("✓ Test 2: Empty program segment throws error with row context");
+
+// Test 3: Key with empty year segment should throw error
+let emptyYearThrown = false;
+try {
+  validateSubjectIdentityKey("cs101|bscs|", {
+    rowNumber: 10,
+    csvType: "SUBJECTS",
+    rawCode: "CS101",
+    rawProgram: "BSCS",
+    rawYear: "",
+  });
+} catch (e) {
+  emptyYearThrown = true;
+  console.assert(
+    e.message.includes("Year") && e.message.includes("row 10"),
+    `Expected error about empty year, got: ${e.message}`,
+  );
+}
+console.assert(emptyYearThrown, "Expected error to be thrown for empty year");
+console.log("✓ Test 3: Empty year segment throws error with row context");
