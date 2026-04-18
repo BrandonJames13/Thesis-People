@@ -169,6 +169,10 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const [conflictMsg, setConflictMsg] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // Progress bar state for schedule generation
+  const [genStep, setGenStep] = useState("idle"); // idle | clearing | generating | saving | done | error
+  const [genProgress, setGenProgress] = useState(0);
+
   // State for handling conflicts from auto-generation
   const [generationConflicts, setGenerationConflicts] = useState([]);
   const [showConflictSummary, setShowConflictSummary] = useState(false);
@@ -475,18 +479,21 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     }
 
     // STEP 1: Clear existing schedules before generating new ones
+    setGenStep("clearing");
+    setGenProgress(10);
     try {
-      showNotification("Clearing existing schedules...");
       const clearResult = await clearScheduleAssignments();
 
       if (!clearResult.success) {
         const errorMsg = clearResult.error?.message || "Unknown error";
+        setGenStep("error");
+        setGenProgress(0);
         showNotification(`⚠ Failed to clear existing schedules: ${errorMsg}`);
         return;
       }
-
-      showNotification("Existing schedules cleared, generating new ones...");
     } catch (clearError) {
+      setGenStep("error");
+      setGenProgress(0);
       showNotification(
         `⚠ Failed to clear existing schedules: ${clearError.message}`,
       );
@@ -494,6 +501,8 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     }
 
     // STEP 2: Set generation state and generate new schedule
+    setGenStep("generating");
+    setGenProgress(35);
     setIsGenerating(true);
     setIsGenerationInProgress(true);
 
@@ -522,6 +531,8 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         pattern: autoPattern,
         activeDays,
       });
+
+      setGenProgress(70);
 
       if (result.error) {
         console.error(
@@ -557,9 +568,8 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         setGenerationConflicts(conflictAssignments);
         setPendingAssignments(result.scheduleAssignments);
         setShowConflictSummary(true);
-        showNotification(
-          `Generated schedule with ${conflictAssignments.length} conflict${conflictAssignments.length !== 1 ? "s" : ""}`,
-        );
+        setGenStep("done");
+        setGenProgress(100);
         return;
       }
 
@@ -578,21 +588,32 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         return;
       }
 
+      setGenStep("saving");
+      setGenProgress(85);
       try {
         await updateScheduleAssignments(result.scheduleAssignments);
-        showNotification("Schedule saved to database");
       } catch (persistError) {
+        setGenStep("error");
+        setGenProgress(0);
         showNotification(`⚠ Failed to save schedule: ${persistError.message}`);
         return;
       }
 
+      setGenStep("done");
+      setGenProgress(100);
+
+      // Brief pause so user sees 100% before modal closes
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
       if (onRunComplete) onRunComplete();
       onClose();
-      showNotification(result.message);
+      showNotification(result.message, { noConfetti: true });
     } finally {
       if (isMountedRef.current) {
         setIsGenerating(false);
         setIsGenerationInProgress(false);
+        setGenStep("idle");
+        setGenProgress(0);
       }
     }
   };
@@ -622,6 +643,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       setPendingAssignments(null);
       showNotification(
         "Schedule saved to database with conflicts for manual review",
+        { noConfetti: true },
       );
 
       if (onRunComplete) onRunComplete();
@@ -776,7 +798,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
     try {
       await updateScheduleAssignments(result.scheduleAssignments);
-      showNotification("Assignment saved to database");
+      showNotification("Assignment saved to database", { noConfetti: true });
     } catch (persistError) {
       showNotification(`⚠ Failed to save assignment: ${persistError.message}`);
       return;
@@ -789,12 +811,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     if (movedCount > 0) {
       showNotification(
         `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved. Relocated ${movedCount} conflicted assignment${movedCount > 1 ? "s" : ""}.`,
+        { noConfetti: true },
       );
       return;
     }
 
     showNotification(
       `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved!`,
+      { noConfetti: true },
     );
   };
 
@@ -1077,13 +1101,143 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
                 {isGenerating ? "Generating..." : "⚙ Run Auto-Generate"}
               </button>
             </div>
-            {isGenerating && (
-              <div className="loading-indicator" style={{ marginTop: 8 }}>
-                <span className="loading-spinner"></span>
-                <div className="loading-text">
-                  <span className="loading-pulse">
-                    Generating schedules, please wait...
+            {genStep !== "idle" && (
+              <div
+                style={{
+                  marginTop: 4,
+                  borderRadius: 10,
+                  border: "1px solid var(--border)",
+                  background: "var(--surface2)",
+                  padding: "14px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                {/* Step labels */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "var(--text2)",
+                    }}
+                  >
+                    {genStep === "clearing" && "⏳ Clearing existing schedule…"}
+                    {genStep === "generating" && "⚙ Running algorithm…"}
+                    {genStep === "saving" && "💾 Saving to database…"}
+                    {genStep === "done" &&
+                      genProgress === 100 &&
+                      "✓ Schedule generated!"}
+                    {genStep === "error" && "⚠ Generation failed"}
                   </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontFamily: "var(--mono)",
+                      color:
+                        genStep === "done"
+                          ? "var(--green)"
+                          : genStep === "error"
+                            ? "var(--red)"
+                            : "var(--accent)",
+                    }}
+                  >
+                    {genProgress}%
+                  </span>
+                </div>
+
+                {/* Progress track */}
+                <div
+                  style={{
+                    height: 6,
+                    borderRadius: 99,
+                    background: "var(--surface3)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      height: "100%",
+                      width: `${genProgress}%`,
+                      borderRadius: 99,
+                      background:
+                        genStep === "done"
+                          ? "var(--green)"
+                          : genStep === "error"
+                            ? "var(--red)"
+                            : "var(--accent)",
+                      transition:
+                        "width 0.5s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease",
+                    }}
+                  />
+                </div>
+
+                {/* Step dots */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    paddingTop: 2,
+                  }}
+                >
+                  {[
+                    { key: "clearing", label: "Clear", pct: 10 },
+                    { key: "generating", label: "Generate", pct: 35 },
+                    { key: "saving", label: "Save", pct: 85 },
+                    { key: "done", label: "Done", pct: 100 },
+                  ].map((s) => {
+                    const isActive = genProgress >= s.pct;
+                    const isCurrent =
+                      genStep === s.key ||
+                      (s.key === "done" && genStep === "done");
+                    return (
+                      <div
+                        key={s.key}
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: isActive
+                              ? genStep === "error"
+                                ? "var(--red)"
+                                : genStep === "done"
+                                  ? "var(--green)"
+                                  : "var(--accent)"
+                              : "var(--border)",
+                            transition: "background 0.3s ease",
+                            boxShadow:
+                              isCurrent && genStep !== "error"
+                                ? `0 0 0 3px ${genStep === "done" ? "rgba(63,185,80,0.25)" : "rgba(47,129,247,0.25)"}`
+                                : "none",
+                          }}
+                        />
+                        <span
+                          style={{
+                            fontSize: 10,
+                            color: isActive ? "var(--text2)" : "var(--text3)",
+                            transition: "color 0.3s ease",
+                          }}
+                        >
+                          {s.label}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
