@@ -12,7 +12,43 @@ const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 // ─── TSU Scheduling Rules ─────────────────────────────────────────────────────
 
 const NIGHT_START_MIN = 18 * 60; // 6:00 PM = 1080 min
-const DAY_END_MIN = 18 * 60; // 6:00 PM = 1080 min
+const DAY_END_MIN = 18 * 60;     // 6:00 PM = 1080 min
+
+// ─── TSU Time Window Constants ────────────────────────────────────────────────
+// FIX: Enforce the three distinct scheduling windows
+const MORNING_START_MIN = 7 * 60;       // 7:00 AM  = 420 min
+const MORNING_END_MIN = 11 * 60;      // 11:00 AM = 660 min  (classes must END by 11:00)
+const AFTERNOON_START_MIN = 13 * 60;     // 1:00 PM  = 780 min
+const AFTERNOON_END_MIN = 18 * 60;      // 6:00 PM  = 1080 min
+const NIGHT_END_MIN = 21 * 60;      // 9:00 PM  = 1260 min
+
+// ─── TSU Lunch Break Rule ─────────────────────────────────────────────────────
+// No class may overlap the 12:00 PM – 1:00 PM lunch break
+const LUNCH_START_MIN = 12 * 60; // 12:00 PM = 720 min
+const LUNCH_END_MIN = 13 * 60; // 1:00 PM  = 780 min
+
+// ─── TSU Day-Order for Lec/Lab gap enforcement ────────────────────────────────
+// FIX: Used to compute minimum 1-day gap between Lecture and Laboratory
+const DAY_ORDER = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
+/**
+ * FIX: Returns true if the class slot overlaps the 12:00–13:00 lunch break.
+ * Previously only checked if the START fell in the window; now also blocks
+ * classes that start before noon but run into the lunch period.
+ */
+function overlapsLunchBreak(slotStartMinutes, durationMinutes) {
+  const slotEndMinutes = slotStartMinutes + durationMinutes;
+  // Overlap when: class starts before lunch ends AND class ends after lunch starts
+  return slotStartMinutes < LUNCH_END_MIN && slotEndMinutes > LUNCH_START_MIN;
+}
+
+/**
+ * Legacy alias kept for any callers that used the old name.
+ * @deprecated Use overlapsLunchBreak(start, duration) instead.
+ */
+function startsInLunchBreak(slotStartMinutes) {
+  return slotStartMinutes >= LUNCH_START_MIN && slotStartMinutes < LUNCH_END_MIN;
+}
 
 const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
   "ojt",
@@ -72,21 +108,26 @@ function isRoomEligibleForSubject(
   // CCNA subjects → only CISCO room
   if (isCisco) return roomType === CISCO_ROOM_TYPE;
 
-  // AVR / Accreditation Room → only special subjects, never Computer Lab subjects
-  if (SPECIAL_ROOM_TYPES.has(roomType)) {
-    return isSpecial && required !== "Computer Lab";
+  // TSU Rule: OJT/special subjects → AVR or Accreditation Room preferred,
+  // Lecture rooms allowed as fallback. Computer Lab is strictly forbidden.
+  if (isSpecial) {
+    if (roomType === "Computer Lab") return false;
+    if (roomType === "Lecture") return true;
+    if (SPECIAL_ROOM_TYPES.has(roomType)) return true;
+    return false;
   }
+
+  // AVR / Accreditation Room → only special subjects (already handled above)
+  if (SPECIAL_ROOM_TYPES.has(roomType)) return false;
 
   // Computer Lab subjects → only Computer Lab rooms
   if (required === "Computer Lab") {
     return roomType === "Computer Lab";
   }
 
-  // Lecture subjects → Lecture rooms, or special rooms if subject qualifies
+  // Lecture subjects → Lecture rooms only
   if (required === "Lecture") {
-    if (roomType === "Lecture") return true;
-    if (SPECIAL_ROOM_TYPES.has(roomType) && isSpecial) return true;
-    return false;
+    return roomType === "Lecture";
   }
 
   return roomType === required;
@@ -241,11 +282,11 @@ export function getAssignmentSubjectCode(row) {
   // Enhanced lookup paths: code → subjectCode → subject_code → subject.code → subject_id → subject_title
   let result = String(
     row?.code ??
-      row?.subjectCode ??
-      row?.subject_code ??
-      row?.subject?.code ??
-      row?.subject_id ??
-      "",
+    row?.subjectCode ??
+    row?.subject_code ??
+    row?.subject?.code ??
+    row?.subject_id ??
+    "",
   )
     .trim()
     .toUpperCase();
@@ -442,7 +483,13 @@ function getAssignmentInstructorId(row) {
 }
 
 function buildSectionTermKey(row) {
-  const sectionId = getNormalizedSectionId(row);
+  // FIX (Bug 1 — core cause of skipped sections):
+  // Use the RAW sectionId (which may include __LEC or __LAB) so that
+  // Lecture and Laboratory siblings get DISTINCT term keys. Previously,
+  // getNormalizedSectionId() stripped the suffix, causing both siblings
+  // to share a key — the second sibling was always blocked by the first.
+  const rawSectionId = String(row?.sectionId ?? row?.section_id ?? "").trim();
+  const sectionId = rawSectionId || getNormalizedSectionId(row);
   const academicYear = getAssignmentAcademicYear(row);
   const semester = getAssignmentSemester(row);
   if (!sectionId || !academicYear || !semester) return "";
@@ -562,6 +609,9 @@ function buildInstructorPoolMap(instructors) {
       id,
       name: String(row?.name ?? row?.instructor_name ?? "").trim(),
       allow_night_class: row?.allow_night_class === true,
+      // FIX (Bug 3 — Max Units): store the instructor's unit cap so the
+      // placement chooser can reject over-loaded instructors.
+      max_units: Number(row?.max_units ?? row?.maxUnits ?? 99) || 99,
     });
   });
   return map;
@@ -606,15 +656,16 @@ function chooseInstructorForPlacementOptimized({
   for (const candidate of sortedCandidates) {
     const instructor = instructorPoolById.get(candidate.id);
 
-    // Night class eligibility check
+    // FIX (Bug 3 — Max Units): reject instructors who have reached their unit cap
+    const currentLoad = instructorLoadCount.get(candidate.id) ?? 0;
+    if (currentLoad >= (instructor.max_units ?? 99)) continue;
+
+    // FIX (Bug 5 — Night class flag): check the CANDIDATE instructor's flag,
+    // not an outer-scope imported instructor variable.
     const endMin = slotMinutes + durationMinutes;
     const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
     if (isNightSlot && !instructor.allow_night_class && !isEve) continue;
-    if (
-      isEve &&
-      slotMinutes >= NIGHT_START_MIN &&
-      !instructor.allow_night_class
-    )
+    if (isEve && slotMinutes >= NIGHT_START_MIN && !instructor.allow_night_class)
       continue;
 
     const testAssignmentSectionTermKey = buildSectionTermKey(placementBase);
@@ -734,7 +785,7 @@ function hasCoverageConflict(
       (existingInstructorName &&
         testInstructorName &&
         existingInstructorName.toLowerCase() ===
-          testInstructorName.toLowerCase());
+        testInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, testAssignment);
   });
@@ -754,20 +805,35 @@ function buildCandidateStarts({
   const endMinutes = parse24TextToMinutes(endTime);
   if (startMinutes == null || endMinutes == null || startMinutes >= endMinutes)
     return [];
+
   const starts = [];
   for (
     let cursor = startMinutes;
     cursor + durationMinutes <= endMinutes;
     cursor += stepMinutes
   ) {
+    // FIX (Bug 2 — Lunch block & Bug 6 — cross-lunch):
+    // Block any slot whose time span overlaps the 12:00–13:00 lunch break,
+    // not just slots that START inside it.
+    if (overlapsLunchBreak(cursor, durationMinutes)) continue;
+
+    // FIX (Bug 2 — Time Windows):
+    // Reject slots that fall outside the declared session window.
+    // Morning sessions must end by 11:00 AM; afternoon by 6:00 PM.
+    const slotEnd = cursor + durationMinutes;
+    if (startMinutes < LUNCH_START_MIN && slotEnd > MORNING_END_MIN) continue;  // morning cap
+    if (startMinutes >= AFTERNOON_START_MIN && slotEnd > AFTERNOON_END_MIN) continue; // afternoon cap
+
     starts.push(cursor);
   }
+
   if (preferredStart) {
     const preferredMinutes = parse24TextToMinutes(preferredStart);
     if (
       preferredMinutes != null &&
       preferredMinutes + durationMinutes <= endMinutes &&
-      preferredMinutes >= startMinutes
+      preferredMinutes >= startMinutes &&
+      !overlapsLunchBreak(preferredMinutes, durationMinutes)
     ) {
       return [
         preferredMinutes,
@@ -1314,7 +1380,11 @@ function categorizeRoomsBySubject(
     const avrRooms = specialRooms.filter(
       (room) => normalizeRoomType(room.type) === "AVR",
     );
-    return [...accreditationRooms, ...avrRooms, ...regularRooms];
+    // TSU Rule: OJT/special subjects must NEVER be placed in Computer Lab rooms
+    const nonLabRegularRooms = regularRooms.filter(
+      (room) => normalizeRoomType(room.type) !== "Computer Lab",
+    );
+    return [...accreditationRooms, ...avrRooms, ...nonLabRegularRooms];
   }
 
   // For non-special subjects, regular rooms first, special rooms as fallback
@@ -1352,23 +1422,48 @@ function buildSectionPrecompute(
     row.enrolled ?? 0,
   );
 
-  const importedStartMinutes = importedStart
-    ? parse24TextToMinutes(importedStart)
-    : null;
-
-  const candidateSlots = buildCandidateStarts({
-    duration: courseDuration,
-    startTime: "07:00",
-    endTime: "21:00",
-    preferredStart: importedStart || undefined,
-  }).map((slotMinutes) => ({
-    slotMinutes,
-    formattedSlot: minutesTo24Text(slotMinutes),
-  }));
-
-  // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
+  // ── TSU Rule: determine EVE status first — needed for session window selection
   const sectionLabel = String(row?.section ?? "").trim();
   const isEve = isEveSection(sectionLabel);
+
+  // ── FIX (Bug 2 — Time Windows): Determine which session window(s) to use.
+  // Morning  : 7:00 AM – 11:00 AM  (non-EVE, imported start before noon)
+  // Afternoon: 1:00 PM –  6:00 PM  (non-EVE, imported start after noon)
+  // Night    : 6:00 PM –  9:00 PM  (EVE sections only)
+  // When no imported start is available for a regular section, we generate
+  // slots for BOTH the morning AND afternoon windows so the algorithm can
+  // find a free slot in either session.
+  let sessionWindows;
+  if (isEve) {
+    sessionWindows = [{ startTime: "18:00", endTime: "21:00" }];
+  } else if (importedStart) {
+    const importedMins = parse24TextToMinutes(importedStart);
+    if (importedMins != null && importedMins < LUNCH_START_MIN) {
+      sessionWindows = [{ startTime: "07:00", endTime: "11:00" }];
+    } else {
+      sessionWindows = [{ startTime: "13:00", endTime: "18:00" }];
+    }
+  } else {
+    // No imported start — try morning first, then afternoon
+    sessionWindows = [
+      { startTime: "07:00", endTime: "11:00" },
+      { startTime: "13:00", endTime: "18:00" },
+    ];
+  }
+
+  const candidateSlots = sessionWindows.flatMap(({ startTime: wStart, endTime: wEnd }) =>
+    buildCandidateStarts({
+      duration: courseDuration,
+      startTime: wStart,
+      endTime: wEnd,
+      preferredStart: importedStart || undefined,
+    }).map((slotMinutes) => ({
+      slotMinutes,
+      formattedSlot: minutesTo24Text(slotMinutes),
+    }))
+  );
+
+  // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
   const tsuPatterns = getPatternsForSection(
     courseDuration,
     isEve,
@@ -1405,7 +1500,7 @@ function buildSectionPrecompute(
     identityKey,
     durationMinutes,
     courseDuration,
-    importedStartMinutes,
+    importedStartMinutes: importedStart ? parse24TextToMinutes(importedStart) : null,
     importedStart,
     importedPattern,
     orderedRooms,
@@ -1550,31 +1645,31 @@ function generateSubjectResolutionReport(cache, conflictCount) {
   console.warn("[scheduleUtils] [WARN] Subject Resolution Report:");
   console.warn(
     "  Total Unresolved: " +
-      report.totalFailures +
-      " assignments | Unique Identifiers: " +
-      report.uniqueIdentifiers,
+    report.totalFailures +
+    " assignments | Unique Identifiers: " +
+    report.uniqueIdentifiers,
   );
 
   report.failures.forEach(({ identifier, count, examples }) => {
     console.warn(
       "  [X] '" +
-        identifier +
-        "' (" +
-        count +
-        " occurrence" +
-        (count > 1 ? "s" : "") +
-        ")",
+      identifier +
+      "' (" +
+      count +
+      " occurrence" +
+      (count > 1 ? "s" : "") +
+      ")",
     );
     if (examples.length > 0) {
       examples.forEach((ex) => {
         console.warn(
           "    |-- Section: " +
-            (ex.sectionId ?? "unknown") +
-            " | " +
-            ex.row +
-            " | Raw: '" +
-            ex.rawValue +
-            "'",
+          (ex.sectionId ?? "unknown") +
+          " | " +
+          ex.row +
+          " | Raw: '" +
+          ex.rawValue +
+          "'",
         );
       });
     }
@@ -1813,9 +1908,9 @@ export function runAutoSchedule({
     // Safe extraction of subject ID with fallbacks
     const courseSubjectId = String(
       course.subjectId ??
-        fallbackSubject?.id ??
-        fallbackSubject?.subject_id ??
-        "",
+      fallbackSubject?.id ??
+      fallbackSubject?.subject_id ??
+      "",
     ).trim();
     course.subjectId = courseSubjectId;
 
@@ -1901,6 +1996,34 @@ export function runAutoSchedule({
       // ── TSU Rule: block Saturday for non-EVE sections ──────────────────────
       if (!isEve && patternDays.includes("SAT")) continue;
 
+      // ── TSU Rule: Lec/Lab split — ensure Lec and Lab land on DIFFERENT days
+      // with at least a 1-day gap (e.g. Lec Monday → Lab must be Wednesday+).
+      const rawSectionId = String(course?.sectionId ?? "");
+      const splitMatch = rawSectionId.match(/^(.+)__(LEC|LAB)$/);
+      if (splitMatch) {
+        const baseSectionId = splitMatch[1];
+        const siblingTag = splitMatch[2] === "LEC" ? "LAB" : "LEC";
+        const siblingId = `${baseSectionId}__${siblingTag}`;
+        const siblingPatterns = assignedPatternsPerSection.get(siblingId) ?? new Set();
+        const siblingDays = new Set();
+        siblingPatterns.forEach((p) => {
+          (patternDaysMap[p] ?? []).forEach((d) => siblingDays.add(d));
+        });
+
+        // FIX (Bug 4 — Lec/Lab 1-day gap):
+        // Require a minimum gap of 2 positions in DAY_ORDER between any
+        // candidate day and any sibling day (gap of 1 = adjacent = not allowed).
+        const hasAdequateGap = patternDays.every((cDay) => {
+          const cIdx = DAY_ORDER.indexOf(cDay);
+          for (const sDay of siblingDays) {
+            const sIdx = DAY_ORDER.indexOf(sDay);
+            if (Math.abs(cIdx - sIdx) < 2) return false; // too close
+          }
+          return true;
+        });
+        if (!hasAdequateGap) continue;
+      }
+
       // ── TSU Rule: enforce 2-times-per-week constraint ────────────────────────
       const sectionId =
         sectionPrecompute.sectionId || getAssignmentSectionId(course);
@@ -1921,22 +2044,12 @@ export function runAutoSchedule({
       } of sectionPrecompute.candidateSlots) {
         if (slotMinutes + durationMinutes > endMinutes) continue;
 
-        // ── TSU Rule: enforce EVE/night class time window ──────────────────────
-        // Get instructor's allow_night_class flag for this candidate
-        const candidateInstructor = importedInstructorId
-          ? instructorPoolById.get(importedInstructorId)
-          : null;
-        const allowNightClass = candidateInstructor?.allow_night_class === true;
-
-        if (
-          !isTimeSlotAllowed(
-            slotMinutes,
-            durationMinutes,
-            isEve,
-            allowNightClass,
-          )
-        )
-          continue;
+        // ── FIX (Bug 5 — Night class flag): The allow_night_class flag must
+        // be evaluated per-candidate in chooseInstructorForPlacementOptimized
+        // (already done there). Here we only skip the slot early if the section
+        // itself violates the time window (handled by isTimeSlotAllowed with
+        // a permissive flag — individual instructor filtering happens below).
+        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, true)) continue;
 
         const candidateTime = `${tryPattern} ${formatTime(formattedSlot)}`;
 
@@ -2257,7 +2370,7 @@ export function runAutoSchedule({
       dedupedAssignments.find(
         (orig) =>
           getAssignmentIdentityKey(orig) ===
-            getAssignmentIdentityKey(assignment) &&
+          getAssignmentIdentityKey(assignment) &&
           normalizeAssignmentStatus(orig.status) === "Assigned",
       ),
   ).length;
@@ -2332,7 +2445,7 @@ function getConflictingAssignments(assignments, targetAssignment, targetKey) {
       (currentInstructorName &&
         targetInstructorName &&
         currentInstructorName.toLowerCase() ===
-          targetInstructorName.toLowerCase());
+        targetInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, targetAssignment);
   });
@@ -2503,7 +2616,7 @@ export function applyManualAssignments({
         time_end: parseTimeToSQL(
           minutesTo24Text(
             (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) +
-              Math.round((assignment.duration || 1.5) * 60),
+            Math.round((assignment.duration || 1.5) * 60),
           ),
         ),
         duration: Number(assignment.duration ?? 1.5) || 1.5,
@@ -2554,6 +2667,24 @@ export function checkManualConflict({
   }
   const assignmentKey = getAssignmentIdentityKey(assignmentTarget);
   const assignmentLabel = formatAssignmentLabel(assignmentTarget);
+
+  // TSU Rule: OJT/special subjects must not be placed in Computer Lab rooms
+  const subjectCode = assignmentTarget?.code ?? "";
+  const subjectTitle = assignmentTarget?.title ?? "";
+  if (isSpecialRoomSubject(subjectCode, subjectTitle)) {
+    // We need the room type — check if the roomName matches a Computer Lab pattern
+    // The caller doesn't pass room objects, so we check via the assignmentTarget roomType
+    const requiredType = normalizeRoomType(assignmentTarget?.roomType ?? "");
+    if (requiredType === "Computer Lab") {
+
+      return {
+        ok: false,
+        type: "error",
+        text: `⚠ OJT/special subjects cannot be scheduled in Computer Lab rooms. Use AVR or Accreditation Room instead.`,
+      };
+    }
+  }
+
   const testCourse = {
     ...assignmentTarget,
     time: `${pattern} ${formatTime(startTime)}`,
