@@ -10,6 +10,7 @@ const NotificationContext = createContext();
 
 export function NotificationProvider({ children }) {
   const [notification, setNotification] = useState(null);
+  const [progress, setProgress] = useState(null);
   const timerRef = useRef(null);
 
   const showNotification = useCallback(
@@ -34,8 +35,24 @@ export function NotificationProvider({ children }) {
     [],
   );
 
+  const showProgress = useCallback((step, pct) => {
+    setProgress({ step, pct });
+  }, []);
+
+  const clearProgress = useCallback(() => {
+    setProgress(null);
+  }, []);
+
   return (
-    <NotificationContext.Provider value={{ notification, showNotification }}>
+    <NotificationContext.Provider
+      value={{
+        notification,
+        showNotification,
+        progress,
+        showProgress,
+        clearProgress,
+      }}
+    >
       {children}
     </NotificationContext.Provider>
   );

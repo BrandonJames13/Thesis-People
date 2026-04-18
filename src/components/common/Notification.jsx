@@ -147,14 +147,83 @@ function spawnShatter(canvas, type) {
   return () => cancelAnimationFrame(frame);
 }
 
+// Step config for the progress toast
+const PROGRESS_STEPS = [
+  { key: "clearing", label: "Clear", pct: 10, icon: "🧹" },
+  { key: "generating", label: "Generate", pct: 35, icon: "🔮" },
+  { key: "saving", label: "Save", pct: 85, icon: "📡" },
+  { key: "done", label: "Done", pct: 100, icon: "🎯" },
+];
+
+function ProgressToast({ step, pct }) {
+  const isError = step === "error";
+  const isDone = step === "done";
+
+  const currentStep = PROGRESS_STEPS.find((s) => s.key === step);
+  const icon = isError ? "⚠️" : isDone ? "🎯" : (currentStep?.icon ?? "🔮");
+
+  const statusLabel =
+    step === "clearing"
+      ? "Clearing existing schedule…"
+      : step === "generating"
+        ? "Running algorithm…"
+        : step === "saving"
+          ? "Saving to database…"
+          : step === "done"
+            ? "Schedule generated!"
+            : step === "error"
+              ? "Generation failed"
+              : "";
+
+  return (
+    <div
+      className={`${styles.progressToast} ${isError ? styles.progressError : isDone ? styles.progressDone : styles.progressActive}`}
+    >
+      {/* Header row */}
+      <div className={styles.progressHeader}>
+        <span className={styles.progressIcon}>{icon}</span>
+        <span className={styles.progressLabel}>{statusLabel}</span>
+        <span className={styles.progressPct}>{pct}%</span>
+      </div>
+
+      {/* Bar track */}
+      <div className={styles.progressTrack}>
+        <div
+          className={`${styles.progressFill} ${isError ? styles.fillError : isDone ? styles.fillDone : styles.fillActive}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      {/* Step dots */}
+      <div className={styles.progressSteps}>
+        {PROGRESS_STEPS.map((s) => {
+          const isActive = pct >= s.pct;
+          const isCurrent = step === s.key;
+          return (
+            <div key={s.key} className={styles.stepItem}>
+              <div
+                className={`${styles.stepDot} ${isActive ? (isError ? styles.dotError : isDone ? styles.dotDone : styles.dotActive) : styles.dotInactive} ${isCurrent && !isError ? styles.dotPulse : ""}`}
+              />
+              <span
+                className={`${styles.stepLabel} ${isActive ? styles.stepLabelActive : ""}`}
+              >
+                {s.icon} {s.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Notification() {
-  const { notification } = useNotification();
+  const { notification, progress } = useNotification();
   const canvasRef = useRef(null);
   const cleanupRef = useRef(null);
 
   useEffect(() => {
     if (!notification) {
-      // Clear canvas when notification disappears
       if (cleanupRef.current) {
         cleanupRef.current();
         cleanupRef.current = null;
@@ -166,12 +235,10 @@ export default function Notification() {
       }
       return;
     }
-
     if (cleanupRef.current) cleanupRef.current();
     const canvas = canvasRef.current;
     if (canvas) {
       if (notification.noConfetti) {
-        // No animation — just clear canvas
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         cleanupRef.current = null;
@@ -182,7 +249,6 @@ export default function Notification() {
             : spawnShatter(canvas, notification.type);
       }
     }
-
     return () => {
       if (cleanupRef.current) cleanupRef.current();
     };
@@ -208,6 +274,7 @@ export default function Notification() {
           <span>{text}</span>
         </div>
       )}
+      {progress && <ProgressToast step={progress.step} pct={progress.pct} />}
     </>
   );
 }
