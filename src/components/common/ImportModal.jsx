@@ -1567,11 +1567,18 @@ export default function ImportModal({ isOpen, onClose }) {
                   );
                   const errors = parsed.warnings.filter(
                     (w) =>
-                      w.includes("NOT FOUND") ||
-                      w.includes("Error") ||
-                      (w.includes("Row") &&
-                        !matched.includes(w) &&
-                        !skipped.includes(w)),
+                      !matched.includes(w) &&
+                      !skipped.includes(w) &&
+                      (w.includes("NOT FOUND") ||
+                        w.includes("Error") ||
+                        w.includes("row") ||
+                        w.includes("defaulted") ||
+                        w.includes("invalid") ||
+                        w.includes("unrecognized") ||
+                        w.includes("ignored") ||
+                        w.includes("normalized") ||
+                        w.includes("blank") ||
+                        w.includes("column")),
                   );
 
                   const categoryConfig = [
