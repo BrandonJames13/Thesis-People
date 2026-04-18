@@ -1,5 +1,5 @@
 "Name","Department","Availability","Status","Employment Status","Max Units","Allow Night Class"
-"Dela Cruz, J.","CS","MWF 08:00-12:00","Active","permanent,fulltime","21","true"
+"Dela Cruz, J.","CS","MWF 08:00-12:00","Active","permanent,temporary","21","true"
 "Lim, K.","CS","TTH 10:00-16:00","Active","lecturer","15","false"
 "Reyes, A.","CS","MWF 13:00-17:00","Active","attached","18","false"
 "Santos, M.","IT","TTH 08:00-12:00","Active","permanent","24","true"

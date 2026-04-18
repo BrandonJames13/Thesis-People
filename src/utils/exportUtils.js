@@ -37,7 +37,7 @@ const VALID_EMPLOYMENT_STATUSES = new Set([
   "lecturer",
   "permanent",
   "attached",
-  "fulltime",
+  "temporary",
 ]);
 
 const DEFAULT_ASSIGNMENT_STATUS = "Pending";
