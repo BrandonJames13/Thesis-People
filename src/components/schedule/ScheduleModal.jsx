@@ -9,6 +9,7 @@ import {
   getAssignmentIdentityKey,
   extractStartTime24,
   applyManualAssignments,
+  getAssignmentSectionId,
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
@@ -73,19 +74,33 @@ function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
                 color: "#333",
               }}
             >
-              {items.map((conflict, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    marginBottom: "4px",
-                    fontSize: "12px",
-                    color: "#333",
-                  }}
-                >
-                  {conflict.conflictReason ||
-                    `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
-                </li>
-              ))}
+              {items.map((conflict, idx) => {
+                const sectionId = getAssignmentSectionId(conflict);
+                return (
+                  <li
+                    key={idx}
+                    style={{
+                      marginBottom: "4px",
+                      fontSize: "12px",
+                      color: "#333",
+                    }}
+                  >
+                    {conflict.conflictReason ||
+                      `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
+                    {sectionId && (
+                      <span
+                        style={{
+                          marginLeft: "8px",
+                          fontWeight: "600",
+                          color: "#666",
+                        }}
+                      >
+                        [{sectionId}]
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}

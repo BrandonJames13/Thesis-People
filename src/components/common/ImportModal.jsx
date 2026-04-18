@@ -826,26 +826,28 @@ export default function ImportModal({ isOpen, onClose }) {
       ]),
     );
 
-    const nightClassViolations = [];
-    dbRows.forEach((row, index) => {
-      if (!row?.instructor_name || !isNightClassFromTime(row?.time_display)) {
-        return;
-      }
-
-      const instructor = instructorByName.get(
-        normalizeLookupKey(row.instructor_name),
-      );
-      if (!instructor) return;
-      if (instructor.allow_night_class) return;
-
-      nightClassViolations.push(
-        `Schedule row ${index + 2}: ${row.instructor_name} is not eligible for night classes (${row.time_display}).`,
-      );
-    });
-
-    if (nightClassViolations.length > 0) {
-      throw new Error(nightClassViolations.join(" "));
-    }
+    // Night class eligibility validation disabled during import to allow assignment
+    // of night classes regardless of instructor allow_night_class flag
+    // const nightClassViolations = [];
+    // dbRows.forEach((row, index) => {
+    //   if (!row?.instructor_name || !isNightClassFromTime(row?.time_display)) {
+    //     return;
+    //   }
+    //
+    //   const instructor = instructorByName.get(
+    //     normalizeLookupKey(row.instructor_name),
+    //   );
+    //   if (!instructor) return;
+    //   if (instructor.allow_night_class) return;
+    //
+    //   nightClassViolations.push(
+    //     `Schedule row ${index + 2}: ${row.instructor_name} is not eligible for night classes (${row.time_display}).`,
+    //   );
+    // });
+    //
+    // if (nightClassViolations.length > 0) {
+    //   throw new Error(nightClassViolations.join(" "));
+    // }
 
     // Build section lookup by composite key: (subject_id, section, academic_year, semester)
     const sectionByCompositeKey = new Map(
@@ -1137,15 +1139,17 @@ export default function ImportModal({ isOpen, onClose }) {
         normalizeLookupKey(row.instructor),
       );
 
-      if (
-        instructor &&
-        isNightClassFromTime(scheduleRow.time_display) &&
-        !instructor.allow_night_class
-      ) {
-        throw new Error(
-          `Full list row ${index + 2}: ${row.instructor} is not eligible for night classes (${scheduleRow.time_display}).`,
-        );
-      }
+      // Night class eligibility validation disabled during import to allow assignment
+      // of night classes regardless of instructor allow_night_class flag
+      // if (
+      //   instructor &&
+      //   isNightClassFromTime(scheduleRow.time_display) &&
+      //   !instructor.allow_night_class
+      // ) {
+      //   throw new Error(
+      //     `Full list row ${index + 2}: ${row.instructor} is not eligible for night classes (${scheduleRow.time_display}).`,
+      //   );
+      // }
 
       scheduleUpsertRows.push({
         ...scheduleRow,

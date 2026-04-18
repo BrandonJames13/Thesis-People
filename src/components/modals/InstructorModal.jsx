@@ -3,9 +3,10 @@ import Modal from "../common/Modal";
 
 const EMPLOYMENT_STATUS_OPTIONS = [
   { value: "permanent", label: "Permanent" },
-  { value: "temporary", label: "Temporary" },
+  { value: "fulltime", label: "Full-time" },
   { value: "attached", label: "Attached" },
   { value: "lecturer", label: "Lecturer" },
+  { value: "temporary", label: "Temporary" },
 ];
 
 export function InstructorModal({ existing, onClose, onSave }) {

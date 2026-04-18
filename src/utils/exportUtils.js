@@ -37,6 +37,7 @@ const VALID_EMPLOYMENT_STATUSES = new Set([
   "lecturer",
   "permanent",
   "attached",
+  "fulltime",
   "temporary",
 ]);
 
@@ -1104,10 +1105,10 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
         status,
         employment_status: employmentStatusParsed.value,
         max_units: maxUnitsParsed.value,
-        allow_night_class: allowNightClassParsed.value,
+        allow_night_class: false,
         employment_status_provided: employmentStatusParsed.provided,
         max_units_provided: maxUnitsParsed.provided,
-        allow_night_class_provided: allowNightClassParsed.provided,
+        allow_night_class_provided: false,
       };
     })
     .filter((inst) => inst.name);
