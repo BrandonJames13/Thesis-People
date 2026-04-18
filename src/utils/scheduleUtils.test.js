@@ -5,8 +5,8 @@
 
 import {
   runAutoSchedule,
-  getAssignmentSubjectCode,
-  getAssignmentSection,
+  // getAssignmentSubjectCode,
+  // getAssignmentSection,
   formatAssignmentLabel,
 } from "./scheduleUtils.js";
 

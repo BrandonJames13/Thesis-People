@@ -646,7 +646,7 @@ function chooseInstructorForPlacementOptimized({
   return null;
 }
 
-function chooseInstructorForPlacement({
+function _chooseInstructorForPlacement({
   course,
   placementBase,
   occupiedPool,
@@ -1710,7 +1710,7 @@ export function runAutoSchedule({
   const newRooms = (Array.isArray(rooms) ? rooms : []).map((r) => ({ ...r }));
 
   // ── Build enhanced subject lookup index ────────────────────────────────────
-  const { subjectByCode, subjectById } = buildSubjectLookupIndex(subjects);
+  const { subjectByCode, _subjectById } = buildSubjectLookupIndex(subjects);
 
   // ── Initialize subject resolution failure tracking ────────────────────────
   const resolutionCache = new SubjectResolutionCache();

@@ -284,7 +284,7 @@ function buildInstructorLoadsFromBothSources(
   subjectSections,
 ) {
   // Build section lookup index for instructorSubjects processing
-  const sectionById = new Map(
+  const _sectionById = new Map(
     (Array.isArray(subjectSections) ? subjectSections : []).map((section) => [
       String(section?.sectionId ?? section?.id ?? section?.section_id ?? "")
         .trim()
@@ -792,7 +792,7 @@ export function DataProvider({ children }) {
         });
 
         // Perform upsert with unique constraint on (section_id, academic_year, semester)
-        const { data, error } = await supabase
+        const { data: _upsertData, error } = await supabase
           .from("schedule_assignments")
           .upsert(rowsToUpsert, {
             onConflict: "section_id,academic_year,semester",
@@ -949,7 +949,7 @@ export function DataProvider({ children }) {
 
     try {
       // Call RPC function to atomically delete schedule_assignments and conflicts from database
-      const { data, error } = await supabase.rpc("reset_schedule_for_term", {
+      const { data: _resetData, error } = await supabase.rpc("reset_schedule_for_term", {
         p_academic_year: ACTIVE_ACADEMIC_YEAR,
         p_semester: ACTIVE_SEMESTER,
       });

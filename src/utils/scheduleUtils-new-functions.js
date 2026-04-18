@@ -7,7 +7,7 @@
  * @param {Array} subjects - Array of subject objects
  * @returns {object} Object with subjectByCode and subjectById maps
  */
-function buildSubjectLookupIndex(subjects) {
+function _buildSubjectLookupIndex(subjects) {
   const subjectByCode = new Map();
   const subjectById = new Map();
 
@@ -95,7 +95,7 @@ class SubjectResolutionCache {
  * @param {number} conflictCount - Total conflicts generated
  * @returns {void} Logs report to console
  */
-function generateSubjectResolutionReport(cache, conflictCount) {
+function _generateSubjectResolutionReport(cache, conflictCount) {
   const report = cache.getReport();
   if (!report) {
     console.log(

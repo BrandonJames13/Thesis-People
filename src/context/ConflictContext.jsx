@@ -415,7 +415,7 @@ export function ConflictProvider({ children }) {
 
     while (attempts < MAX_ATTEMPTS) {
       // Detect conflicts directly against the current working copy
-      const { hard: currentHard } = detectConflicts();
+      const { hard: _currentHard } = detectConflicts();
 
       // Re-run detection against workingAssignments (not stale closure state)
       const liveHard = [];
