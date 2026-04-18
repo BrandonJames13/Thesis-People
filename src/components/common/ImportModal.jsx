@@ -1023,15 +1023,6 @@ export default function ImportModal({ isOpen, onClose }) {
         ? (row.allow_night_class ?? false)
         : (existing?.allow_night_class ?? false);
 
-      if (
-        resolvedAllowNightClass &&
-        !resolvedEmploymentStatus.includes("permanent")
-      ) {
-        throw new Error(
-          `Instructor ${row.name}: allow night class requires employment status to include permanent.`,
-        );
-      }
-
       return {
         name: row.name,
         department: normalizedDepartment,
