@@ -153,15 +153,34 @@ export default function Notification() {
   const cleanupRef = useRef(null);
 
   useEffect(() => {
-    if (!notification) return;
+    if (!notification) {
+      // Clear canvas when notification disappears
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
 
     if (cleanupRef.current) cleanupRef.current();
     const canvas = canvasRef.current;
     if (canvas) {
-      cleanupRef.current =
-        notification.type === "success"
-          ? spawnConfetti(canvas)
-          : spawnShatter(canvas, notification.type);
+      if (notification.noConfetti) {
+        // No animation — just clear canvas
+        const ctx = canvas.getContext("2d");
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        cleanupRef.current = null;
+      } else {
+        cleanupRef.current =
+          notification.type === "success"
+            ? spawnConfetti(canvas)
+            : spawnShatter(canvas, notification.type);
+      }
     }
 
     return () => {

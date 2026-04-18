@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -6,6 +6,81 @@ import { useClickOutside } from "../../hooks/useClickOutside";
 import Modal from "../common/Modal";
 import styles from "./Header.module.css";
 
+// ─── Drag-to-slide theme toggle ───────────────────────────────────────────────
+function ThemeToggle({ theme, toggleTheme }) {
+  const isDark = theme === "dark";
+
+  const TRACK_W = 64;
+  const THUMB_W = 24;
+  const MAX_DRAG = TRACK_W - THUMB_W - 4; // 4px = 2px padding each side
+
+  const [dragX, setDragX] = useState(null);
+  const [hasSwitched, setHasSwitched] = useState(false);
+  const startRef = useRef(null);
+
+  const baseOffset = isDark ? 0 : MAX_DRAG;
+  const thumbOffset =
+    dragX !== null ? Math.max(0, Math.min(MAX_DRAG, dragX)) : baseOffset;
+  const isDragging = dragX !== null;
+
+  const handlePointerDown = (e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    startRef.current = { clientX: e.clientX, baseOffset };
+    setDragX(baseOffset);
+    setHasSwitched(false);
+  };
+
+  const handlePointerMove = (e) => {
+    if (startRef.current === null) return;
+    const delta = e.clientX - startRef.current.clientX;
+    const next = Math.max(
+      0,
+      Math.min(MAX_DRAG, startRef.current.baseOffset + delta),
+    );
+    setDragX(next);
+
+    const midpoint = MAX_DRAG / 2;
+    const crossedToLight = next > midpoint && isDark && !hasSwitched;
+    const crossedToDark = next <= midpoint && !isDark && !hasSwitched;
+    if (crossedToLight || crossedToDark) {
+      setHasSwitched(true);
+      toggleTheme();
+    }
+  };
+
+  const handlePointerUp = (e) => {
+    if (startRef.current === null) return;
+    const totalDelta = Math.abs(e.clientX - startRef.current.clientX);
+    if (totalDelta < 4 && !hasSwitched) toggleTheme();
+    startRef.current = null;
+    setDragX(null);
+    setHasSwitched(false);
+  };
+
+  return (
+    <div className={styles.toggleTrack} data-dark={isDark}>
+      <span className={styles.toggleIconLeft}>🌙</span>
+      <span className={styles.toggleIconRight}>☀️</span>
+      <div
+        className={styles.toggleThumb}
+        style={{
+          transform: `translateX(${thumbOffset}px)`,
+          transition: isDragging
+            ? "none"
+            : "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
+          cursor: isDragging ? "grabbing" : "grab",
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      />
+    </div>
+  );
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
 export default function Header() {
   const { currentUser, logout, changePassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -39,6 +114,8 @@ export default function Header() {
     setPwModalOpen(true);
   };
 
+  const isAdmin = currentUser?.role === "admin";
+
   return (
     <header className={styles.header}>
       <div className={styles.logo}>
@@ -46,29 +123,36 @@ export default function Header() {
         TSU&nbsp;·&nbsp;CCS&nbsp;&nbsp;
         <span className={styles.logoSub}>/ Room Scheduling System</span>
       </div>
+
       <div className={styles.headerRight}>
         <span className={styles.badge}>v1.0 · BETA</span>
-        <button
-          className={`btn btn-secondary ${styles.themeBtn}`}
-          onClick={toggleTheme}
-          title={
-            theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
-          }
-        >
-          {theme === "dark" ? "🌙" : "🌞"}
-        </button>
 
-        {/* //! User Menu */}
+        <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+
         <div className={styles.userWrap} ref={menuRef}>
-          <div
+          <button
             className={styles.userTrigger}
             onClick={(e) => {
               e.stopPropagation();
-              setMenuOpen(!menuOpen);
+              setMenuOpen((o) => !o);
             }}
+            aria-label="User menu"
           >
-            <div className="avatar">{currentUser?.initials || "—"}</div>
-            <div className={styles.userName}>{currentUser?.name || "—"}</div>
+            <div
+              className={`${styles.avatar} ${isAdmin ? styles.avatarAdmin : styles.avatarFaculty}`}
+            >
+              {currentUser?.initials || "—"}
+            </div>
+            <div className={styles.userInfo}>
+              <span className={styles.userName}>
+                {currentUser?.name || "—"}
+              </span>
+              <span
+                className={`${styles.userRole} ${isAdmin ? styles.userRoleAdmin : styles.userRoleFaculty}`}
+              >
+                {isAdmin ? "👑 Admin" : "🎓 Faculty"}
+              </span>
+            </div>
             <span
               className={styles.caret}
               style={{
@@ -77,35 +161,49 @@ export default function Header() {
             >
               ▾
             </span>
-          </div>
-          {/* //* User Menu Dropdown */}
+          </button>
+
           {menuOpen && (
             <div className={styles.dropdown}>
-              <div className={styles.menuName}>{currentUser?.name || "—"}</div>
-              <div className={styles.menuEmail}>
-                {currentUser?.email || "—"}
-              </div>
-              <div className={styles.menuRole}>
-                <span
-                  className={`${styles.statusPill} ${currentUser?.role === "admin" ? styles.statusAdmin : styles.statusFaculty}`}
+              <div className={styles.dropdownProfile}>
+                <div
+                  className={`${styles.dropdownAvatar} ${isAdmin ? styles.avatarAdmin : styles.avatarFaculty}`}
                 >
-                  {currentUser?.role === "admin" ? "👑 Admin" : "🎓 Faculty"}
-                </span>
+                  {currentUser?.initials || "—"}
+                </div>
+                <div className={styles.dropdownMeta}>
+                  <div className={styles.dropdownName}>
+                    {currentUser?.name || "—"}
+                  </div>
+                  <div className={styles.dropdownEmail}>
+                    {currentUser?.email || "—"}
+                  </div>
+                  <span
+                    className={`${styles.statusPill} ${isAdmin ? styles.statusAdmin : styles.statusFaculty}`}
+                  >
+                    {isAdmin ? "👑 Admin" : "🎓 Faculty"}
+                  </span>
+                </div>
               </div>
+
+              <div className={styles.dropdownDivider} />
+
               <button className={styles.menuItem} onClick={openPwModal}>
-                🔑 Change Password
+                <span className={styles.menuItemIcon}>🔑</span>
+                Change Password
               </button>
               <button
                 className={`${styles.menuItem} ${styles.menuLogout}`}
                 onClick={logout}
               >
-                ↩ Logout
+                <span className={styles.menuItemIcon}>↩</span>
+                Logout
               </button>
             </div>
           )}
         </div>
       </div>
-      {/* //! change password modal */}
+
       <Modal
         isOpen={pwModalOpen}
         onClose={() => setPwModalOpen(false)}

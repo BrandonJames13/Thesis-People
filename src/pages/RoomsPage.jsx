@@ -16,6 +16,127 @@ import {
   detectSpecialRoomType,
 } from "../data/constants";
 
+function RoomCard({
+  room,
+  isAdmin,
+  statusColor,
+  getWingLabel,
+  onEdit,
+  onDelete,
+  getRoomCapacityLimit,
+  normalizeRoomType,
+  sanitizeRoomCapacity,
+}) {
+  const [hovered, setHovered] = useState(false);
+  const [editHovered, setEditHovered] = useState(false);
+  const [deleteHovered, setDeleteHovered] = useState(false);
+
+  const normalizedType = normalizeRoomType(room.type);
+  const { max } = getRoomCapacityLimit(normalizedType);
+  const safeCapacity = sanitizeRoomCapacity(normalizedType, room.capacity);
+  const percent = Math.min(
+    100,
+    Math.max(0, Math.round((safeCapacity / Math.max(max, 1)) * 100)),
+  );
+
+  return (
+    <div
+      className="room-card"
+      style={{ position: "relative" }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setEditHovered(false);
+        setDeleteHovered(false);
+      }}
+    >
+      {isAdmin && (
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            display: "flex",
+            gap: 4,
+            alignItems: "center",
+            opacity: hovered ? 1 : 0,
+            transform: hovered ? "translateY(0px)" : "translateY(-4px)",
+            transition: "opacity 0.2s ease, transform 0.2s ease",
+            pointerEvents: hovered ? "auto" : "none",
+          }}
+        >
+          <button
+            onClick={() => onEdit(room)}
+            onMouseEnter={() => setEditHovered(true)}
+            onMouseLeave={() => setEditHovered(false)}
+            style={{
+              background: editHovered ? "var(--accent)" : "var(--surface3)",
+              border: `1px solid ${editHovered ? "var(--accent)" : "var(--border)"}`,
+              color: editHovered ? "#fff" : "var(--text2)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 500,
+              lineHeight: 1,
+              padding: "4px 8px",
+              borderRadius: 5,
+              whiteSpace: "nowrap",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            title="Edit"
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDelete(room)}
+            onMouseEnter={() => setDeleteHovered(true)}
+            onMouseLeave={() => setDeleteHovered(false)}
+            style={{
+              background: deleteHovered ? "#c0392b" : "var(--surface3)",
+              border: `1px solid ${deleteHovered ? "#c0392b" : "var(--border)"}`,
+              color: deleteHovered ? "#fff" : "var(--text2)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 500,
+              lineHeight: 1,
+              padding: "4px 7px",
+              borderRadius: 5,
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            title="Delete"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      <div>
+        <div className="room-number">{room.number}</div>
+      </div>
+      <div className="room-type">{normalizedType}</div>
+      {room.wing && (
+        <div
+          style={{
+            fontSize: 11,
+            color: "var(--text3)",
+            marginBottom: 4,
+          }}
+        >
+          📍 {getWingLabel(room.wing)}
+        </div>
+      )}
+      <div style={{ marginBottom: 10 }}>
+        <span className={`pill pill-${statusColor}`}>{room.status}</span>
+      </div>
+      <div className="room-capacity">
+        <span style={{ fontSize: 11, color: "var(--text3)" }}>Cap:</span>
+        <div className="cap-bar">
+          <div className="cap-fill" style={{ width: `${percent}%` }} />
+        </div>
+        <span className="monospace">{safeCapacity}</span>
+      </div>
+    </div>
+  );
+}
+
 const WINGS = [
   { code: "L", label: "Left Wing (L)" },
   { code: "R", label: "Right Wing (R)" },
@@ -385,143 +506,18 @@ export default function RoomsPage() {
                     ? "orange"
                     : "blue";
               return (
-                <div
-                  className="room-card"
+                <RoomCard
                   key={room.id}
-                  style={{ position: "relative" }}
-                >
-                  {isAdmin && (
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 10,
-                        right: 10,
-                        display: "flex",
-                        gap: 4,
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => openEditModal(room)}
-                        style={{
-                          background: "var(--surface3)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text2)",
-                          cursor: "pointer",
-                          fontSize: 11,
-                          fontWeight: 500,
-                          lineHeight: 1,
-                          padding: "4px 8px",
-                          borderRadius: 5,
-                          whiteSpace: "nowrap",
-                          transition: "background 0.15s, border-color 0.15s",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "var(--accent)";
-                          e.currentTarget.style.borderColor = "var(--accent)";
-                          e.currentTarget.style.color = "#fff";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "var(--surface3)";
-                          e.currentTarget.style.borderColor = "var(--border)";
-                          e.currentTarget.style.color = "var(--text2)";
-                        }}
-                        title="Edit"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(room)}
-                        style={{
-                          background: "var(--surface3)",
-                          border: "1px solid var(--border)",
-                          color: "var(--text2)",
-                          cursor: "pointer",
-                          fontSize: 11,
-                          fontWeight: 500,
-                          lineHeight: 1,
-                          padding: "4px 7px",
-                          borderRadius: 5,
-                          transition: "background 0.15s, border-color 0.15s",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "#c0392b";
-                          e.currentTarget.style.borderColor = "#c0392b";
-                          e.currentTarget.style.color = "#fff";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "var(--surface3)";
-                          e.currentTarget.style.borderColor = "var(--border)";
-                          e.currentTarget.style.color = "var(--text2)";
-                        }}
-                        title="Delete"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  )}
-                  <div>
-                    <div
-                      className="room-number"
-                      style={{ paddingRight: isAdmin ? 60 : 0 }}
-                    >
-                      {room.number}
-                    </div>
-                  </div>
-                  <div className="room-type">
-                    {normalizeRoomType(room.type)}
-                  </div>
-                  {room.wing && (
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text3)",
-                        marginBottom: 4,
-                      }}
-                    >
-                      📍 {getWingLabel(room.wing)}
-                    </div>
-                  )}
-                  <div style={{ marginBottom: 10 }}>
-                    <span className={`pill pill-${statusColor}`}>
-                      {room.status}
-                    </span>
-                  </div>
-                  <div className="room-capacity">
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      Cap:
-                    </span>
-                    {(() => {
-                      const normalizedType = normalizeRoomType(room.type);
-                      const { max } = getRoomCapacityLimit(normalizedType);
-                      const safeCapacity = sanitizeRoomCapacity(
-                        normalizedType,
-                        room.capacity,
-                      );
-                      const percent = Math.min(
-                        100,
-                        Math.max(
-                          0,
-                          Math.round((safeCapacity / Math.max(max, 1)) * 100),
-                        ),
-                      );
-
-                      return (
-                        <>
-                          <div className="cap-bar">
-                            <div
-                              className="cap-fill"
-                              style={{
-                                width: `${percent}%`,
-                              }}
-                            />
-                          </div>
-                          <span className="monospace">{safeCapacity}</span>
-                        </>
-                      );
-                    })()}
-                  </div>
-                </div>
+                  room={room}
+                  isAdmin={isAdmin}
+                  statusColor={statusColor}
+                  getWingLabel={getWingLabel}
+                  onEdit={openEditModal}
+                  onDelete={setDeleteTarget}
+                  getRoomCapacityLimit={getRoomCapacityLimit}
+                  normalizeRoomType={normalizeRoomType}
+                  sanitizeRoomCapacity={sanitizeRoomCapacity}
+                />
               );
             })
           )}

@@ -1,3 +1,4 @@
+/* ── Header shell ─────────────────────────────────────────────────────────── */
 .header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -11,6 +12,7 @@
   z-index: 100;
 }
 
+/* ── Logo ─────────────────────────────────────────────────────────────────── */
 .logo {
   display: flex;
   align-items: center;
@@ -21,7 +23,6 @@
   letter-spacing: 0.5px;
   color: var(--text);
 }
-
 .logoIcon {
   width: 28px;
   height: 28px;
@@ -32,18 +33,18 @@
   justify-content: center;
   font-size: 14px;
 }
-
 .logoSub {
   color: var(--text3);
   font-weight: 400;
 }
 
+/* ── Right cluster ────────────────────────────────────────────────────────── */
 .headerRight {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  height: 100%;
 }
-
 .badge {
   background: rgba(47, 129, 247, 0.15);
   border: 1px solid rgba(47, 129, 247, 0.3);
@@ -54,101 +55,253 @@
   font-weight: 600;
   font-family: var(--mono);
   letter-spacing: 0.5px;
+  align-self: center;
 }
 
-.themeBtn {
-  font-size: 13px !important;
-  padding: 6px 12px !important;
+/* ── Theme toggle track ───────────────────────────────────────────────────── */
+/* Track: 64 × 28px   Thumb: 24 × 24px   padding: 2px each side */
+.toggleTrack {
+  position: relative;
+  width: 64px;
+  height: 28px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  flex-shrink: 0;
+  align-self: center;
+  transition:
+    background 0.3s ease,
+    border-color 0.3s ease;
+  user-select: none;
+  cursor: pointer;
+}
+/* Dark mode — deep slate track */
+.toggleTrack[data-dark="true"] {
+  background: #1c2030;
+  border-color: #3a4060;
+}
+/* Light mode — warm parchment track */
+.toggleTrack[data-dark="false"] {
+  background: #fdf3e3;
+  border-color: #e8c87a;
 }
 
+.toggleIconLeft,
+.toggleIconRight {
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 0;
+  flex-shrink: 0;
+}
+
+/* ── Thumb — 24 × 24px, absolute so it slides over the icons ─────────────── */
+.toggleThumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  z-index: 1;
+  will-change: transform;
+  touch-action: none;
+  /* Dark mode thumb: cool slate-white */
+  background: #e2e8f0;
+  box-shadow:
+    0 1px 5px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+/* Light mode thumb: warm amber */
+.toggleTrack[data-dark="false"] .toggleThumb {
+  background: #f59e0b;
+  box-shadow:
+    0 1px 6px rgba(245, 158, 11, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+}
+
+/* ── User trigger button ──────────────────────────────────────────────────── */
 .userWrap {
   position: relative;
+  align-self: center;
 }
-
 .userTrigger {
   display: flex;
   align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  transition: all 0.15s;
-}
-
-.userTrigger:hover {
+  gap: 9px;
   background: var(--surface2);
-  border-color: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 5px 10px 5px 6px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+  font-family: var(--sans);
+  height: 38px;
+  box-sizing: border-box;
+}
+.userTrigger:hover {
+  background: var(--surface3);
+  border-color: var(--text3);
+  box-shadow: 0 0 0 3px rgba(139, 148, 158, 0.12);
 }
 
+/* ── Avatar ───────────────────────────────────────────────────────────────── */
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+.avatarAdmin {
+  background: rgba(188, 140, 255, 0.18);
+  color: var(--purple);
+  border-color: rgba(188, 140, 255, 0.45);
+}
+.avatarFaculty {
+  background: rgba(63, 185, 80, 0.15);
+  color: var(--green);
+  border-color: rgba(63, 185, 80, 0.4);
+}
+
+/* ── User info stack ──────────────────────────────────────────────────────── */
+.userInfo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
 .userName {
   font-size: 12px;
-  color: var(--text2);
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.userRole {
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.userRoleAdmin {
+  color: var(--purple);
+}
+.userRoleFaculty {
+  color: var(--green);
 }
 
 .caret {
   font-size: 10px;
   color: var(--text3);
   transition: transform 0.2s;
+  margin-left: 2px;
 }
 
+/* ── Dropdown ─────────────────────────────────────────────────────────────── */
 .dropdown {
   position: absolute;
-  top: 40px;
+  top: calc(100% + 8px);
   right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   padding: 8px;
-  min-width: 180px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  min-width: 214px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   z-index: 200;
+  animation: dropIn 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes dropIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
-.menuName {
-  padding: 8px 10px;
+/* Dropdown profile header */
+.dropdownProfile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px 10px;
+}
+.dropdownAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--mono);
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+.dropdownMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.dropdownName {
   font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.menuEmail {
-  padding: 0 10px 4px;
+.dropdownEmail {
   font-size: 11px;
   color: var(--text3);
-  word-break: break-all;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dropdownDivider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
-.menuRole {
-  padding: 4px 10px 8px;
-  font-size: 11px;
-  color: var(--text3);
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 4px;
-}
-
+/* ── Status pills ─────────────────────────────────────────────────────────── */
 .statusPill {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
+  margin-top: 2px;
 }
-
 .statusAdmin {
-  background: rgba(188, 140, 255, 0.2);
+  background: rgba(188, 140, 255, 0.18);
   color: var(--purple);
-  border: 1px solid var(--purple);
+  border: 1px solid rgba(188, 140, 255, 0.4);
 }
-
 .statusFaculty {
-  background: rgba(63, 185, 80, 0.2);
+  background: rgba(63, 185, 80, 0.15);
   color: var(--green);
-  border: 1px solid var(--green);
+  border: 1px solid rgba(63, 185, 80, 0.35);
 }
 
+/* ── Menu items ───────────────────────────────────────────────────────────── */
 .menuItem {
   width: 100%;
   text-align: left;
@@ -158,25 +311,39 @@
   font-size: 13px;
   color: var(--text2);
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: 7px;
   font-family: var(--sans);
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition:
+    background 0.12s,
+    color 0.12s;
 }
-
 .menuItem:hover {
   background: var(--surface2);
+  color: var(--text);
 }
-
+.menuItemIcon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
 .menuLogout {
   color: var(--red);
 }
+.menuLogout:hover {
+  background: rgba(248, 81, 73, 0.1);
+  color: var(--red);
+}
 
+/* ── Change password modal ────────────────────────────────────────────────── */
 .pwForm {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-
 .pwLabel {
   font-size: 12px;
   font-weight: 600;
@@ -184,7 +351,6 @@
   margin-bottom: 4px;
   display: block;
 }
-
 .pwError {
   padding: 8px 12px;
   border-radius: 6px;
@@ -193,7 +359,6 @@
   border: 1px solid var(--red);
   color: var(--red);
 }
-
 .pwActions {
   display: flex;
   gap: 10px;
