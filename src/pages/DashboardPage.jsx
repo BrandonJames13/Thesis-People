@@ -273,7 +273,9 @@ export default function DashboardPage() {
                       </span>
                       <br />
                       <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                        {assignment.course_title ?? assignment.title}
+                        {assignment.course_title ??
+                          assignment.subject_title ??
+                          assignment.title}
                         {assignment.sectionId
                           ? ` · ${String(assignment.sectionId).slice(-10).toUpperCase()}`
                           : ""}

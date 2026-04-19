@@ -12,15 +12,15 @@ const VALID_ASSIGNMENT_STATUSES = new Set(["Pending", "Assigned", "Conflict"]);
 // ─── TSU Scheduling Rules ─────────────────────────────────────────────────────
 
 const NIGHT_START_MIN = 18 * 60; // 6:00 PM = 1080 min
-const DAY_END_MIN = 18 * 60;     // 6:00 PM = 1080 min
+const DAY_END_MIN = 18 * 60; // 6:00 PM = 1080 min
 
 // ─── TSU Time Window Constants ────────────────────────────────────────────────
 // FIX: Enforce the three distinct scheduling windows
-const MORNING_START_MIN = 7 * 60;       // 7:00 AM  = 420 min
-const MORNING_END_MIN = 11 * 60;      // 11:00 AM = 660 min  (classes must END by 11:00)
-const AFTERNOON_START_MIN = 13 * 60;     // 1:00 PM  = 780 min
-const AFTERNOON_END_MIN = 18 * 60;      // 6:00 PM  = 1080 min
-const NIGHT_END_MIN = 21 * 60;      // 9:00 PM  = 1260 min
+const MORNING_START_MIN = 7 * 60; // 7:00 AM  = 420 min
+const MORNING_END_MIN = 11 * 60; // 11:00 AM = 660 min  (classes must END by 11:00)
+const AFTERNOON_START_MIN = 13 * 60; // 1:00 PM  = 780 min
+const AFTERNOON_END_MIN = 18 * 60; // 6:00 PM  = 1080 min
+const NIGHT_END_MIN = 21 * 60; // 9:00 PM  = 1260 min
 
 // ─── TSU Lunch Break Rule ─────────────────────────────────────────────────────
 // No class may overlap the 12:00 PM – 1:00 PM lunch break
@@ -47,7 +47,9 @@ function overlapsLunchBreak(slotStartMinutes, durationMinutes) {
  * @deprecated Use overlapsLunchBreak(start, duration) instead.
  */
 function startsInLunchBreak(slotStartMinutes) {
-  return slotStartMinutes >= LUNCH_START_MIN && slotStartMinutes < LUNCH_END_MIN;
+  return (
+    slotStartMinutes >= LUNCH_START_MIN && slotStartMinutes < LUNCH_END_MIN
+  );
 }
 
 const SPECIAL_ROOM_SUBJECT_KEYWORDS = [
@@ -282,11 +284,11 @@ export function getAssignmentSubjectCode(row) {
   // Enhanced lookup paths: code → subjectCode → subject_code → subject.code → subject_id → subject_title
   let result = String(
     row?.code ??
-    row?.subjectCode ??
-    row?.subject_code ??
-    row?.subject?.code ??
-    row?.subject_id ??
-    "",
+      row?.subjectCode ??
+      row?.subject_code ??
+      row?.subject?.code ??
+      row?.subject_id ??
+      "",
   )
     .trim()
     .toUpperCase();
@@ -563,7 +565,10 @@ function buildEligibleRooms(roomPool, assignment) {
   const neededType = normalizeRoomType(assignment.roomType);
   const subjectCode = getAssignmentSubjectCode(assignment);
   const subjectTitle = String(
-    assignment.title ?? assignment.course_title ?? "",
+    assignment.title ??
+      assignment.course_title ??
+      assignment.subject_title ??
+      "",
   ).trim();
 
   return roomPool.filter((room) => {
@@ -665,7 +670,11 @@ function chooseInstructorForPlacementOptimized({
     const endMin = slotMinutes + durationMinutes;
     const isNightSlot = slotMinutes >= NIGHT_START_MIN || endMin > DAY_END_MIN;
     if (isNightSlot && !instructor.allow_night_class && !isEve) continue;
-    if (isEve && slotMinutes >= NIGHT_START_MIN && !instructor.allow_night_class)
+    if (
+      isEve &&
+      slotMinutes >= NIGHT_START_MIN &&
+      !instructor.allow_night_class
+    )
       continue;
 
     const testAssignmentSectionTermKey = buildSectionTermKey(placementBase);
@@ -785,7 +794,7 @@ function hasCoverageConflict(
       (existingInstructorName &&
         testInstructorName &&
         existingInstructorName.toLowerCase() ===
-        testInstructorName.toLowerCase());
+          testInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, testAssignment);
   });
@@ -821,8 +830,9 @@ function buildCandidateStarts({
     // Reject slots that fall outside the declared session window.
     // Morning sessions must end by 11:00 AM; afternoon by 6:00 PM.
     const slotEnd = cursor + durationMinutes;
-    if (startMinutes < LUNCH_START_MIN && slotEnd > MORNING_END_MIN) continue;  // morning cap
-    if (startMinutes >= AFTERNOON_START_MIN && slotEnd > AFTERNOON_END_MIN) continue; // afternoon cap
+    if (startMinutes < LUNCH_START_MIN && slotEnd > MORNING_END_MIN) continue; // morning cap
+    if (startMinutes >= AFTERNOON_START_MIN && slotEnd > AFTERNOON_END_MIN)
+      continue; // afternoon cap
 
     starts.push(cursor);
   }
@@ -1418,7 +1428,7 @@ function buildSectionPrecompute(
   const orderedRooms = categorizeRoomsBySubject(
     eligibleRooms,
     getAssignmentSubjectCode(row),
-    String(row?.title ?? row?.course_title ?? "").trim(),
+    String(row?.title ?? row?.course_title ?? row?.subject_title ?? "").trim(),
     row.enrolled ?? 0,
   );
 
@@ -1451,16 +1461,17 @@ function buildSectionPrecompute(
     ];
   }
 
-  const candidateSlots = sessionWindows.flatMap(({ startTime: wStart, endTime: wEnd }) =>
-    buildCandidateStarts({
-      duration: courseDuration,
-      startTime: wStart,
-      endTime: wEnd,
-      preferredStart: importedStart || undefined,
-    }).map((slotMinutes) => ({
-      slotMinutes,
-      formattedSlot: minutesTo24Text(slotMinutes),
-    }))
+  const candidateSlots = sessionWindows.flatMap(
+    ({ startTime: wStart, endTime: wEnd }) =>
+      buildCandidateStarts({
+        duration: courseDuration,
+        startTime: wStart,
+        endTime: wEnd,
+        preferredStart: importedStart || undefined,
+      }).map((slotMinutes) => ({
+        slotMinutes,
+        formattedSlot: minutesTo24Text(slotMinutes),
+      })),
   );
 
   // ── TSU Rule: use getPatternsForSection instead of raw fallback order ────────
@@ -1500,7 +1511,9 @@ function buildSectionPrecompute(
     identityKey,
     durationMinutes,
     courseDuration,
-    importedStartMinutes: importedStart ? parse24TextToMinutes(importedStart) : null,
+    importedStartMinutes: importedStart
+      ? parse24TextToMinutes(importedStart)
+      : null,
     importedStart,
     importedPattern,
     orderedRooms,
@@ -1645,31 +1658,31 @@ function generateSubjectResolutionReport(cache, conflictCount) {
   console.warn("[scheduleUtils] [WARN] Subject Resolution Report:");
   console.warn(
     "  Total Unresolved: " +
-    report.totalFailures +
-    " assignments | Unique Identifiers: " +
-    report.uniqueIdentifiers,
+      report.totalFailures +
+      " assignments | Unique Identifiers: " +
+      report.uniqueIdentifiers,
   );
 
   report.failures.forEach(({ identifier, count, examples }) => {
     console.warn(
       "  [X] '" +
-      identifier +
-      "' (" +
-      count +
-      " occurrence" +
-      (count > 1 ? "s" : "") +
-      ")",
+        identifier +
+        "' (" +
+        count +
+        " occurrence" +
+        (count > 1 ? "s" : "") +
+        ")",
     );
     if (examples.length > 0) {
       examples.forEach((ex) => {
         console.warn(
           "    |-- Section: " +
-          (ex.sectionId ?? "unknown") +
-          " | " +
-          ex.row +
-          " | Raw: '" +
-          ex.rawValue +
-          "'",
+            (ex.sectionId ?? "unknown") +
+            " | " +
+            ex.row +
+            " | Raw: '" +
+            ex.rawValue +
+            "'",
         );
       });
     }
@@ -1908,9 +1921,9 @@ export function runAutoSchedule({
     // Safe extraction of subject ID with fallbacks
     const courseSubjectId = String(
       course.subjectId ??
-      fallbackSubject?.id ??
-      fallbackSubject?.subject_id ??
-      "",
+        fallbackSubject?.id ??
+        fallbackSubject?.subject_id ??
+        "",
     ).trim();
     course.subjectId = courseSubjectId;
 
@@ -2004,7 +2017,8 @@ export function runAutoSchedule({
         const baseSectionId = splitMatch[1];
         const siblingTag = splitMatch[2] === "LEC" ? "LAB" : "LEC";
         const siblingId = `${baseSectionId}__${siblingTag}`;
-        const siblingPatterns = assignedPatternsPerSection.get(siblingId) ?? new Set();
+        const siblingPatterns =
+          assignedPatternsPerSection.get(siblingId) ?? new Set();
         const siblingDays = new Set();
         siblingPatterns.forEach((p) => {
           (patternDaysMap[p] ?? []).forEach((d) => siblingDays.add(d));
@@ -2049,7 +2063,8 @@ export function runAutoSchedule({
         // (already done there). Here we only skip the slot early if the section
         // itself violates the time window (handled by isTimeSlotAllowed with
         // a permissive flag — individual instructor filtering happens below).
-        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, true)) continue;
+        if (!isTimeSlotAllowed(slotMinutes, durationMinutes, isEve, true))
+          continue;
 
         const candidateTime = `${tryPattern} ${formatTime(formattedSlot)}`;
 
@@ -2370,7 +2385,7 @@ export function runAutoSchedule({
       dedupedAssignments.find(
         (orig) =>
           getAssignmentIdentityKey(orig) ===
-          getAssignmentIdentityKey(assignment) &&
+            getAssignmentIdentityKey(assignment) &&
           normalizeAssignmentStatus(orig.status) === "Assigned",
       ),
   ).length;
@@ -2445,7 +2460,7 @@ function getConflictingAssignments(assignments, targetAssignment, targetKey) {
       (currentInstructorName &&
         targetInstructorName &&
         currentInstructorName.toLowerCase() ===
-        targetInstructorName.toLowerCase());
+          targetInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, targetAssignment);
   });
@@ -2616,7 +2631,7 @@ export function applyManualAssignments({
         time_end: parseTimeToSQL(
           minutesTo24Text(
             (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) +
-            Math.round((assignment.duration || 1.5) * 60),
+              Math.round((assignment.duration || 1.5) * 60),
           ),
         ),
         duration: Number(assignment.duration ?? 1.5) || 1.5,
@@ -2676,7 +2691,6 @@ export function checkManualConflict({
     // The caller doesn't pass room objects, so we check via the assignmentTarget roomType
     const requiredType = normalizeRoomType(assignmentTarget?.roomType ?? "");
     if (requiredType === "Computer Lab") {
-
       return {
         ok: false,
         type: "error",

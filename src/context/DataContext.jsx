@@ -229,7 +229,7 @@ function normalizeAssignmentFromDbRow(row, lookup) {
     pattern: row.pattern ?? section?.pattern ?? "",
     room_type:
       row.room_type ?? section?.roomType ?? subject?.roomType ?? room?.type,
-    title: row.course_title ?? subject?.title ?? "",
+    title: row.course_title ?? row.subject_title ?? subject?.title ?? "",
     program: row.program ?? subject?.program ?? "",
     year: row.year ?? subject?.year ?? "",
     instructor_id: row.instructor_id,
@@ -762,10 +762,11 @@ export function DataProvider({ children }) {
         // Map normalized fields to database columns
         // IMPORTANT: Ensure subject_code is never NULL to prevent "UNKNOWN" display on reload
         const rowsToUpsert = assignedOnly.map((assignment) => {
-          // Priority chain: explicit code/subjectCode > section lookup > empty string
+          // Priority chain: explicit code/subjectCode > subject_code > section lookup > empty string
           const subjectCodeValue =
             assignment.code ||
             assignment.subjectCode ||
+            assignment.subject_code ||
             assignment.section_code ||
             "";
 
@@ -776,7 +777,11 @@ export function DataProvider({ children }) {
             instructor_id:
               assignment.instructor_id || assignment.instructorId || "",
             subject_code: subjectCodeValue,
-            subject_title: assignment.course_title || assignment.title || "",
+            subject_title:
+              assignment.course_title ||
+              assignment.title ||
+              assignment.subject_title ||
+              "",
             status: assignment.status || "Assigned",
             pattern: assignment.pattern || "",
             time_display: assignment.time_display || assignment.time || "",
@@ -949,10 +954,13 @@ export function DataProvider({ children }) {
 
     try {
       // Call RPC function to atomically delete schedule_assignments and conflicts from database
-      const { data: _resetData, error } = await supabase.rpc("reset_schedule_for_term", {
-        p_academic_year: ACTIVE_ACADEMIC_YEAR,
-        p_semester: ACTIVE_SEMESTER,
-      });
+      const { data: _resetData, error } = await supabase.rpc(
+        "reset_schedule_for_term",
+        {
+          p_academic_year: ACTIVE_ACADEMIC_YEAR,
+          p_semester: ACTIVE_SEMESTER,
+        },
+      );
 
       if (error) {
         const normalized = normalizePostgresError(
