@@ -721,7 +721,7 @@ export default function ImportModal({ isOpen, onClose }) {
         await upsertRows(
           "instructor_subject_sections",
           instructorSectionUpsertRows,
-          "instructor_id,section_id",
+          "instructor_id,section_id,academic_year,semester",
           "Unable to import instructor subject sections.",
         );
       }
@@ -889,6 +889,9 @@ export default function ImportModal({ isOpen, onClose }) {
           section: row.section,
           academic_year: row.academic_year,
           semester: row.semester,
+          // FIX (Lec/Lab conflict): include room_type so Lecture and Lab rows
+          // for the same section resolve to distinct conflict keys on upsert.
+          room_type: row.room_type ?? null,
           pattern: row.pattern,
           time_display: row.time_display,
           time_start: row.time_start || null,
@@ -907,7 +910,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,academic_year,semester",
+      "section_id,room_type,academic_year,semester",
       "Unable to import schedule assignments.",
     );
   };
@@ -1170,7 +1173,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,academic_year,semester",
+      "section_id,room_type,academic_year,semester",
       "Unable to import schedule assignments.",
     );
 
@@ -1298,6 +1301,25 @@ export default function ImportModal({ isOpen, onClose }) {
       });
     });
 
+    // FIX (Lec/Lab conflict): deduplicate by (instructor_id, section_id, academic_year, semester).
+    // Same instructor teaching both Lec and Lab produces duplicate keys — keep first only.
+    const seenISKeys = new Set();
+    const dedupedInstructorSectionRows = instructorSectionUpsertRows.filter(
+      (r) => {
+        const key =
+          r.instructor_id +
+          "|" +
+          r.section_id +
+          "|" +
+          r.academic_year +
+          "|" +
+          r.semester;
+        if (seenISKeys.has(key)) return false;
+        seenISKeys.add(key);
+        return true;
+      },
+    );
+
     console.log(`\n=== Assignment Results ===`);
     console.log(
       `Successfully matched: ${instructorSectionUpsertRows.length} row(s)`,
@@ -1306,11 +1328,11 @@ export default function ImportModal({ isOpen, onClose }) {
     debugLogs.forEach((log) => console.log(log));
     console.log(`\n=== END Instructor-Subject Section Assignment ===\n`);
 
-    if (instructorSectionUpsertRows.length > 0) {
+    if (dedupedInstructorSectionRows.length > 0) {
       await upsertRows(
         "instructor_subject_sections",
-        instructorSectionUpsertRows,
-        "instructor_id,section_id",
+        dedupedInstructorSectionRows,
+        "instructor_id,section_id,academic_year,semester",
         "Unable to import instructor subject sections.",
       );
       console.log(

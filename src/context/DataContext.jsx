@@ -805,11 +805,11 @@ export function DataProvider({ children }) {
           };
         });
 
-        // Perform upsert with unique constraint on (section_id, academic_year, semester)
+        // Perform upsert with unique constraint on (section_id, room_type, academic_year, semester)
         const { data: _upsertData, error } = await supabase
           .from("schedule_assignments")
           .upsert(rowsToUpsert, {
-            onConflict: "section_id,academic_year,semester",
+            onConflict: "section_id,room_type,academic_year,semester",
           })
           .select();
 

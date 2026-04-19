@@ -75,14 +75,15 @@ export const CSV_FORMATS = {
       "Max Units",
       "Allow Night Class",
     ],
-    // rowKey: (row) => {
-    //   const sectionId = String(row?.section_id ?? row?.sectionId ?? "").trim();
-    //   if (sectionId) return `id:${sectionId.toLowerCase()}`;
-    //   return buildSectionIdentityKey(row, { includeProgramYear: true });
-    // },
-
-    // * In CSV_FORMATS[CSV_TYPES.FULL_LIST]:
-    rowKey: (row) => buildSectionIdentityKey(row, { includeProgramYear: true }),
+    // FIX (Lec/Lab conflict): rowKey must include roomType so that a Lec row and a Lab
+    // row for the same section+subject are treated as DISTINCT records during deduplication.
+    // Previously both rows produced the same key and one was silently dropped before
+    // ever reaching the scheduler.
+    rowKey: (row) => {
+      const baseKey = buildSectionIdentityKey(row, { includeProgramYear: true });
+      const rt = normalizeRoomType(row?.roomType ?? "");
+      return rt ? `${baseKey}|${rt.toLowerCase()}` : baseKey;
+    },
   },
   [CSV_TYPES.ROOMS]: {
     label: "Rooms",
@@ -254,13 +255,13 @@ export function buildSectionIdentityKey(row, options = {}) {
   const { includeProgramYear = false } = options;
   const parts = includeProgramYear
     ? [
-        row?.code,
-        row?.program,
-        row?.year,
-        row?.section,
-        row?.academicYear,
-        row?.semester,
-      ]
+      row?.code,
+      row?.program,
+      row?.year,
+      row?.section,
+      row?.academicYear,
+      row?.semester,
+    ]
     : [row?.code, row?.section, row?.academicYear, row?.semester];
 
   return parts.map((value) => normalizeHeader(value)).join("|");
@@ -366,9 +367,9 @@ export function validateSubjectIdentityKey(key, context = {}) {
 
     throw new Error(
       `${csvTypeLabel} ${rowLabel}: Identity key validation failed. Built key: "${key}". ` +
-        `Raw values: ${rawValues}. ` +
-        `Issues: ${errors.join("; ")}. ` +
-        `Ensure all three segments (code|program|year) are non-empty.`,
+      `Raw values: ${rawValues}. ` +
+      `Issues: ${errors.join("; ")}. ` +
+      `Ensure all three segments (code|program|year) are non-empty.`,
     );
   }
 
@@ -435,19 +436,19 @@ export function generateSubjectLookupSuggestions(row, availableKeys) {
       if (programsForCode.length > 0) {
         suggestions.push(
           `Code "${code}" found but program "${program}" does not match. ` +
-            `Available programs for this code: ${programsForCode.join(", ")}. ` +
-            `Verify the program value in your CSV.`,
+          `Available programs for this code: ${programsForCode.join(", ")}. ` +
+          `Verify the program value in your CSV.`,
         );
       } else {
         suggestions.push(
           `Code "${code}" found but no subjects have a program specified for this code. ` +
-            `Check if the program value "${program}" is correct.`,
+          `Check if the program value "${program}" is correct.`,
         );
       }
     } else if (!normalizedProgram) {
       suggestions.push(
         `Code "${code}" found but program is empty. Available programs for this code: ${programsForCode.length > 0 ? programsForCode.join(", ") : "(none specified)"}. ` +
-          `The CSV may be missing the program value.`,
+        `The CSV may be missing the program value.`,
       );
     }
   } else if (!normalizedCode) {
@@ -465,7 +466,7 @@ export function generateSubjectLookupSuggestions(row, availableKeys) {
     if (yearMatches.length === 0 && normalizedYear) {
       suggestions.push(
         `No subjects found for code "${code}" with program "${program}". ` +
-          `Check if this code/program combination exists in the database.`,
+        `Check if this code/program combination exists in the database.`,
       );
     } else if (yearMatches.length > 0 && normalizedYear) {
       const yearsForCodeProgram = yearMatches
@@ -475,8 +476,8 @@ export function generateSubjectLookupSuggestions(row, availableKeys) {
       if (normalizedYear && !yearsForCodeProgram.includes(normalizedYear)) {
         suggestions.push(
           `Year "${year}" not found for code "${code}" with program "${program}". ` +
-            `Available years: ${yearsForCodeProgram.length > 0 ? yearsForCodeProgram.join(", ") : "(none specified)"}. ` +
-            `Verify the year value in your CSV.`,
+          `Available years: ${yearsForCodeProgram.length > 0 ? yearsForCodeProgram.join(", ") : "(none specified)"}. ` +
+          `Verify the year value in your CSV.`,
         );
       }
     }
@@ -863,7 +864,8 @@ function getTypeConfig(type) {
 }
 
 function parseFullListRows(rows, warnings = []) {
-  return rows
+  // ── PASS 1: parse all rows into plain objects ─────────────────────────────
+  const parsed = rows
     .map((r, index) => {
       const rowNumber = index + 2;
       const rawRoomType = String(r[9] ?? "").trim();
@@ -998,6 +1000,43 @@ function parseFullListRows(rows, warnings = []) {
       };
     })
     .filter((course) => course.code);
+
+  // ── PASS 2: detect (sectionId, subjectCode) pairs that have BOTH a Lec and
+  // a Lab row as separate CSV entries. For those pairs, append __LEC or __LAB
+  // to sectionId and dedupeKey so the scheduler treats them as independent
+  // assignments with their own conflict-detection keys.
+  // Without this, both rows share the same buildSectionTermKey result and the
+  // second row (usually Lab) is always blocked as a duplicate by the first.
+  const pairTypesBySectionSubject = new Map();
+  parsed.forEach((row) => {
+    if (!row.sectionId || !row.code) return;
+    const key = `${row.sectionId}||${row.code}`;
+    const types = pairTypesBySectionSubject.get(key) ?? new Set();
+    types.add(normalizeRoomType(row.roomType));
+    pairTypesBySectionSubject.set(key, types);
+  });
+
+  return parsed.map((row) => {
+    if (!row.sectionId || !row.code) return row;
+    const key = `${row.sectionId}||${row.code}`;
+    const types = pairTypesBySectionSubject.get(key) ?? new Set();
+
+    // Only tag rows that genuinely have both a Lecture and a Computer Lab sibling
+    const hasLec = types.has("Lecture");
+    const hasLab = types.has("Computer Lab");
+    if (!hasLec || !hasLab) return row;
+
+    const rt = normalizeRoomType(row.roomType);
+    const suffix = rt === "Lecture" ? "__LEC" : "__LAB";
+    const taggedId = `${row.sectionId}${suffix}`;
+
+    return {
+      ...row,
+      sectionId: taggedId,
+      section_id: taggedId,
+      dedupeKey: `${row.dedupeKey}${suffix}`,
+    };
+  });
 }
 
 /**
@@ -1010,7 +1049,7 @@ function parseFullListRows(rows, warnings = []) {
 function parseFacultyRows(rows, warnings = [], options = {}) {
   const availabilityIndex =
     Number.isInteger(options?.availabilityIndex) &&
-    options.availabilityIndex >= 0
+      options.availabilityIndex >= 0
       ? options.availabilityIndex
       : -1;
   const statusIndex = Number.isInteger(options?.statusIndex)
@@ -1048,26 +1087,26 @@ function parseFacultyRows(rows, warnings = [], options = {}) {
       const employmentStatusParsed =
         employmentStatusIndex >= 0
           ? parseEmploymentStatusCell(
-              String(r[employmentStatusIndex] ?? ""),
-              rowNumber,
-              warnings,
-            )
+            String(r[employmentStatusIndex] ?? ""),
+            rowNumber,
+            warnings,
+          )
           : { value: null, provided: false };
       const maxUnitsParsed =
         maxUnitsIndex >= 0
           ? parseMaxUnitsCell(
-              String(r[maxUnitsIndex] ?? ""),
-              rowNumber,
-              warnings,
-            )
+            String(r[maxUnitsIndex] ?? ""),
+            rowNumber,
+            warnings,
+          )
           : { value: null, provided: false };
       const allowNightClassParsed =
         allowNightClassIndex >= 0
           ? parseAllowNightClassCell(
-              String(r[allowNightClassIndex] ?? ""),
-              rowNumber,
-              warnings,
-            )
+            String(r[allowNightClassIndex] ?? ""),
+            rowNumber,
+            warnings,
+          )
           : { value: false, provided: false };
 
       if (rawDepartment && !department) {
@@ -1216,8 +1255,8 @@ function parseSubjectRows(rows, warnings = []) {
       if (r.length < 12) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Expected 12 columns, found ${r.length}. ` +
-            `Verify headers match template: Subject Code, Subject Title, Section, Academic Year, Semester, Program, Year, ` +
-            `Enrolled, Type Required, Duration (hrs), Instructor, Status.`,
+          `Verify headers match template: Subject Code, Subject Title, Section, Academic Year, Semester, Program, Year, ` +
+          `Enrolled, Type Required, Duration (hrs), Instructor, Status.`,
         );
       }
 
@@ -1234,14 +1273,14 @@ function parseSubjectRows(rows, warnings = []) {
       if (!code) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Code field (Index 0) is empty or whitespace-only. ` +
-            `Raw value: "${rawCode}". Expected non-empty subject code (e.g., "CS101", "WMA1").`,
+          `Raw value: "${rawCode}". Expected non-empty subject code (e.g., "CS101", "WMA1").`,
         );
       }
 
       if (code.includes("|")) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Code field (Index 0) contains pipe character "|". ` +
-            `Raw value: "${code}". Subject codes cannot contain pipe characters.`,
+          `Raw value: "${code}". Subject codes cannot contain pipe characters.`,
         );
       }
 
@@ -1249,7 +1288,7 @@ function parseSubjectRows(rows, warnings = []) {
       if (!program) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Program field (Index 5) is empty or invalid. ` +
-            `Raw value: "${rawProgram}". Expected one of: ${VALID_PROGRAM_HINT}.`,
+          `Raw value: "${rawProgram}". Expected one of: ${VALID_PROGRAM_HINT}.`,
         );
       }
 
@@ -1257,7 +1296,7 @@ function parseSubjectRows(rows, warnings = []) {
       if (!year) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Year field (Index 6) is empty. ` +
-            `Raw value: "${year}". Expected non-empty year level (e.g., "1", "2", "3", "4").`,
+          `Raw value: "${year}". Expected non-empty year level (e.g., "1", "2", "3", "4").`,
         );
       }
 
@@ -1265,7 +1304,7 @@ function parseSubjectRows(rows, warnings = []) {
       if (!semester) {
         throw new Error(
           `${CSV_TYPES.SUBJECTS.toUpperCase()} CSV row ${rowNumber}: Semester field (Index 4) is invalid. ` +
-            `Raw value: "${rawSemester}". Expected one of: 1st, 2nd, Summer.`,
+          `Raw value: "${rawSemester}". Expected one of: 1st, 2nd, Summer.`,
         );
       }
 
@@ -1532,7 +1571,9 @@ export function parseImportCsv(csvText, type) {
       },
       upsert: {
         table: "schedule_assignments",
-        conflictTarget: ["section_id", "academic_year", "semester"],
+        // FIX (Lec/Lab conflict): include room_type so that a Lecture and a
+        // Computer Lab row for the same section are treated as distinct records.
+        conflictTarget: ["section_id", "room_type", "academic_year", "semester"],
       },
       rowCount: rows.length,
     };
@@ -1768,7 +1809,7 @@ export function parseImportCsv(csvText, type) {
       })),
       upsert: {
         table: "schedule_assignments",
-        conflictTarget: ["section_id", "academic_year", "semester"],
+        conflictTarget: ["section_id", "room_type", "academic_year", "semester"],
       },
       rowCount: schedules.length,
     };
