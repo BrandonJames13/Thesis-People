@@ -2281,7 +2281,7 @@ export function runAutoSchedule({
         subject_code: getAssignmentSubjectCode(assignment),
         room_number: getAssignmentRoom(assignment),
         instructor_name: getAssignmentInstructorName(assignment),
-        pattern: getPatternForRow(assignment, pattern),
+        pattern: assignment.pattern || pattern,
         time_display: String(
           assignment.time ?? assignment.time_display ?? "",
         ).trim(),
@@ -2625,7 +2625,7 @@ export function applyManualAssignments({
         subject_code: getAssignmentSubjectCode(assignment),
         room_number: assignment.room,
         instructor_name: getAssignmentInstructorName(assignment),
-        pattern: getPatternForRow(assignment, "MON,FRI"),
+        pattern: assignment.pattern || "MON,FRI",
         time_display: `${assignment.pattern} ${formatTime(extractStartTime24(assignment, ""))}`,
         time_start: parseTimeToSQL(extractStartTime24(assignment, "")),
         time_end: parseTimeToSQL(

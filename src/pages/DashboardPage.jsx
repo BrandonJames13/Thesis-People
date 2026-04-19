@@ -75,6 +75,16 @@ export default function DashboardPage() {
     }
   };
 
+  const handleScheduleModalClose = (closePayload) => {
+    // Close the modal
+    setShowScheduleModal(false);
+
+    // Check if parent component signals navigation to Conflicts page
+    if (closePayload?.navigationTarget === "conflicts") {
+      navigate("/conflicts");
+    }
+  };
+
   const requireAdmin = () => {
     if (isAdmin) return true;
     showNotification("Admin access required for this action.");
@@ -515,7 +525,7 @@ export default function DashboardPage() {
       {showScheduleModal && isAdmin && (
         <ScheduleModal
           onRunComplete={handleGenerationComplete}
-          onClose={() => setShowScheduleModal(false)}
+          onClose={handleScheduleModalClose}
         />
       )}
 

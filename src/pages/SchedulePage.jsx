@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useData } from "../context/DataContext";
 import { TIME_SLOTS, DAYS, COLOR_MAP } from "../data/constants";
 import { patternDaysMap } from "../data/constants";
@@ -124,6 +125,7 @@ function getAssignmentTimeWindow(assignment) {
 }
 
 export default function SchedulePage() {
+  const navigate = useNavigate();
   const { rooms, scheduleAssignments, instructors } = useData();
 
   const [roomFilter, setRoomFilter] = useState("");
@@ -134,6 +136,16 @@ export default function SchedulePage() {
   const [showInstructorDropdown, setShowInstructorDropdown] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+
+  const handleScheduleModalClose = (closePayload) => {
+    // Close the modal
+    setShowModal(false);
+
+    // Check if parent component signals navigation to Conflicts page
+    if (closePayload?.navigationTarget === "conflicts") {
+      navigate("/conflicts");
+    }
+  };
 
   // Get unique instructor names from assignments + instructor list
   const allInstructorNames = useMemo(() => {
@@ -595,7 +607,7 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      {showModal && <ScheduleModal onClose={() => setShowModal(false)} />}
+      {showModal && <ScheduleModal onClose={handleScheduleModalClose} />}
 
       <ExportModal
         isOpen={showExportModal}
