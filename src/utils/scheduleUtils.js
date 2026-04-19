@@ -633,6 +633,7 @@ function buildInstructorLoadCount(assignments) {
   return load;
 }
 
+// AFTER:
 function chooseInstructorForPlacementOptimized({
   courseSubjectId,
   placementBase,
@@ -646,8 +647,11 @@ function chooseInstructorForPlacementOptimized({
   instructorPoolById,
   instructorLoadCount,
   isEve,
+  effectiveEligibleIds, // ← fallback pool passed from runAutoSchedule
 }) {
-  const eligibleIds = eligibleInstructorIdsBySubjectId.get(courseSubjectId);
+  const eligibleIds =
+    effectiveEligibleIds ??
+    eligibleInstructorIdsBySubjectId.get(courseSubjectId);
   if (!eligibleIds || eligibleIds.size === 0) return null;
 
   const sortedCandidates = Array.from(eligibleIds)
@@ -1974,9 +1978,21 @@ export function runAutoSchedule({
       return;
     }
 
+    // AFTER:
     const eligibleInstructorIds =
       eligibleInstructorIdsBySubjectId.get(courseSubjectId);
-    if (!eligibleInstructorIds || eligibleInstructorIds.size === 0) {
+    const hasInstructorMapping =
+      eligibleInstructorIds && eligibleInstructorIds.size > 0;
+
+    // No instructor-subject mapping exists yet — fall back to ALL active
+    // instructors so the section can still be placed. The assignment will
+    // be saved as "Pending" (not "Assigned") so staff know it needs a
+    // proper instructor assignment later.
+    const effectiveEligibleIds = hasInstructorMapping
+      ? eligibleInstructorIds
+      : new Set(instructorPoolById.keys());
+
+    if (effectiveEligibleIds.size === 0) {
       generatedAssignments.push({
         ...course,
         room: "",
@@ -1989,8 +2005,7 @@ export function runAutoSchedule({
         duration: courseDuration,
         pattern: importedPattern || pattern,
         status: "Conflict",
-        conflictReason:
-          "No eligible instructor mapped for this section subject.",
+        conflictReason: "No active instructors available in the system.",
       });
       conflictCount++;
       return;
@@ -2085,9 +2100,10 @@ export function runAutoSchedule({
 
           let selectedInstructor = null;
 
+          //* AFTER:
           if (
             importedInstructorId &&
-            eligibleInstructorIds.has(importedInstructorId) &&
+            effectiveEligibleIds.has(importedInstructorId) &&
             instructorPoolById.has(importedInstructorId)
           ) {
             const importedInst = instructorPoolById.get(importedInstructorId);
@@ -2140,6 +2156,7 @@ export function runAutoSchedule({
               instructorPoolById,
               instructorLoadCount,
               isEve,
+              effectiveEligibleIds,
             });
           }
 
@@ -2178,7 +2195,7 @@ export function runAutoSchedule({
         instructor_name: instructorUsed?.instructorName || "",
         instructorId: instructorUsed?.instructorId || "",
         instructor_id: instructorUsed?.instructorId || "",
-        status: "Assigned",
+         status: hasInstructorMapping ? "Assigned" : "Pending",
         patternAdjusted:
           importedPattern && patternUsed !== importedPattern
             ? `Pattern changed from ${importedPattern} to ${patternUsed} to resolve conflict`
