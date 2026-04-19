@@ -295,6 +295,17 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     [sectionRows],
   );
 
+  // ── Batch helper ─────────────────────────────────────────────────────────────
+function groupSectionRowsByLabel(rows) {
+  const map = new Map();
+  rows.forEach((row) => {
+    const label = String(row?.section ?? row?.sectionId ?? "").trim() || "UNKNOWN";
+    if (!map.has(label)) map.set(label, []);
+    map.get(label).push(row);
+  });
+  return Array.from(map.values()); // [[rows for BSCS-1A], [rows for BSCS-1B], ...]
+}
+
   const instructorNameById = useMemo(() => {
     const map = new Map();
 
@@ -546,18 +557,49 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         setTimeout(resolve, 0);
       });
 
-      const result = runAutoSchedule({
-        sectionRows: [...sectionRows],
-        subjects: [...availableSubjects],
-        rooms: [...availableRooms],
-        instructors: [...availableInstructors],
-        instructorSubjects: [...instructorSubjects],
-        scheduleAssignments: [...scheduleAssignments],
-        startTime: autoStart,
-        endTime: autoEnd,
-        pattern: autoPattern,
-        activeDays,
-      });
+     // REPLACE WITH THIS:
+const GROUPS_PER_BATCH = 8;
+const allGroups  = groupSectionRowsByLabel([...sectionRows]);
+const batches    = [];
+for (let i = 0; i < allGroups.length; i += GROUPS_PER_BATCH) {
+  batches.push(allGroups.slice(i, i + GROUPS_PER_BATCH));
+}
+
+let accumulatedAssignments = [...scheduleAssignments];
+let result = null;
+
+for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+  const batchRows = batches[batchIdx].flat();
+  const pct = Math.round(35 + ((batchIdx + 1) / batches.length) * 35);
+  showProgress(`Batch ${batchIdx + 1} of ${batches.length}`, pct);
+
+  const batchResult = runAutoSchedule({
+    sectionRows: batchRows,
+    subjects: [...availableSubjects],
+    rooms: [...availableRooms],
+    instructors: [...availableInstructors],
+    instructorSubjects: [...instructorSubjects],
+    scheduleAssignments: accumulatedAssignments,
+    startTime: autoStart,
+    endTime: autoEnd,
+    pattern: autoPattern,
+    activeDays,
+  });
+
+  if (batchResult.error) {
+    console.error(`[ScheduleModal] Batch ${batchIdx + 1} error:`, batchResult.error);
+    const diagnosticMessage = `${batchResult.error}\n\nBatch ${batchIdx + 1}/${batches.length} failed.`;
+    alert(diagnosticMessage);
+    return;
+  }
+
+  // Carry forward all assignments so the next batch sees occupied rooms/instructors
+  accumulatedAssignments = batchResult.scheduleAssignments ?? accumulatedAssignments;
+  result = batchResult;
+
+  // Yield to the event loop so the progress bar can re-render
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
 
       showProgress("generating", 70);
 
