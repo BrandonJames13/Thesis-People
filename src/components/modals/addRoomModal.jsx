@@ -10,7 +10,6 @@ import {
 import {
   getDefaultRoomCapacity,
   getRoomCapacityLimit,
-  isRoomCapacityValid,
   normalizeRoomType,
   ROOM_TYPE_LABELS,
 } from "../../data/constants";

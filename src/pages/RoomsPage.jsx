@@ -5,7 +5,6 @@ import { useData } from "../context/DataContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
 import {
   validateRoomPayload,
-  extractRoomTypeFromName,
 } from "../utils/roomUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";

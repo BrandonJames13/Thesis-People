@@ -9,6 +9,7 @@ import {
   getAssignmentIdentityKey,
   extractStartTime24,
   applyManualAssignments,
+  getAssignmentSectionId,
 } from "../../utils/scheduleUtils";
 import Modal from "../common/Modal";
 
@@ -73,19 +74,33 @@ function ConflictSummary({ conflicts = [], onReview, onSaveAnyway }) {
                 color: "#333",
               }}
             >
-              {items.map((conflict, idx) => (
-                <li
-                  key={idx}
-                  style={{
-                    marginBottom: "4px",
-                    fontSize: "12px",
-                    color: "#333",
-                  }}
-                >
-                  {conflict.conflictReason ||
-                    `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
-                </li>
-              ))}
+              {items.map((conflict, idx) => {
+                const sectionId = getAssignmentSectionId(conflict);
+                return (
+                  <li
+                    key={idx}
+                    style={{
+                      marginBottom: "4px",
+                      fontSize: "12px",
+                      color: "#333",
+                    }}
+                  >
+                    {conflict.conflictReason ||
+                      `${conflict.subject_code || conflict.course_code || ""} - Unable to assign`}
+                    {sectionId && (
+                      <span
+                        style={{
+                          marginLeft: "8px",
+                          fontWeight: "600",
+                          color: "#666",
+                        }}
+                      >
+                        [{sectionId}]
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}
@@ -660,16 +675,33 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     }
   };
 
-  const handleReviewConflicts = () => {
-    // Navigate to Conflicts page - signal parent to navigate
-    setShowConflictSummary(false);
-    setGenerationConflicts([]);
-    setPendingAssignments(null);
+  const handleReviewConflicts = async () => {
+    // Verify pending assignments exist before saving
+    if (!pendingAssignments || pendingAssignments.length === 0) {
+      showNotification("⚠ No pending assignments to save.");
+      return;
+    }
 
-    // Use onClose callback with a special marker to indicate navigation to conflicts page
-    // The parent component should handle this by navigating to the ConflictsPage
-    if (onClose && typeof onClose === "function") {
-      onClose({ navigationTarget: "conflicts" });
+    try {
+      showNotification("💾 Saving assignments...");
+      // Persist pending assignments to database
+      await updateScheduleAssignments(pendingAssignments);
+      showNotification("✓ Assignments saved! Navigating to Conflicts page...");
+
+      // Clear UI state
+      setShowConflictSummary(false);
+      setGenerationConflicts([]);
+      setPendingAssignments(null);
+
+      // Signal parent to navigate to Conflicts page
+      if (onClose && typeof onClose === "function") {
+        onClose({ navigationTarget: "conflicts" });
+      }
+    } catch (error) {
+      const errorMsg =
+        error?.message || "Failed to save assignments. Please try again.";
+      showNotification(`⚠ ${errorMsg}`);
+      // Keep modal open and state intact on failure
     }
   };
 

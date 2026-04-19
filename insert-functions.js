@@ -1,3 +1,4 @@
+/* global require, process */
 const fs = require("fs");
 const filePath = "src/utils/scheduleUtils.js";
 let content = fs.readFileSync(filePath, "utf8");

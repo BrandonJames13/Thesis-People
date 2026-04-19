@@ -6,21 +6,24 @@ const EMPLOYMENT_STATUS_OPTIONS = [
   { value: "fulltime", label: "Full-time" },
   { value: "attached", label: "Attached" },
   { value: "lecturer", label: "Lecturer" },
+  { value: "temporary", label: "Temporary" },
 ];
 
 export function InstructorModal({ existing, onClose, onSave }) {
   const [name, setName] = useState(existing?.name ?? "");
   const [dept, setDept] = useState(existing?.department ?? "");
-  const [availability, setAvailability] = useState(existing?.availability ?? "");
+  const [availability, setAvailability] = useState(
+    existing?.availability ?? "",
+  );
   const [status, setStatus] = useState(
-    existing ? String(existing?.status ?? "") : "Active"
+    existing ? String(existing?.status ?? "") : "Active",
   );
   const [employmentStatus, setEmploymentStatus] = useState(
-    existing?.employment_status ?? []
+    existing?.employment_status ?? [],
   );
   const [maxUnits, setMaxUnits] = useState(existing?.max_units ?? "");
   const [allowNightClass, setAllowNightClass] = useState(
-    existing?.allow_night_class ?? false
+    existing?.allow_night_class ?? false,
   );
   const [formError, setFormError] = useState("");
 
@@ -32,7 +35,7 @@ export function InstructorModal({ existing, onClose, onSave }) {
     setEmploymentStatus((current) =>
       current.includes(value)
         ? current.filter((item) => item !== value)
-        : [...current, value]
+        : [...current, value],
     );
     // auto-uncheck night class if permanent is being removed
     if (value === "permanent" && employmentStatus.includes("permanent")) {
@@ -91,7 +94,6 @@ export function InstructorModal({ existing, onClose, onSave }) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-
           {/* Name */}
           <div>
             <label style={labelStyle}>Full Name *</label>
@@ -101,7 +103,10 @@ export function InstructorModal({ existing, onClose, onSave }) {
               placeholder="e.g. Reyes, A."
               style={{ width: "100%", boxSizing: "border-box" }}
               value={name}
-              onChange={(e) => { setName(e.target.value); setFormError(""); }}
+              onChange={(e) => {
+                setName(e.target.value);
+                setFormError("");
+              }}
             />
           </div>
 
@@ -160,7 +165,9 @@ export function InstructorModal({ existing, onClose, onSave }) {
           </div>
 
           {/* Max Units + Night Class — side by side */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
+          >
             <div>
               <label style={labelStyle}>Max Units</label>
               <input
@@ -196,7 +203,9 @@ export function InstructorModal({ existing, onClose, onSave }) {
                 Allow night class
               </label>
               {!isPermanent && (
-                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>
+                <div
+                  style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}
+                >
                   Permanent only
                 </div>
               )}
@@ -240,13 +249,15 @@ export function InstructorModal({ existing, onClose, onSave }) {
           <div style={{ color: "var(--red)", fontSize: 12 }}>⚠ {formError}</div>
         )}
 
-        <div style={{
-          display: "flex",
-          gap: 10,
-          justifyContent: "flex-end",
-          borderTop: "1px solid var(--border)",
-          paddingTop: 16,
-        }}>
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            justifyContent: "flex-end",
+            borderTop: "1px solid var(--border)",
+            paddingTop: 16,
+          }}
+        >
           <button className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
