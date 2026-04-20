@@ -1073,6 +1073,17 @@ export default function ImportModal({ isOpen, onClose }) {
     const subjectByKey = new Map(
       importedSubjects.map((row) => [buildSubjectIdentityKey(row), row]),
     );
+    // FIX: Secondary lookup by subject code only, so multi-program subjects
+    // (e.g. DIGDESIGN taught across BSCS, NA, WMA) don't silently drop their
+    // instructor_subject_sections rows when the full code|program|year key misses.
+    const subjectByCodeOnly = new Map(
+      importedSubjects.map((row) => [
+        String(row.code ?? "")
+          .trim()
+          .toUpperCase(),
+        row,
+      ]),
+    );
     const roomByNumber = new Map(
       importedRooms.map((row) => [normalizeLookupKey(row.number), row]),
     );
@@ -1124,7 +1135,15 @@ export default function ImportModal({ isOpen, onClose }) {
       const scheduleRow = scheduleDbRows[index];
       if (!scheduleRow) return;
 
-      const subject = subjectByKey.get(buildSubjectIdentityKey(row));
+      // FIX: same code-only fallback applied here so schedule_assignments rows
+      // are also correctly linked for multi-program subjects.
+      const subject =
+        subjectByKey.get(buildSubjectIdentityKey(row)) ??
+        subjectByCodeOnly.get(
+          String(row.code ?? "")
+            .trim()
+            .toUpperCase(),
+        );
       const directSection = row.section_id
         ? sectionById.get(normalizeLookupKey(row.section_id))
         : null;
@@ -1231,7 +1250,16 @@ export default function ImportModal({ isOpen, onClose }) {
       }
 
       const subjectKey = buildSubjectIdentityKey(row);
-      const subject = subjectByKey.get(subjectKey);
+      // FIX: Try the full composite key first; if it misses (multi-program subject
+      // whose program variant wasn't stored), fall back to code-only lookup so
+      // instructor_subject_sections rows are still written for every section.
+      const subject =
+        subjectByKey.get(subjectKey) ??
+        subjectByCodeOnly.get(
+          String(row.code ?? "")
+            .trim()
+            .toUpperCase(),
+        );
       if (!subject) {
         // Enhanced error logging with full row context and smart suggestions
         const keyValidation = validateSubjectIdentityKey(subjectKey);
