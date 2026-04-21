@@ -49,6 +49,15 @@ function getAssignmentInstructorMatch(assignment, instructor) {
   );
 }
 
+// Quote a CSV field if it contains special characters (comma, quote, newline)
+function quoteCsvField(value) {
+  const str = String(value ?? "");
+  if (str.includes(",") || str.includes('"') || str.includes("\n")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
 function getAssignmentSectionKey(assignment) {
   const sectionId = String(
     assignment?.section_id ?? assignment?.sectionId ?? "",
@@ -153,7 +162,7 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
   lines.push(`Status:,${instructor.status || "Active"}`);
   lines.push("");
   lines.push(
-    "Subject Code,Subject Title,Section,Section ID,LEC (hrs),LAB (hrs),Days/Time,Room,Total Students",
+    "Subject Code,Subject Title,Section,LEC (hrs),LAB (hrs),Days/Time,Room,Total Students",
   );
 
   let totalLec = 0;
@@ -177,7 +186,7 @@ function exportInstructorSchedule(instructor, scheduleAssignments) {
     totalStudents += c.enrolled;
 
     lines.push(
-      `${c.code},${c.title},${c.section},${c.sectionId},${lec.toFixed(2)},${lab.toFixed(2)},"${c.time}","${c.room}",${c.enrolled}`,
+      `${c.code},${quoteCsvField(c.title)},${c.section},${lec.toFixed(2)},${lab.toFixed(2)},\"${c.time}\",\"${c.room}\",${c.enrolled}`,
     );
   });
 

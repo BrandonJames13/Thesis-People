@@ -240,13 +240,13 @@ export default function ImportModal({ isOpen, onClose }) {
     if (
       error &&
       table === "subjects" &&
-      onConflict !== "code,program" &&
+      onConflict !== "code,program,year" &&
       isSubjectsCodeProgramUniqueViolation(error)
     ) {
       const retryRows = dedupeSubjectsByCodeProgram(rowsToUpsert);
       const { data: retryData, error: retryError } = await supabase
         .from(table)
-        .upsert(retryRows, { onConflict: "code,program" })
+        .upsert(retryRows, { onConflict: "code,program,year" })
         .select(select);
 
       if (!retryError) {
@@ -500,7 +500,7 @@ export default function ImportModal({ isOpen, onClose }) {
           room_type: row.room_type,
           duration: row.duration,
         })),
-        "code,program",
+        "code,program,year",
         "Unable to import subjects.",
       );
     }
@@ -910,7 +910,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,room_type,academic_year,semester",
+      "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
   };
@@ -1065,7 +1065,7 @@ export default function ImportModal({ isOpen, onClose }) {
         upsertRows(
           "subjects",
           subjectUpsertRows,
-          "code,program",
+          "code,program,year",
           "Unable to import subjects.",
         ),
       ]);
@@ -1186,7 +1186,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,room_type,academic_year,semester",
+      "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
 
