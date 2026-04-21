@@ -907,7 +907,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,academic_year,semester",
+      "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
   };
@@ -1170,7 +1170,7 @@ export default function ImportModal({ isOpen, onClose }) {
     await upsertRows(
       "schedule_assignments",
       scheduleUpsertRows,
-      "section_id,academic_year,semester",
+      "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
 
