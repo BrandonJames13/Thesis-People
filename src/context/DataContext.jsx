@@ -305,17 +305,18 @@ function buildInstructorLoadsFromBothSources(
       const instructorKey = getInstructorLoadKey(assignment);
       if (!instructorKey) return;
 
-      const sectionKey =
-        String(assignment.section_id ?? "").trim() ||
-        String(
-          assignment.assignmentId ?? assignment.assignment_id ?? "",
-        ).trim() ||
-        assignment.sectionIdentity;
-      if (!sectionKey) return;
+      // Extract section ID consistently with Phase 2
+      const sectionId = String(
+        assignment.section_id ?? assignment.sectionId ?? "",
+      )
+        .trim()
+        .toLowerCase();
+      if (!sectionId) return;
 
-      // Avoid re-processing same section
-      if (processedSectionKeys.has(sectionKey)) return;
-      processedSectionKeys.add(sectionKey);
+      // Avoid re-processing same section for same instructor
+      const dedupeKey = `${instructorKey}|${sectionId}`;
+      if (processedSectionKeys.has(dedupeKey)) return;
+      processedSectionKeys.add(dedupeKey);
 
       const current = loadMap.get(instructorKey) ?? {
         subjectIds: new Set(),
@@ -324,7 +325,7 @@ function buildInstructorLoadsFromBothSources(
         labHours: 0,
       };
 
-      current.sectionKeys.add(sectionKey);
+      current.sectionKeys.add(sectionId);
 
       // Track subject by ID for unique counting
       const subjectId = String(assignment.subject_id ?? "").trim();
@@ -367,8 +368,10 @@ function buildInstructorLoadsFromBothSources(
       if (!sectionId) return;
 
       // Skip if already processed from scheduleAssignments (avoid double-count)
-      if (processedSectionKeys.has(sectionId)) return;
-      processedSectionKeys.add(sectionId);
+      // Use composite key to track instructor-section combination
+      const dedupeKey = `${instructorKey}|${sectionId}`;
+      if (processedSectionKeys.has(dedupeKey)) return;
+      processedSectionKeys.add(dedupeKey);
 
       const current = loadMap.get(instructorKey) ?? {
         subjectIds: new Set(),
