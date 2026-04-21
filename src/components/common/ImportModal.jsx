@@ -1073,17 +1073,19 @@ export default function ImportModal({ isOpen, onClose }) {
     const subjectByKey = new Map(
       importedSubjects.map((row) => [buildSubjectIdentityKey(row), row]),
     );
-    // FIX: Secondary lookup by subject code only, so multi-program subjects
-    // (e.g. DIGDESIGN taught across BSCS, NA, WMA) don't silently drop their
-    // instructor_subject_sections rows when the full code|program|year key misses.
+
+    // FIX: secondary code-only map so multi-program subjects (HCI, FDS,
+    // DIGDESIGN, COMPROG3, PT) resolve during instructor-section linking
+    // even when their code+program+year key does not match the row's program.
     const subjectByCodeOnly = new Map(
       importedSubjects.map((row) => [
         String(row.code ?? "")
           .trim()
-          .toUpperCase(),
+          .toLowerCase(),
         row,
       ]),
     );
+
     const roomByNumber = new Map(
       importedRooms.map((row) => [normalizeLookupKey(row.number), row]),
     );
@@ -1135,15 +1137,7 @@ export default function ImportModal({ isOpen, onClose }) {
       const scheduleRow = scheduleDbRows[index];
       if (!scheduleRow) return;
 
-      // FIX: same code-only fallback applied here so schedule_assignments rows
-      // are also correctly linked for multi-program subjects.
-      const subject =
-        subjectByKey.get(buildSubjectIdentityKey(row)) ??
-        subjectByCodeOnly.get(
-          String(row.code ?? "")
-            .trim()
-            .toUpperCase(),
-        );
+      const subject = subjectByKey.get(buildSubjectIdentityKey(row));
       const directSection = row.section_id
         ? sectionById.get(normalizeLookupKey(row.section_id))
         : null;
@@ -1179,7 +1173,7 @@ export default function ImportModal({ isOpen, onClose }) {
         subject_id: subject?.id ?? scheduleRow.subject_id ?? null,
         room_id: room?.id ?? null,
         instructor_id: instructor?.id ?? null,
-        status: "Assigned", // ! ← add this line
+        status: "Assigned", // ! â add this line
       });
     });
 
@@ -1250,15 +1244,15 @@ export default function ImportModal({ isOpen, onClose }) {
       }
 
       const subjectKey = buildSubjectIdentityKey(row);
-      // FIX: Try the full composite key first; if it misses (multi-program subject
-      // whose program variant wasn't stored), fall back to code-only lookup so
-      // instructor_subject_sections rows are still written for every section.
+      // FIX: fall back to code-only lookup for multi-program subjects
+      // (e.g. HCI rows with program=BSCS won't match the key built for
+      // program=FREE1, but the subject DB id is the same either way).
       const subject =
         subjectByKey.get(subjectKey) ??
         subjectByCodeOnly.get(
           String(row.code ?? "")
             .trim()
-            .toUpperCase(),
+            .toLowerCase(),
         );
       if (!subject) {
         // Enhanced error logging with full row context and smart suggestions
@@ -1316,7 +1310,7 @@ export default function ImportModal({ isOpen, onClose }) {
       }
 
       debugLogs.push(
-        `Row ${idx + 1}: ✅ MATCH - Instructor: ${instructor.id.substring(0, 8)}, Section: ${section.id.substring(0, 8)}`,
+        `Row ${idx + 1}: â MATCH - Instructor: ${instructor.id.substring(0, 8)}, Section: ${section.id.substring(0, 8)}`,
       );
 
       instructorSectionUpsertRows.push({
@@ -1330,7 +1324,7 @@ export default function ImportModal({ isOpen, onClose }) {
     });
 
     // FIX (Lec/Lab conflict): deduplicate by (instructor_id, section_id, academic_year, semester).
-    // Same instructor teaching both Lec and Lab produces duplicate keys — keep first only.
+    // Same instructor teaching both Lec and Lab produces duplicate keys â keep first only.
     const seenISKeys = new Set();
     const dedupedInstructorSectionRows = instructorSectionUpsertRows.filter(
       (r) => {
@@ -1364,11 +1358,11 @@ export default function ImportModal({ isOpen, onClose }) {
         "Unable to import instructor subject sections.",
       );
       console.log(
-        `✅ Successfully upserted ${instructorSectionUpsertRows.length} instructor-section assignments`,
+        `â Successfully upserted ${instructorSectionUpsertRows.length} instructor-section assignments`,
       );
     } else {
       console.warn(
-        `⚠️ No instructor-section assignments were created. This may indicate:
+        `â ï¸ No instructor-section assignments were created. This may indicate:
         1. No matching instructors in database (check instructor names)
         2. No matching subjects/sections (check subject import)
         3. Missing time data in CSV (check column 13)`,
@@ -1602,7 +1596,7 @@ export default function ImportModal({ isOpen, onClose }) {
                 {(() => {
                   // Categorize warnings
                   const matched = parsed.warnings.filter(
-                    (w) => w.includes("MATCH") || w.includes("✅"),
+                    (w) => w.includes("MATCH") || w.includes("â"),
                   );
                   const skipped = parsed.warnings.filter(
                     (w) =>
@@ -1629,7 +1623,7 @@ export default function ImportModal({ isOpen, onClose }) {
                   const categoryConfig = [
                     {
                       key: "matched",
-                      label: "✅ Matched",
+                      label: "â Matched",
                       logs: matched,
                       color: "#10b981",
                       bgColor: "#ecfdf5",
@@ -1637,7 +1631,7 @@ export default function ImportModal({ isOpen, onClose }) {
                     },
                     {
                       key: "skipped",
-                      label: "⚠️ Skipped",
+                      label: "â ï¸ Skipped",
                       logs: skipped,
                       color: "#d97706",
                       bgColor: "#fffbeb",
@@ -1645,7 +1639,7 @@ export default function ImportModal({ isOpen, onClose }) {
                     },
                     {
                       key: "errors",
-                      label: "❌ Errors",
+                      label: "â Errors",
                       logs: errors,
                       color: "#dc2626",
                       bgColor: "#fef2f2",
@@ -1681,7 +1675,7 @@ export default function ImportModal({ isOpen, onClose }) {
                             }}
                           >
                             <span style={{ fontSize: 10 }}>
-                              {expandedLogSections[category.key] ? "▼" : "▶"}
+                              {expandedLogSections[category.key] ? "â¼" : "â¶"}
                             </span>
                             {category.label} ({category.logs.length})
                           </button>
