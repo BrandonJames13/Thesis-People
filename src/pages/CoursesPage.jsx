@@ -220,7 +220,6 @@ export default function SubjectsPage() {
       p_room_type: subjectPayload?.room_type ?? null,
       p_duration: subjectPayload?.duration ?? 1.5,
       p_sections: normalizedSections,
-      p_instructor_ids: [], // Empty: instructors assigned only via schedule workflow
       p_academic_year: CURRENT_ACADEMIC_YEAR,
       p_semester: CURRENT_SEMESTER,
     });

@@ -218,6 +218,18 @@ export default function ImportModal({ isOpen, onClose }) {
     ).reverse();
   };
 
+  const dedupeScheduleAssignments = (rows) => {
+    const sourceRows = Array.isArray(rows) ? rows : [];
+
+    // First-row-wins for duplicate (section_id, instructor_id, academic_year, semester) constraint keys.
+    // This prevents PostgreSQL ON CONFLICT error when multiple rows target the same constraint key.
+    return dedupeByKey(
+      sourceRows,
+      (row) =>
+        `${row?.section_id ?? ""}|${row?.instructor_id ?? ""}|${row?.academic_year ?? ""}|${row?.semester ?? ""}`,
+    );
+  };
+
   const upsertRows = async (
     table,
     rows,
@@ -904,9 +916,12 @@ export default function ImportModal({ isOpen, onClose }) {
       );
     }
 
+    // Deduplicate by constraint key to prevent PostgreSQL ON CONFLICT error
+    const dedupedScheduleRows = dedupeScheduleAssignments(scheduleUpsertRows);
+
     await upsertRows(
       "schedule_assignments",
-      scheduleUpsertRows,
+      dedupedScheduleRows,
       "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
@@ -1167,9 +1182,12 @@ export default function ImportModal({ isOpen, onClose }) {
       );
     }
 
+    // Deduplicate by constraint key to prevent PostgreSQL ON CONFLICT error
+    const dedupedScheduleRows = dedupeScheduleAssignments(scheduleUpsertRows);
+
     await upsertRows(
       "schedule_assignments",
-      scheduleUpsertRows,
+      dedupedScheduleRows,
       "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
