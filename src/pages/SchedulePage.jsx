@@ -83,6 +83,7 @@ function isValidTimeDisplay(value) {
 }
 
 function getAssignmentTimeRange(assignment) {
+  // Priority 1: SQL time columns (most precise)
   const startFromSql = parseSqlTimeToMinutes(assignment?.time_start);
   const endFromSql = parseSqlTimeToMinutes(assignment?.time_end);
   if (
@@ -93,25 +94,38 @@ function getAssignmentTimeRange(assignment) {
     return { startMin: startFromSql, endMin: endFromSql };
   }
 
+  // Priority 2: time_display (e.g. "8:00 AM – 9:30 AM")
   const rawDisplay = String(assignment?.time_display ?? "").trim();
-  if (!isValidTimeDisplay(rawDisplay)) return null;
-
-  const [startText, endText] = rawDisplay
-    .replace(/\s*[–-]\s*/, " - ")
-    .split(" - ")
-    .map((part) => part.trim());
-  const startMin = parseTimeTextToMinutes(startText);
-  const endMin = parseTimeTextToMinutes(endText);
-
-  if (
-    !Number.isFinite(startMin) ||
-    !Number.isFinite(endMin) ||
-    endMin <= startMin
-  ) {
-    return null;
+  if (isValidTimeDisplay(rawDisplay)) {
+    const [startText, endText] = rawDisplay
+      .replace(/\s*[–-]\s*/, " - ")
+      .split(" - ")
+      .map((part) => part.trim());
+    const startMin = parseTimeTextToMinutes(startText);
+    const endMin = parseTimeTextToMinutes(endText);
+    if (
+      Number.isFinite(startMin) &&
+      Number.isFinite(endMin) &&
+      endMin > startMin
+    ) {
+      return { startMin, endMin };
+    }
   }
 
-  return { startMin, endMin };
+  // Priority 3: raw `time` field written by the scheduler ("TTH 08:30 AM")
+  // Strip the leading pattern token then parse the time portion.
+  const rawTime = String(assignment?.time ?? "").trim();
+  if (rawTime) {
+    const withoutPattern = rawTime.replace(/^[A-Z,/]+\s+/i, "");
+    const parts = withoutPattern.split(/\s*[-–]\s*/);
+    const startMin = parseTimeTextToMinutes(parts[0]?.trim() ?? "");
+    if (Number.isFinite(startMin)) {
+      const duration = Number(assignment?.duration ?? 1.5) || 1.5;
+      return { startMin, endMin: startMin + Math.round(duration * 60) };
+    }
+  }
+
+  return null;
 }
 
 function getAssignmentTimeWindow(assignment) {
@@ -243,20 +257,12 @@ export default function SchedulePage() {
       const startingSlot = coveredSlots[0];
       const boundedSpan = coveredSlots.length;
 
+      // FIX: normalize pattern (handles "TTh"→"TTH", "Fri"→"FRI", "Mon,Sat"→"MON,SAT")
+      // Also strip leading pattern token if it was accidentally embedded in the pattern field
+      const rawPattern = String(assignment.pattern ?? "").trim();
+      const upperPattern = rawPattern.toUpperCase();
       const assignedDays =
-        patternDaysMap[assignment.pattern?.toUpperCase()] || [];
-
-      if (assignedDays.length === 0) {
-        console.log("No days for pattern:", assignment.pattern);
-      }
-      console.log(
-        "Days for pattern:",
-        assignment.pattern,
-        "→",
-        assignedDays,
-        "| timeRange:",
-        timeRange,
-      );
+        patternDaysMap[upperPattern] || patternDaysMap[rawPattern] || [];
 
       assignedDays.forEach((day) => {
         if (!DAYS.includes(day)) return;
@@ -268,7 +274,8 @@ export default function SchedulePage() {
               ? {
                   assignment,
                   span: boundedSpan,
-                  color: COLOR_MAP[assignment.pattern] || "blue",
+                  color:
+                    COLOR_MAP[upperPattern] || COLOR_MAP[rawPattern] || "blue",
                   visibleStartMin: timeRange.startMin,
                   visibleEndMin: timeRange.endMin,
                 }
