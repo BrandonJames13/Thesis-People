@@ -230,6 +230,69 @@ export default function SchedulePage() {
 
   // Build bounded grid map (one visible block per day/slot cell).
   const grid = useMemo(() => {
+    // DEBUG: Log assignment data to diagnose why calendar is blank
+    if (process.env.NODE_ENV !== "production") {
+      console.log("[SchedulePage Debug - Grid Build]", {
+        totalAssignmentsInContext: scheduleAssignments.length,
+        visibleAssignmentsAfterFilters: visibleAssignments.length,
+        activeFilters: {
+          room: roomFilter || "none",
+          year: yearFilter || "none",
+          instructor: instructorFilter || "none",
+          section: sectionFilter || "none",
+        },
+      });
+
+      if (visibleAssignments.length > 0) {
+        const firstAssignment = visibleAssignments[0];
+        console.log("[SchedulePage Debug - First Assignment Fields]", {
+          pattern: firstAssignment?.pattern,
+          time_start: firstAssignment?.time_start,
+          time_end: firstAssignment?.time_end,
+          time_display: firstAssignment?.time_display,
+          time: firstAssignment?.time,
+          duration: firstAssignment?.duration,
+          subject_code: firstAssignment?.subject_code,
+          section_id: firstAssignment?.section_id,
+          label: getAssignmentLabel(firstAssignment),
+          timeRange: getAssignmentTimeRange(firstAssignment),
+        });
+
+        // Log assignments that are being skipped and why
+        const skippedAssignments = visibleAssignments.filter((a) => !a.pattern);
+        if (skippedAssignments.length > 0) {
+          console.warn(
+            `[SchedulePage Debug - Skipped] ${skippedAssignments.length} assignments have no pattern:`,
+            skippedAssignments.map((a) => ({
+              subject: a.subject_code,
+              section: a.section,
+              pattern: a.pattern,
+            })),
+          );
+        }
+
+        const noTimeRangeAssignments = visibleAssignments.filter(
+          (a) => a.pattern && !getAssignmentTimeRange(a),
+        );
+        if (noTimeRangeAssignments.length > 0) {
+          console.warn(
+            `[SchedulePage Debug - Skipped] ${noTimeRangeAssignments.length} assignments have no valid time range:`,
+            noTimeRangeAssignments.map((a) => ({
+              subject: a.subject_code,
+              section: a.section,
+              pattern: a.pattern,
+              time_fields: {
+                time_start: a.time_start,
+                time_end: a.time_end,
+                time_display: a.time_display,
+                time: a.time,
+              },
+            })),
+          );
+        }
+      }
+    }
+
     const gridMap = {};
     DAYS.forEach((d) => {
       gridMap[d] = {};
@@ -280,7 +343,6 @@ export default function SchedulePage() {
                 }
               : "blocked";
         });
-
         for (const slot of coveredSlots) {
           if (!TIME_SLOTS.includes(slot.hour)) {
             delete gridMap[day][slot.hour];

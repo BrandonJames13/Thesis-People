@@ -164,6 +164,9 @@ function normalizeScheduleAssignment(row) {
     assignmentId: String(row.assignmentId ?? row.assignment_id ?? "").trim(),
     assignment_id: String(row.assignment_id ?? "").trim(),
     section_id: String(row.section_id ?? "").trim(),
+    time_start: row.time_start ?? null,
+    time_end: row.time_end ?? null,
+    time_display: row.time_display ?? row.time ?? "",
   };
 }
 
