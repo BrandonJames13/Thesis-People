@@ -146,7 +146,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const {
     rooms,
     availableSubjects,
-    subjectSections,        // FIX: all sections (not just unscheduled ones)
+    subjectSections, // FIX: all sections (not just unscheduled ones)
     availableSections,
     availableRooms,
     availableInstructors,
@@ -212,7 +212,9 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     // After a full generation, every section is in assignedSectionKeys so
     // availableSections becomes empty → sectionRows = 0 → generation fails.
     // The scheduler itself handles existing assignments via scheduleAssignments.
-    const allSectionsForGeneration = subjectSections.length > 0
+    // Only fall back when subjectSections is unavailable, not when it is a
+    // valid empty array.
+    const allSectionsForGeneration = Array.isArray(subjectSections)
       ? subjectSections
       : availableSections;
     allSectionsForGeneration.forEach((section) => {
@@ -295,7 +297,12 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     });
 
     return rows;
-  }, [availableSubjects, subjectSections, availableSections, scheduleAssignments]);
+  }, [
+    availableSubjects,
+    subjectSections,
+    availableSections,
+    scheduleAssignments,
+  ]);
 
   const sectionRowsByIdentity = useMemo(
     () =>

@@ -313,10 +313,11 @@ function buildInstructorLoadsFromBothSources(
         assignment.sectionIdentity;
       if (!sectionKey) return;
 
-      // Avoid re-processing same section
-      if (processedSectionKeys.has(sectionKey)) return;
-      processedSectionKeys.add(sectionKey);
+      const processedSectionKey = `${instructorKey}|${sectionKey}`;
 
+      // Avoid re-processing the same section for the same instructor
+      if (processedSectionKeys.has(processedSectionKey)) return;
+      processedSectionKeys.add(processedSectionKey);
       const current = loadMap.get(instructorKey) ?? {
         subjectIds: new Set(),
         sectionKeys: new Set(),
@@ -983,8 +984,9 @@ export function DataProvider({ children }) {
       }
 
       // Clear local state immediately so sectionRows recalculates with
-      // assignedSectionKeys = empty set before generation begins.
-      // This is safe because the caller sets new state via updateScheduleAssignments
+      // Callers can set replacement state via updateScheduleAssignments after
+      // awaiting this Promise, but there may be an async gap where assignments
+      // remain empty between this clear and the caller's follow-up update.
       // synchronously after this resolves (no async gap between the two).
       setScheduleAssignments([]);
       setScheduleAssignmentsSyncing(false);

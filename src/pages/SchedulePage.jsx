@@ -274,8 +274,7 @@ export default function SchedulePage() {
               ? {
                   assignment,
                   span: boundedSpan,
-                  color:
-                    COLOR_MAP[upperPattern] || COLOR_MAP[rawPattern] || "blue",
+                  color: COLOR_MAP[upperPattern] || "blue",
                   visibleStartMin: timeRange.startMin,
                   visibleEndMin: timeRange.endMin,
                 }
