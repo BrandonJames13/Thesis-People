@@ -220,9 +220,9 @@ function normalizeAssignmentFromDbRow(row, lookup) {
       row.instructor_name ?? instructor?.name ?? section?.instructor ?? "",
     room: row.room_number ?? room?.number ?? section?.room ?? "",
     time: row.time_display ?? section?.time ?? "",
-    time_display: row.time_display ?? section?.time ?? "", // ← add
-    time_start: row.time_start ?? null, // ← add
-    time_end: row.time_end ?? null, // ← add
+    time_display: row.time_display ?? section?.time ?? "", // â add
+    time_start: row.time_start ?? null, // â add
+    time_end: row.time_end ?? null, // â add
     duration:
       Number(row.duration ?? section?.duration ?? subject?.duration ?? 1.5) ||
       1.5,
@@ -297,7 +297,7 @@ function buildInstructorLoadsFromBothSources(
   const processedSectionKeys = new Set();
   const loadMap = new Map();
 
-  // ── Phase 1: Process scheduled assignments (status="Assigned") ────
+  // ââ Phase 1: Process scheduled assignments (status="Assigned") ââââ
   (Array.isArray(scheduleAssignments) ? scheduleAssignments : []).forEach(
     (assignment) => {
       if (assignment.status !== "Assigned") return;
@@ -305,18 +305,17 @@ function buildInstructorLoadsFromBothSources(
       const instructorKey = getInstructorLoadKey(assignment);
       if (!instructorKey) return;
 
-      // Extract section ID consistently with Phase 2
-      const sectionId = String(
-        assignment.section_id ?? assignment.sectionId ?? "",
-      )
-        .trim()
-        .toLowerCase();
-      if (!sectionId) return;
+      const sectionKey =
+        String(assignment.section_id ?? "").trim() ||
+        String(
+          assignment.assignmentId ?? assignment.assignment_id ?? "",
+        ).trim() ||
+        assignment.sectionIdentity;
+      if (!sectionKey) return;
 
-      // Avoid re-processing same section for same instructor
-      const dedupeKey = `${instructorKey}|${sectionId}`;
-      if (processedSectionKeys.has(dedupeKey)) return;
-      processedSectionKeys.add(dedupeKey);
+      // Avoid re-processing same section
+      if (processedSectionKeys.has(sectionKey)) return;
+      processedSectionKeys.add(sectionKey);
 
       const current = loadMap.get(instructorKey) ?? {
         subjectIds: new Set(),
@@ -325,7 +324,7 @@ function buildInstructorLoadsFromBothSources(
         labHours: 0,
       };
 
-      current.sectionKeys.add(sectionId);
+      current.sectionKeys.add(sectionKey);
 
       // Track subject by ID for unique counting
       const subjectId = String(assignment.subject_id ?? "").trim();
@@ -356,7 +355,7 @@ function buildInstructorLoadsFromBothSources(
     },
   );
 
-  // ── Phase 2: Process unscheduled instructor-subject assignments ────
+  // ââ Phase 2: Process unscheduled instructor-subject assignments ââââ
   (Array.isArray(instructorSubjects) ? instructorSubjects : []).forEach(
     (row) => {
       const instructorKey = getInstructorLoadKey(row);
@@ -368,10 +367,8 @@ function buildInstructorLoadsFromBothSources(
       if (!sectionId) return;
 
       // Skip if already processed from scheduleAssignments (avoid double-count)
-      // Use composite key to track instructor-section combination
-      const dedupeKey = `${instructorKey}|${sectionId}`;
-      if (processedSectionKeys.has(dedupeKey)) return;
-      processedSectionKeys.add(dedupeKey);
+      if (processedSectionKeys.has(sectionId)) return;
+      processedSectionKeys.add(sectionId);
 
       const current = loadMap.get(instructorKey) ?? {
         subjectIds: new Set(),
@@ -397,7 +394,7 @@ function buildInstructorLoadsFromBothSources(
     },
   );
 
-  // ── Phase 3: Normalize to final load structure ────
+  // ââ Phase 3: Normalize to final load structure ââââ
   const loads = new Map();
   loadMap.forEach((load, key) => {
     loads.set(key, {
@@ -852,7 +849,7 @@ export function DataProvider({ children }) {
       const previousAssignments = scheduleAssignments;
       const normalized = normalizeScheduleAssignments(newAssignments);
 
-      // ─── Validate all assignments reference valid subjects before DB write ────
+      // âââ Validate all assignments reference valid subjects before DB write ââââ
       const validateAssignmentSubjects = (assignments) => {
         const invalidAssignments = [];
 
@@ -985,7 +982,10 @@ export function DataProvider({ children }) {
         return { success: false, error: normalized };
       }
 
-      // Update local state to empty array
+      // Clear local state immediately so sectionRows recalculates with
+      // assignedSectionKeys = empty set before generation begins.
+      // This is safe because the caller sets new state via updateScheduleAssignments
+      // synchronously after this resolves (no async gap between the two).
       setScheduleAssignments([]);
       setScheduleAssignmentsSyncing(false);
       console.log("[DataContext] Successfully cleared schedule assignments.");

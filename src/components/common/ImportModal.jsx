@@ -240,13 +240,13 @@ export default function ImportModal({ isOpen, onClose }) {
     if (
       error &&
       table === "subjects" &&
-      onConflict !== "code,program,year" &&
+      onConflict !== "code,program" &&
       isSubjectsCodeProgramUniqueViolation(error)
     ) {
       const retryRows = dedupeSubjectsByCodeProgram(rowsToUpsert);
       const { data: retryData, error: retryError } = await supabase
         .from(table)
-        .upsert(retryRows, { onConflict: "code,program,year" })
+        .upsert(retryRows, { onConflict: "code,program" })
         .select(select);
 
       if (!retryError) {
@@ -500,7 +500,7 @@ export default function ImportModal({ isOpen, onClose }) {
           room_type: row.room_type,
           duration: row.duration,
         })),
-        "code,program,year",
+        "code,program",
         "Unable to import subjects.",
       );
     }
@@ -907,9 +907,18 @@ export default function ImportModal({ isOpen, onClose }) {
       );
     }
 
+    // Deduplicate by (section_id, instructor_id, academic_year, semester) before upsert
+    const seenScheduleKeys = new Set();
+    const dedupedScheduleUpsertRows = scheduleUpsertRows.filter((r) => {
+      const key = `${r.section_id}|${r.instructor_id ?? ""}|${r.academic_year}|${r.semester}`;
+      if (seenScheduleKeys.has(key)) return false;
+      seenScheduleKeys.add(key);
+      return true;
+    });
+
     await upsertRows(
       "schedule_assignments",
-      scheduleUpsertRows,
+      dedupedScheduleUpsertRows,
       "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
@@ -1065,7 +1074,7 @@ export default function ImportModal({ isOpen, onClose }) {
         upsertRows(
           "subjects",
           subjectUpsertRows,
-          "code,program,year",
+          "code,program",
           "Unable to import subjects.",
         ),
       ]);
@@ -1183,9 +1192,19 @@ export default function ImportModal({ isOpen, onClose }) {
       );
     }
 
+    // Deduplicate by (section_id, instructor_id, academic_year, semester) before upsert
+    // Same instructor teaching Lec + Lab for the same section produces duplicate keys
+    const seenFullListScheduleKeys = new Set();
+    const dedupedFullListScheduleRows = scheduleUpsertRows.filter((r) => {
+      const key = `${r.section_id}|${r.instructor_id ?? ""}|${r.academic_year}|${r.semester}`;
+      if (seenFullListScheduleKeys.has(key)) return false;
+      seenFullListScheduleKeys.add(key);
+      return true;
+    });
+
     await upsertRows(
       "schedule_assignments",
-      scheduleUpsertRows,
+      dedupedFullListScheduleRows,
       "section_id,instructor_id,academic_year,semester",
       "Unable to import schedule assignments.",
     );
@@ -1245,8 +1264,6 @@ export default function ImportModal({ isOpen, onClose }) {
 
       const subjectKey = buildSubjectIdentityKey(row);
       // FIX: fall back to code-only lookup for multi-program subjects
-      // (e.g. HCI rows with program=BSCS won't match the key built for
-      // program=FREE1, but the subject DB id is the same either way).
       const subject =
         subjectByKey.get(subjectKey) ??
         subjectByCodeOnly.get(
