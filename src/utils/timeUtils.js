@@ -1,5 +1,19 @@
 import { patternDaysMap } from "../data/constants";
 
+/**
+ * Normalize a pattern string for patternDaysMap lookup.
+ * Handles raw CSV values like "TTh" → "TTH", "Fri" → "FRI", "Mon,Sat" → "MON,SAT".
+ * Returns the normalized key if found in patternDaysMap, otherwise returns the
+ * original value (so callers still get an empty array via the `|| []` fallback).
+ */
+function normalizePattern(pattern) {
+  const raw = String(pattern ?? "").trim();
+  if (!raw) return raw;
+  const upper = raw.toUpperCase();
+  if (patternDaysMap[upper]) return upper;
+  return raw;
+}
+
 export function parseTimeTextToMinutes(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
@@ -46,14 +60,18 @@ export function coursesOverlap(a, b) {
   const tb = parseCourseTime(b);
   if (!ta || !tb) return false;
   if (ta.endMin <= tb.startMin || tb.endMin <= ta.startMin) return false;
-  const daysA = patternDaysMap[a.pattern] || [];
-  const daysB = patternDaysMap[b.pattern] || [];
+  // FIX: normalize pattern before lookup so raw CSV values like "TTh" / "Fri"
+  // resolve correctly instead of returning an empty array and silently skipping
+  // the day-overlap check (which caused the scheduler to double-book).
+  const daysA = patternDaysMap[normalizePattern(a.pattern)] || [];
+  const daysB = patternDaysMap[normalizePattern(b.pattern)] || [];
   return daysA.some((d) => daysB.includes(d));
 }
 
 export function sharedDays(a, b) {
-  const daysA = patternDaysMap[a.pattern] || [];
-  const daysB = patternDaysMap[b.pattern] || [];
+  // FIX: same normalization applied for consistency.
+  const daysA = patternDaysMap[normalizePattern(a.pattern)] || [];
+  const daysB = patternDaysMap[normalizePattern(b.pattern)] || [];
   return daysA.filter((d) => daysB.includes(d));
 }
 

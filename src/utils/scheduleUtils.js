@@ -105,6 +105,13 @@ function isRoomEligibleForSubject(
   const isCisco = isCiscoSubject(subjectCode);
   const isSpecial = isSpecialRoomSubject(subjectCode, subjectTitle);
 
+  // TSU Rule: AVR rooms (identified by name) can NEVER be assigned as Lecture rooms.
+  // AVR rooms in the CSV are stored with type "Lab", so we must also check the room
+  // number/name to catch them regardless of how their type is stored.
+  const roomName = String(room.number ?? room.name ?? "").trim().toUpperCase();
+  const isAVRRoom = roomType === "AVR" || roomName === "AVR";
+  if (isAVRRoom && !isSpecial) return false;
+
   // CISCO room → only CCNA subjects
   if (roomType === CISCO_ROOM_TYPE) return isCisco;
   // CCNA subjects → only CISCO room
@@ -248,10 +255,10 @@ function getPatternsForSection(duration, isEve, activeDaysSet) {
       ];
     else if (dur === 2)
       // 2-hour classes: single days only (no two-day patterns to respect 2-day limit)
-      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+      candidates = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
     else
       // 3+ hour classes: single days only (long blocks on individual days)
-      candidates = ["MON", "TUE", "WED", "THU", "FRI"];
+      candidates = ["SAT", "MON", "TUE", "WED", "THU", "FRI"];
   }
 
   // Filter candidates: only return patterns that exist in patternDaysMap and
@@ -284,11 +291,11 @@ export function getAssignmentSubjectCode(row) {
   // Enhanced lookup paths: code → subjectCode → subject_code → subject.code → subject_id → subject_title
   let result = String(
     row?.code ??
-      row?.subjectCode ??
-      row?.subject_code ??
-      row?.subject?.code ??
-      row?.subject_id ??
-      "",
+    row?.subjectCode ??
+    row?.subject_code ??
+    row?.subject?.code ??
+    row?.subject_id ??
+    "",
   )
     .trim()
     .toUpperCase();
@@ -566,9 +573,9 @@ function buildEligibleRooms(roomPool, assignment) {
   const subjectCode = getAssignmentSubjectCode(assignment);
   const subjectTitle = String(
     assignment.title ??
-      assignment.course_title ??
-      assignment.subject_title ??
-      "",
+    assignment.course_title ??
+    assignment.subject_title ??
+    "",
   ).trim();
 
   return roomPool.filter((room) => {
@@ -794,7 +801,7 @@ function hasCoverageConflict(
       (existingInstructorName &&
         testInstructorName &&
         existingInstructorName.toLowerCase() ===
-          testInstructorName.toLowerCase());
+        testInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, testAssignment);
   });
@@ -1658,31 +1665,31 @@ function generateSubjectResolutionReport(cache, conflictCount) {
   console.warn("[scheduleUtils] [WARN] Subject Resolution Report:");
   console.warn(
     "  Total Unresolved: " +
-      report.totalFailures +
-      " assignments | Unique Identifiers: " +
-      report.uniqueIdentifiers,
+    report.totalFailures +
+    " assignments | Unique Identifiers: " +
+    report.uniqueIdentifiers,
   );
 
   report.failures.forEach(({ identifier, count, examples }) => {
     console.warn(
       "  [X] '" +
-        identifier +
-        "' (" +
-        count +
-        " occurrence" +
-        (count > 1 ? "s" : "") +
-        ")",
+      identifier +
+      "' (" +
+      count +
+      " occurrence" +
+      (count > 1 ? "s" : "") +
+      ")",
     );
     if (examples.length > 0) {
       examples.forEach((ex) => {
         console.warn(
           "    |-- Section: " +
-            (ex.sectionId ?? "unknown") +
-            " | " +
-            ex.row +
-            " | Raw: '" +
-            ex.rawValue +
-            "'",
+          (ex.sectionId ?? "unknown") +
+          " | " +
+          ex.row +
+          " | Raw: '" +
+          ex.rawValue +
+          "'",
         );
       });
     }
@@ -1921,9 +1928,9 @@ export function runAutoSchedule({
     // Safe extraction of subject ID with fallbacks
     const courseSubjectId = String(
       course.subjectId ??
-        fallbackSubject?.id ??
-        fallbackSubject?.subject_id ??
-        "",
+      fallbackSubject?.id ??
+      fallbackSubject?.subject_id ??
+      "",
     ).trim();
     course.subjectId = courseSubjectId;
 
@@ -2006,8 +2013,8 @@ export function runAutoSchedule({
         sectionPrecompute.patternCache.get(tryPattern)?.days ?? [];
       if (patternDays.length === 0) continue;
 
-      // ── TSU Rule: block Saturday for non-EVE sections ──────────────────────
-      if (!isEve && patternDays.includes("SAT")) continue;
+      // ── TSU Rule: block Saturday for non-EVE sections only if SAT is not an active day ──
+      if (!isEve && patternDays.includes("SAT") && !activeDaysSet.has("SAT")) continue;
 
       // ── TSU Rule: Lec/Lab split — ensure Lec and Lab land on DIFFERENT days
       // with at least a 1-day gap (e.g. Lec Monday → Lab must be Wednesday+).
@@ -2385,7 +2392,7 @@ export function runAutoSchedule({
       dedupedAssignments.find(
         (orig) =>
           getAssignmentIdentityKey(orig) ===
-            getAssignmentIdentityKey(assignment) &&
+          getAssignmentIdentityKey(assignment) &&
           normalizeAssignmentStatus(orig.status) === "Assigned",
       ),
   ).length;
@@ -2460,7 +2467,7 @@ function getConflictingAssignments(assignments, targetAssignment, targetKey) {
       (currentInstructorName &&
         targetInstructorName &&
         currentInstructorName.toLowerCase() ===
-          targetInstructorName.toLowerCase());
+        targetInstructorName.toLowerCase());
     if (!sameRoom && !sameInstructor) return false;
     return coursesOverlap(assignment, targetAssignment);
   });
@@ -2631,7 +2638,7 @@ export function applyManualAssignments({
         time_end: parseTimeToSQL(
           minutesTo24Text(
             (parse24TextToMinutes(extractStartTime24(assignment, "")) || 0) +
-              Math.round((assignment.duration || 1.5) * 60),
+            Math.round((assignment.duration || 1.5) * 60),
           ),
         ),
         duration: Number(assignment.duration ?? 1.5) || 1.5,
