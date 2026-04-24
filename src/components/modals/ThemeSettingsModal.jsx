@@ -101,7 +101,6 @@ export default function ThemeSettingsModal({ onClose }) {
         {/* Label strip */}
         <div
           style={{
-            background: isDark ? "#00000040" : "#00000008",
             backdropFilter: "blur(4px)",
             padding: "7px 10px",
             background: palette.preview[1],
@@ -205,7 +204,12 @@ export default function ThemeSettingsModal({ onClose }) {
       >
         <div>
           <div
-            style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}
+            style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: "var(--text)",
+              marginBottom: 4,
+            }}
           >
             🎨 Appearance
           </div>
