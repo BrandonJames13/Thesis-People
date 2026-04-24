@@ -500,6 +500,25 @@ function buildSectionTermKey(row) {
   return `${sectionId}::${academicYear}::${semester}`;
 }
 
+/**
+ * FIX (Bug 1 — duplicate instructor assignments):
+ * Builds unique constraint key matching database constraint:
+ * UNIQUE(section_id, instructor_id, academic_year, semester)
+ * This prevents duplicate assignment of same instructor to same section in same term.
+ */
+function buildUniqueConstraintKey(row) {
+  const sectionId = getNormalizedSectionId(row);
+  const instructorId = String(
+    row?.instructor_id ?? row?.instructorId ?? "",
+  ).trim();
+  const academicYear = getAssignmentAcademicYear(row);
+  const semester = getAssignmentSemester(row);
+  if (!sectionId || !academicYear || !semester) return "";
+  // Include NULL placeholder for null instructor_id to ensure consistent grouping
+  const instId = instructorId || "NULL";
+  return `${sectionId}::${instId}::${academicYear}::${semester}`;
+}
+
 function parse24TextToMinutes(value) {
   const text = String(value ?? "").trim();
   if (!text.includes(":")) return null;
@@ -983,8 +1002,12 @@ function dedupeBySectionTerm(assignments) {
   const statusRank = { Assigned: 3, Conflict: 2, Pending: 1 };
 
   (Array.isArray(assignments) ? assignments : []).forEach((assignment) => {
+    // FIX (Bug 1 — duplicate instructors): Use constraint key including instructor_id
+    // This matches the database unique constraint and prevents duplicate assignments
     const uniqueKey =
-      buildSectionTermKey(assignment) || getAssignmentIdentityKey(assignment);
+      buildUniqueConstraintKey(assignment) ||
+      buildSectionTermKey(assignment) ||
+      getAssignmentIdentityKey(assignment);
     if (!uniqueKey) return;
 
     const next = {
@@ -995,6 +1018,16 @@ function dedupeBySectionTerm(assignments) {
     if (!existing) {
       byKey.set(uniqueKey, next);
       return;
+    }
+
+    // Log when deduping to help diagnose duplicate issues
+    if (
+      String(next.status).trim() === "Assigned" ||
+      String(existing.status).trim() === "Assigned"
+    ) {
+      console.debug(
+        `[dedupeBySectionTerm] Deduping ${uniqueKey}: keeping ${String(next.status || existing.status).trim()}`,
+      );
     }
 
     const existingRank =
@@ -1035,6 +1068,38 @@ function hasIndexedCoverageConflictOptimized(
   patternDaysMap,
 ) {
   const { roomIndex, instructorIndex } = occupancyIndexes;
+
+  // FIX (Bug 1 — duplicate instructors): Detect duplicate instructor-section assignments
+  // before checking time/room conflicts. This catches duplicates that would violate
+  // the database constraint UNIQUE(section_id, instructor_id, academic_year, semester).
+  if (testInstructorId && testAssignmentSectionTermKey) {
+    const hasDuplicateInstructorSection = occupiedPool.some((assignment) => {
+      const existingKey = getAssignmentIdentityKey(assignment);
+      if (existingKey === testAssignmentIdentityKey) return false;
+      if (assignmentKeyToIgnore && existingKey === assignmentKeyToIgnore)
+        return false;
+
+      // Skip if existing assignment has no instructor
+      const existingInstructorId = getAssignmentInstructorId(assignment);
+      if (!existingInstructorId) return false;
+
+      // Compare via constraint key: same (section, instructor, academic_year, semester)
+      const existingConstraintKey = buildUniqueConstraintKey(assignment);
+      const testConstraintKey = `${testAssignmentSectionTermKey.split("::").slice(0, 1)}::${testInstructorId}::${testAssignmentSectionTermKey.split("::").slice(1).join("::")}`;
+
+      if (
+        existingConstraintKey &&
+        existingConstraintKey === testConstraintKey
+      ) {
+        console.warn(
+          `[hasIndexedCoverageConflictOptimized] Duplicate instructor-section detected: ${testConstraintKey}`,
+        );
+        return true;
+      }
+      return false;
+    });
+    if (hasDuplicateInstructorSection) return true;
+  }
 
   if (testAssignmentSectionTermKey) {
     const hasConflictingSectionTerm = occupiedPool.some((assignment) => {
@@ -1404,7 +1469,9 @@ function categorizeRoomsBySubject(
 }
 
 /**
- * Updated: accepts activeDaysSet as last parameter for TSU pattern filtering.
+ * Updated: accepts activeDaysSet and modal startTime/endTime for strict time bounds enforcement.
+ * FIX (Bug 2 — Time bounds): Modal start/end times are HARD LIMITS.
+ * No slot can be generated outside the user-selected window.
  */
 function buildSectionPrecompute(
   row,
@@ -1417,6 +1484,8 @@ function buildSectionPrecompute(
   roomPool,
   patternCache,
   activeDaysSet,
+  startTime,
+  endTime,
 ) {
   const durationMinutes = Math.round(courseDuration * 60);
   const sectionId = getAssignmentSectionId(row);
@@ -1438,29 +1507,67 @@ function buildSectionPrecompute(
   const sectionLabel = String(row?.section ?? "").trim();
   const isEve = isEveSection(sectionLabel);
 
-  // ── FIX (Bug 2 — Time Windows): Determine which session window(s) to use.
-  // Morning  : 7:00 AM – 11:00 AM  (non-EVE, imported start before noon)
-  // Afternoon: 1:00 PM –  6:00 PM  (non-EVE, imported start after noon)
-  // Night    : 6:00 PM –  9:00 PM  (EVE sections only)
-  // When no imported start is available for a regular section, we generate
-  // slots for BOTH the morning AND afternoon windows so the algorithm can
-  // find a free slot in either session.
+  // ── FIX (Bug 2 — Time Windows): Enforce modal startTime/endTime as HARD LIMITS
+  // Previously, the code would ignore modal bounds and default to TSU windows (7-11, 1-6, 6-9).
+  // Now we use the modal bounds as the ultimate constraint, while respecting TSU rules
+  // (e.g., no crossing lunch break, EVE after 6 PM).
   let sessionWindows;
+
+  // Always use the provided modal start/end as the hard bounds
   if (isEve) {
-    sessionWindows = [{ startTime: "18:00", endTime: "21:00" }];
-  } else if (importedStart) {
-    const importedMins = parse24TextToMinutes(importedStart);
-    if (importedMins != null && importedMins < LUNCH_START_MIN) {
-      sessionWindows = [{ startTime: "07:00", endTime: "11:00" }];
+    // EVE sections must start at 6 PM or later (per TSU rule)
+    // Constrain to the modal window intersection with EVE time frame
+    const modalStart = Math.max(
+      parse24TextToMinutes(startTime) || 18 * 60,
+      18 * 60, // EVE minimum 6 PM
+    );
+    const modalEnd = parse24TextToMinutes(endTime) || 21 * 60;
+    if (modalStart < modalEnd) {
+      sessionWindows = [
+        {
+          startTime: minutesTo24Text(modalStart),
+          endTime: minutesTo24Text(modalEnd),
+        },
+      ];
     } else {
-      sessionWindows = [{ startTime: "13:00", endTime: "18:00" }];
+      // No valid window for EVE within modal bounds
+      sessionWindows = [];
     }
   } else {
-    // No imported start — try morning first, then afternoon
-    sessionWindows = [
-      { startTime: "07:00", endTime: "11:00" },
-      { startTime: "13:00", endTime: "18:00" },
-    ];
+    // Regular (non-EVE) sections: split into morning and afternoon windows
+    // (intersected with modal bounds) so assignments distribute across the day.
+    const modalStartMin = parse24TextToMinutes(startTime) || 7 * 60;
+    const modalEndMin = parse24TextToMinutes(endTime) || 18 * 60;
+
+    sessionWindows = [];
+
+    // Morning window: TSU [7:00, 11:00] ∩ modal bounds
+    const morningStart = Math.max(modalStartMin, 7 * 60);
+    const morningEnd = Math.min(modalEndMin, 11 * 60);
+    if (morningStart < morningEnd) {
+      sessionWindows.push({
+        startTime: minutesTo24Text(morningStart),
+        endTime: minutesTo24Text(morningEnd),
+      });
+    }
+
+    // Afternoon window: TSU [13:00, 18:00] ∩ modal bounds
+    const afternoonStart = Math.max(modalStartMin, 13 * 60);
+    const afternoonEnd = Math.min(modalEndMin, 18 * 60);
+    if (afternoonStart < afternoonEnd) {
+      sessionWindows.push({
+        startTime: minutesTo24Text(afternoonStart),
+        endTime: minutesTo24Text(afternoonEnd),
+      });
+    }
+
+    // Fallback for non-standard windows that don't overlap TSU morning/afternoon bands.
+    if (sessionWindows.length === 0 && modalStartMin < modalEndMin) {
+      sessionWindows.push({
+        startTime: minutesTo24Text(modalStartMin),
+        endTime: minutesTo24Text(modalEndMin),
+      });
+    }
   }
 
   const candidateSlots = sessionWindows.flatMap(
@@ -1941,7 +2048,7 @@ export function runAutoSchedule({
     const importedInstructor = getAssignmentInstructorName(course);
     const importedInstructorId = getAssignmentInstructorId(course);
 
-    // ── PRECOMPUTE — now passes activeDaysSet for TSU pattern filtering ────────
+    // ── PRECOMPUTE — now passes startTime/endTime for strict modal bound enforcement ────
     const sectionPrecompute = buildSectionPrecompute(
       row,
       courseSubjectId,
@@ -1953,6 +2060,8 @@ export function runAutoSchedule({
       newRooms,
       patternCache,
       activeDaysSet,
+      startTime,
+      endTime,
     );
 
     const { isEve } = sectionPrecompute;
@@ -2016,7 +2125,13 @@ export function runAutoSchedule({
         patternDaysMap[sectionPrecompute.importedPattern] ?? [];
       const importedUsesSat = importedPatternDays.includes("SAT");
       const userEnabledSat = activeDaysSet.has("SAT");
-      if (!isEve && patternDays.includes("SAT") && !importedUsesSat && !userEnabledSat) continue;
+      if (
+        !isEve &&
+        patternDays.includes("SAT") &&
+        !importedUsesSat &&
+        !userEnabledSat
+      )
+        continue;
 
       // ── TSU Rule: Lec/Lab split — ensure Lec and Lab land on DIFFERENT days
       // with at least a 1-day gap (e.g. Lec Monday → Lab must be Wednesday+).
@@ -2266,8 +2381,7 @@ export function runAutoSchedule({
       const _startTime24 = extractStartTime24(assignment, "");
       const _duration = Number(assignment.duration ?? 1.5) || 1.5;
       const _endMinutes =
-        (parse24TextToMinutes(_startTime24) ?? 0) +
-        Math.round(_duration * 60);
+        (parse24TextToMinutes(_startTime24) ?? 0) + Math.round(_duration * 60);
       return {
         ...assignment,
         status: normalizeAssignmentStatus(assignment.status),
@@ -2284,9 +2398,7 @@ export function runAutoSchedule({
           (_startTime24 ? parseTimeToSQL(_startTime24) : null),
         time_end:
           assignment.time_end ||
-          (_startTime24
-            ? parseTimeToSQL(minutesTo24Text(_endMinutes))
-            : null),
+          (_startTime24 ? parseTimeToSQL(minutesTo24Text(_endMinutes)) : null),
       };
     }
 
@@ -2316,8 +2428,12 @@ export function runAutoSchedule({
         time_display: String(
           assignment.time ?? assignment.time_display ?? "",
         ).trim(),
-        time_start: parseTimeToSQL(startTime24),
-        time_end: parseTimeToSQL(minutesTo24Text(endMinutes)),
+        // FIX (Bug 2 — midnight fallback): Only set time_start if startTime24 is valid
+        // If missing, leave as null so validation catch converts to Conflict
+        time_start: startTime24 ? parseTimeToSQL(startTime24) : null,
+        time_end: startTime24
+          ? parseTimeToSQL(minutesTo24Text(endMinutes))
+          : null,
         duration,
         status: normalizeAssignmentStatus(assignment.status),
         academic_year: getAssignmentAcademicYear(assignment),
@@ -2358,6 +2474,14 @@ export function runAutoSchedule({
       if (!instructorId) missing.push("instructor_id");
       if (!academicYear) missing.push("academic_year");
       if (!semester) missing.push("semester");
+
+      // FIX (Bug 2 — midnight fallback): Check for valid time_start
+      // Reject Assigned status if time_start is missing or is 00:00:00
+      // (indicating a failed time extraction that defaulted to midnight)
+      const timeStart = String(assignment.time_start ?? "").trim();
+      if (!timeStart || timeStart === "00:00:00") {
+        missing.push("time_start (missing or defaulted to midnight)");
+      }
 
       if (missing.length > 0) {
         return {

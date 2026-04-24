@@ -269,7 +269,8 @@ function buildNormalizedFromCourseRows(rows) {
  * 1. scheduleAssignments with status "Assigned" (scheduled with hours)
  * 2. instructorSubjects (unscheduled assignments from import)
  *
- * Deduplicates by section_id to avoid double-counting the same section.
+ * Deduplicates by canonical section identity to avoid double-counting
+ * logically identical sections that may have different section UUIDs.
  * Counts unique subjects by subject_id.
  * Uses duration from scheduleAssignments; defaults to 0 for unscheduled entries.
  *
@@ -284,7 +285,7 @@ function buildInstructorLoadsFromBothSources(
   subjectSections,
 ) {
   // Build section lookup index for instructorSubjects processing
-  const _sectionById = new Map(
+  const sectionById = new Map(
     (Array.isArray(subjectSections) ? subjectSections : []).map((section) => [
       String(section?.sectionId ?? section?.id ?? section?.section_id ?? "")
         .trim()
@@ -293,9 +294,48 @@ function buildInstructorLoadsFromBothSources(
     ]),
   );
 
-  // Track all processed sections to deduplicate across both sources
-  const processedSectionKeys = new Set();
   const loadMap = new Map();
+
+  function getCanonicalSectionKey(record, sectionLookup) {
+    const explicitIdentity = String(
+      record?.sectionIdentity ?? record?.section_identity ?? "",
+    ).trim();
+    const lookupIdentity = String(sectionLookup?.sectionIdentity ?? "").trim();
+    const sectionIdentity = explicitIdentity || lookupIdentity;
+    if (sectionIdentity) {
+      return `identity:${sectionIdentity.toLowerCase()}`;
+    }
+
+    const sectionId = String(
+      record?.section_id ?? record?.sectionId ?? sectionLookup?.sectionId ?? "",
+    ).trim();
+    if (sectionId) {
+      return `id:${sectionId.toLowerCase()}`;
+    }
+
+    const assignmentId = String(
+      record?.assignmentId ?? record?.assignment_id ?? record?.id ?? "",
+    ).trim();
+    if (assignmentId) {
+      return `assignment:${assignmentId.toLowerCase()}`;
+    }
+
+    return "";
+  }
+
+  function getOrCreateInstructorLoad(instructorKey) {
+    const existing = loadMap.get(instructorKey);
+    if (existing) return existing;
+
+    const next = {
+      subjectIds: new Set(),
+      sectionKeys: new Set(),
+      lectureHours: 0,
+      labHours: 0,
+    };
+    loadMap.set(instructorKey, next);
+    return next;
+  }
 
   // ââ Phase 1: Process scheduled assignments (status="Assigned") ââââ
   (Array.isArray(scheduleAssignments) ? scheduleAssignments : []).forEach(
@@ -305,24 +345,14 @@ function buildInstructorLoadsFromBothSources(
       const instructorKey = getInstructorLoadKey(assignment);
       if (!instructorKey) return;
 
-      const sectionKey =
-        String(assignment.section_id ?? "").trim() ||
-        String(
-          assignment.assignmentId ?? assignment.assignment_id ?? "",
-        ).trim() ||
-        assignment.sectionIdentity;
+      const sectionKey = getCanonicalSectionKey(assignment);
       if (!sectionKey) return;
 
-      // Avoid re-processing same section
-      if (processedSectionKeys.has(sectionKey)) return;
-      processedSectionKeys.add(sectionKey);
+      const current = getOrCreateInstructorLoad(instructorKey);
 
-      const current = loadMap.get(instructorKey) ?? {
-        subjectIds: new Set(),
-        sectionKeys: new Set(),
-        lectureHours: 0,
-        labHours: 0,
-      };
+      // Deduplicate per instructor so two faculty with the same section are
+      // counted independently.
+      if (current.sectionKeys.has(sectionKey)) return;
 
       current.sectionKeys.add(sectionKey);
 
@@ -350,8 +380,6 @@ function buildInstructorLoadsFromBothSources(
       const isLab = roomType === "Computer Lab";
       if (isLab) current.labHours += duration;
       else current.lectureHours += duration;
-
-      loadMap.set(instructorKey, current);
     },
   );
 
@@ -366,31 +394,27 @@ function buildInstructorLoadsFromBothSources(
         .toLowerCase();
       if (!sectionId) return;
 
-      // Skip if already processed from scheduleAssignments (avoid double-count)
-      if (processedSectionKeys.has(sectionId)) return;
-      processedSectionKeys.add(sectionId);
+      const section = sectionById.get(sectionId);
+      const sectionKey = getCanonicalSectionKey(row, section);
+      if (!sectionKey) return;
 
-      const current = loadMap.get(instructorKey) ?? {
-        subjectIds: new Set(),
-        sectionKeys: new Set(),
-        lectureHours: 0,
-        labHours: 0,
-      };
+      const current = getOrCreateInstructorLoad(instructorKey);
 
-      current.sectionKeys.add(sectionId);
+      // Skip if already processed from scheduleAssignments or prior import rows.
+      if (current.sectionKeys.has(sectionKey)) return;
+
+      current.sectionKeys.add(sectionKey);
 
       // Track subject ID from instructorSubjects
-      const subjectId = String(row.subject_id ?? row.subjectId ?? "")
-        .trim()
-        .toLowerCase();
+      const subjectId = String(
+        row.subject_id ?? row.subjectId ?? section?.subjectId ?? "",
+      ).trim();
       if (subjectId) {
         current.subjectIds.add(subjectId);
       }
 
       // Note: No hours added for unscheduled assignments (defaults to 0)
       // Hours will be added when auto-schedule runs or manual assignment occurs
-
-      loadMap.set(instructorKey, current);
     },
   );
 
@@ -805,11 +829,31 @@ export function DataProvider({ children }) {
           };
         });
 
-        // Perform upsert with unique constraint on (section_id, room_type, academic_year, semester)
+        // FIX: Bug 2 (Persistence alignment) — Use correct conflict key matching deployed DB constraint
+        // Constraint is: UNIQUE (section_id, instructor_id, academic_year, semester)
+        // not (section_id, room_type, ...). This prevents duplicate instructor-section assignments.
+        console.log(
+          `[DataContext] persistScheduleAssignments: Preparing ${rowsToUpsert.length} assignments for upsert.`,
+        );
+
+        // Log constraint key values to detect duplicates before upsert
+        const constraintKeys = new Map();
+        rowsToUpsert.forEach((row, idx) => {
+          const key = `${row.section_id}::${row.instructor_id || "NULL"}::${row.academic_year}::${row.semester}`;
+          if (constraintKeys.has(key)) {
+            console.warn(
+              `[DataContext] Duplicate constraint key detected: "${key}" at indices ${constraintKeys.get(key)} and ${idx}`,
+            );
+          } else {
+            constraintKeys.set(key, idx);
+          }
+        });
+
+        // Perform upsert with correct unique constraint key: (section_id, instructor_id, academic_year, semester)
         const { data: _upsertData, error } = await supabase
           .from("schedule_assignments")
           .upsert(rowsToUpsert, {
-            onConflict: "section_id,room_type,academic_year,semester",
+            onConflict: "section_id,instructor_id,academic_year,semester",
           })
           .select();
 
@@ -822,11 +866,14 @@ export function DataProvider({ children }) {
             `[DataContext] Persistence failed for ${rowsToUpsert.length} assignments:`,
             normalized,
           );
+          console.error(
+            `[DataContext] First 3 rows attempted: ${JSON.stringify(rowsToUpsert.slice(0, 3))}`,
+          );
           return { success: false, error: normalized };
         }
 
         console.log(
-          `[DataContext] Successfully persisted ${rowsToUpsert.length} schedule assignments.`,
+          `[DataContext] Successfully persisted ${rowsToUpsert.length} schedule assignments via upsert on (section_id, instructor_id, academic_year, semester).`,
         );
         return { success: true };
       } catch (err) {

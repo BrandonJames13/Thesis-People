@@ -558,18 +558,42 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
         setTimeout(resolve, 0);
       });
 
+      // FIX: Bug 1 (Duplicate sections) — Pass empty array as baseline after clear succeeds
+      // Ensures stale pre-clear assignments cannot be re-merged by generation.
+      // The cleared state in DB is not immediately reflected in React state, so we
+      // explicitly pass [] to generation to enforce a clean slate.
+      const inputSectionRows = [...sectionRows];
+      const inputSubjects = [...availableSubjects];
+      const inputRooms = [...availableRooms];
+      const inputInstructors = [...availableInstructors];
+      const inputInstructorSubjects = [...instructorSubjects];
+
+      console.log(
+        `[ScheduleModal] handleRunAuto: Starting generation with ${inputSectionRows.length} sections, modal bounds ${autoStart}-${autoEnd}, days: [${activeDays.join(", ")}]`,
+      );
+
       const result = runAutoSchedule({
-        sectionRows: [...sectionRows],
-        subjects: [...availableSubjects],
-        rooms: [...availableRooms],
-        instructors: [...availableInstructors],
-        instructorSubjects: [...instructorSubjects],
-        scheduleAssignments: [...scheduleAssignments],
+        sectionRows: inputSectionRows,
+        subjects: inputSubjects,
+        rooms: inputRooms,
+        instructors: inputInstructors,
+        instructorSubjects: inputInstructorSubjects,
+        scheduleAssignments: [], // FIX: Enforce empty baseline after DB clear
         startTime: autoStart,
         endTime: autoEnd,
         pattern: autoPattern,
         activeDays,
       });
+
+      const generatedAssigned = result.scheduleAssignments.filter(
+        (a) => String(a.status || "").trim() === "Assigned",
+      ).length;
+      const generatedConflicts = result.scheduleAssignments.filter(
+        (a) => String(a.status || "").trim() === "Conflict",
+      ).length;
+      console.log(
+        `[ScheduleModal] Generation complete: ${generatedAssigned} Assigned, ${generatedConflicts} Conflict, from ${result.scheduleAssignments.length} total.`,
+      );
 
       showProgress("generating", 70);
 
