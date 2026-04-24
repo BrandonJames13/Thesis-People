@@ -14,7 +14,11 @@ export const patternDaysMap = {
   "WED,FRI": ["WED", "FRI"], // Two-day combination: Wednesday & Friday
 };
 
-export const TIME_SLOTS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20];
+export const TIME_SLOTS = [
+  7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5,
+  12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5,
+  17, 17.5, 18, 18.5, 19, 19.5, 20,
+];
 
 export const DAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT"];
 

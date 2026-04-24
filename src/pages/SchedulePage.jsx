@@ -235,11 +235,11 @@ export default function SchedulePage() {
       gridMap[d] = {};
     });
 
-    const slotRanges = TIME_SLOTS.map((hour, index) => ({
-      hour,
+    const slotRanges = TIME_SLOTS.map((slot, index) => ({
+      hour: slot,
       index,
-      startMin: hour * 60,
-      endMin: (hour + 1) * 60,
+      startMin: slot * 60,
+      endMin: slot * 60 + 30,
     }));
 
     visibleAssignments.forEach((assignment) => {
@@ -327,8 +327,11 @@ export default function SchedulePage() {
     }
 
     return TIME_SLOTS.map((h) => {
-      const displayH = h > 12 ? h - 12 : h === 0 ? 12 : h;
-      const ampm = h >= 12 ? "PM" : "AM";
+      const hourPart = Math.floor(h);
+      const isHalfHour = h % 1 !== 0;
+      const displayH =
+        hourPart > 12 ? hourPart - 12 : hourPart === 0 ? 12 : hourPart;
+      const ampm = hourPart >= 12 ? "PM" : "AM";
       const cells = [];
       DAYS.forEach((day) => {
         const cell = grid[day][h];
@@ -369,11 +372,19 @@ export default function SchedulePage() {
       });
 
       return (
-        <tr key={h}>
-          <td className="time-col-cell">
-            {displayH}:00
-            <br />
-            <span style={{ fontSize: 10 }}>{ampm}</span>
+        <tr key={h} className={isHalfHour ? "half-hour-row" : "hour-row"}>
+          <td
+            className={`time-col-cell${isHalfHour ? " half-hour-label" : ""}`}
+          >
+            {isHalfHour ? (
+              <span style={{ fontSize: 10, opacity: 0.8 }}>{displayH}:30</span>
+            ) : (
+              <>
+                {displayH}:00
+                <br />
+                <span style={{ fontSize: 10 }}>{ampm}</span>
+              </>
+            )}
           </td>
           {cells}
         </tr>
