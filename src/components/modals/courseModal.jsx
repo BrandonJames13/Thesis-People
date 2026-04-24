@@ -391,25 +391,28 @@ export function SubjectModal({
               key={sectionRow.id || `section-${index}`}
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr 1fr 1fr auto",
+                gridTemplateColumns:
+                  "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto",
                 gap: 8,
                 alignItems: "end",
               }}
             >
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Section</label>
                 <input
                   className="search-input"
+                  style={{ width: "100%", boxSizing: "border-box" }}
                   value={sectionRow.section}
                   onChange={(e) =>
                     updateSectionRow(index, "section", e.target.value)
                   }
                 />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Enrolled (min 1)</label>
                 <input
                   className="search-input"
+                  style={{ width: "100%", boxSizing: "border-box" }}
                   value={sectionRow.enrolled}
                   onChange={(e) =>
                     updateSectionRow(index, "enrolled", e.target.value)
@@ -418,10 +421,11 @@ export function SubjectModal({
                   min="1"
                 />
               </div>
-              <div>
+              <div style={{ minWidth: 0 }}>
                 <label style={labelStyle}>Status</label>
                 <select
                   className="search-input"
+                  style={{ width: "100%", boxSizing: "border-box" }}
                   value={sectionRow.status}
                   onChange={(e) =>
                     updateSectionRow(index, "status", e.target.value)
