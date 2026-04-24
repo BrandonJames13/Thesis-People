@@ -4,6 +4,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { useNotification } from "../../context/NotificationContext";
 import { useClickOutside } from "../../hooks/useClickOutside";
 import Modal from "../common/Modal";
+import ThemeSettingsModal from "../modals/ThemeSettingsModal";
 import styles from "./Header.module.css";
 
 // ─── Drag-to-slide theme toggle ───────────────────────────────────────────────
@@ -87,6 +88,7 @@ export default function Header() {
   const { showNotification } = useNotification();
   const [menuOpen, setMenuOpen] = useState(false);
   const [pwModalOpen, setPwModalOpen] = useState(false);
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
   const [pwCurrent, setPwCurrent] = useState("");
   const [pwNew, setPwNew] = useState("");
   const [pwConfirm, setPwConfirm] = useState("");
@@ -126,6 +128,38 @@ export default function Header() {
 
       <div className={styles.headerRight}>
         <span className={styles.badge}>v1.0 · BETA</span>
+
+        <button
+          onClick={() => setThemeModalOpen(true)}
+          title="Appearance"
+          style={{
+            background: "var(--surface3)",
+            border: "1px solid var(--border)",
+            borderRadius: 7,
+            color: "var(--text2)",
+            cursor: "pointer",
+            fontSize: 15,
+            width: 32,
+            height: 32,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "background 0.15s, color 0.15s",
+            flexShrink: 0,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = "var(--accent)";
+            e.currentTarget.style.color = "#fff";
+            e.currentTarget.style.borderColor = "var(--accent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = "var(--surface3)";
+            e.currentTarget.style.color = "var(--text2)";
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
+        >
+          🎨
+        </button>
 
         <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
 
@@ -258,6 +292,9 @@ export default function Header() {
           </button>
         </div>
       </Modal>
+      {themeModalOpen && (
+        <ThemeSettingsModal onClose={() => setThemeModalOpen(false)} />
+      )}
     </header>
   );
 }

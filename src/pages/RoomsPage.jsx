@@ -3,11 +3,10 @@ import { useAuth } from "../context/AuthContext";
 import { useNotification } from "../context/NotificationContext";
 import { useData } from "../context/DataContext";
 import { buildDatabaseErrorMessage } from "../utils/errorUtils";
-import {
-  validateRoomPayload,
-} from "../utils/roomUtils";
+import { validateRoomPayload } from "../utils/roomUtils";
 import ConfirmModal from "../components/common/ConfirmModal";
 import { AddRoomModal } from "../components/modals/addRoomModal";
+import RoomScheduleModal from "../components/modals/RoomScheduleModal";
 import { supabase } from "../lib/supabaseClient";
 import {
   getRoomCapacityLimit,
@@ -23,6 +22,7 @@ function RoomCard({
   getWingLabel,
   onEdit,
   onDelete,
+  onViewSchedule,
   getRoomCapacityLimit,
   normalizeRoomType,
   sanitizeRoomCapacity,
@@ -30,6 +30,7 @@ function RoomCard({
   const [hovered, setHovered] = useState(false);
   const [editHovered, setEditHovered] = useState(false);
   const [deleteHovered, setDeleteHovered] = useState(false);
+  const [viewHovered, setViewHovered] = useState(false);
 
   const normalizedType = normalizeRoomType(room.type);
   const { max } = getRoomCapacityLimit(normalizedType);
@@ -65,6 +66,27 @@ function RoomCard({
             pointerEvents: hovered ? "auto" : "none",
           }}
         >
+          <button
+            onClick={() => onViewSchedule(room)}
+            onMouseEnter={() => setViewHovered(true)}
+            onMouseLeave={() => setViewHovered(false)}
+            style={{
+              background: viewHovered ? "var(--accent)" : "var(--surface3)",
+              border: `1px solid ${viewHovered ? "var(--accent)" : "var(--border)"}`,
+              color: viewHovered ? "#fff" : "var(--text2)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 500,
+              lineHeight: 1,
+              padding: "4px 8px",
+              borderRadius: 5,
+              whiteSpace: "nowrap",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            title="View Schedule"
+          >
+            📅 Schedule
+          </button>
           <button
             onClick={() => onEdit(room)}
             onMouseEnter={() => setEditHovered(true)}
@@ -105,6 +127,41 @@ function RoomCard({
             title="Delete"
           >
             ✕
+          </button>
+        </div>
+      )}
+      {!isAdmin && (
+        <div
+          style={{
+            position: "absolute",
+            top: 10,
+            right: 10,
+            opacity: hovered ? 1 : 0,
+            transform: hovered ? "translateY(0px)" : "translateY(-4px)",
+            transition: "opacity 0.2s ease, transform 0.2s ease",
+            pointerEvents: hovered ? "auto" : "none",
+          }}
+        >
+          <button
+            onClick={() => onViewSchedule(room)}
+            onMouseEnter={() => setViewHovered(true)}
+            onMouseLeave={() => setViewHovered(false)}
+            style={{
+              background: viewHovered ? "var(--accent)" : "var(--surface3)",
+              border: `1px solid ${viewHovered ? "var(--accent)" : "var(--border)"}`,
+              color: viewHovered ? "#fff" : "var(--text2)",
+              cursor: "pointer",
+              fontSize: 11,
+              fontWeight: 500,
+              lineHeight: 1,
+              padding: "4px 8px",
+              borderRadius: 5,
+              whiteSpace: "nowrap",
+              transition: "background 0.15s, border-color 0.15s, color 0.15s",
+            }}
+            title="View Schedule"
+          >
+            📅 Schedule
           </button>
         </div>
       )}
@@ -176,6 +233,7 @@ export default function RoomsPage() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [page, setPage] = useState(1);
+  const [viewScheduleRoom, setViewScheduleRoom] = useState(null);
 
   const fetchRooms = useCallback(async () => {
     try {
@@ -514,6 +572,7 @@ export default function RoomsPage() {
                   getWingLabel={getWingLabel}
                   onEdit={openEditModal}
                   onDelete={setDeleteTarget}
+                  onViewSchedule={setViewScheduleRoom}
                   getRoomCapacityLimit={getRoomCapacityLimit}
                   normalizeRoomType={normalizeRoomType}
                   sanitizeRoomCapacity={sanitizeRoomCapacity}
@@ -659,6 +718,13 @@ export default function RoomsPage() {
         onConfirm={handleClearRoomsConfirm}
         onClose={() => setShowClearConfirm(false)}
       />
+
+      {viewScheduleRoom && (
+        <RoomScheduleModal
+          room={viewScheduleRoom}
+          onClose={() => setViewScheduleRoom(null)}
+        />
+      )}
     </div>
   );
 }

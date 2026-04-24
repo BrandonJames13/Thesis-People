@@ -146,7 +146,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
   const {
     rooms,
     availableSubjects,
-    subjectSections,        // FIX: all sections (not just unscheduled ones)
+    subjectSections, // FIX: all sections (not just unscheduled ones)
     availableSections,
     availableRooms,
     availableInstructors,
@@ -212,9 +212,8 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     // After a full generation, every section is in assignedSectionKeys so
     // availableSections becomes empty → sectionRows = 0 → generation fails.
     // The scheduler itself handles existing assignments via scheduleAssignments.
-    const allSectionsForGeneration = subjectSections.length > 0
-      ? subjectSections
-      : availableSections;
+    const allSectionsForGeneration =
+      subjectSections.length > 0 ? subjectSections : availableSections;
     allSectionsForGeneration.forEach((section) => {
       const subject = subjectByCode.get(section.subjectCode) ?? {};
       const sectionKey = getAssignmentIdentityKey(section);
@@ -295,7 +294,12 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     });
 
     return rows;
-  }, [availableSubjects, subjectSections, availableSections, scheduleAssignments]);
+  }, [
+    availableSubjects,
+    subjectSections,
+    availableSections,
+    scheduleAssignments,
+  ]);
 
   const sectionRowsByIdentity = useMemo(
     () =>
@@ -638,7 +642,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
       if (onRunComplete) onRunComplete();
       onClose();
-      showNotification(result.message, { noConfetti: true });
+      showNotification(result.message, { noGears: true });
     } finally {
       if (isMountedRef.current) {
         setIsGenerating(false);
@@ -673,7 +677,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
       setPendingAssignments(null);
       showNotification(
         "Schedule saved to database with conflicts for manual review",
-        { noConfetti: true },
+        { noGears: true },
       );
 
       if (onRunComplete) onRunComplete();
@@ -845,7 +849,7 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
 
     try {
       await updateScheduleAssignments(result.scheduleAssignments);
-      showNotification("Assignment saved to database", { noConfetti: true });
+      showNotification("Assignment saved to database", { noGears: true });
     } catch (persistError) {
       showNotification(`⚠ Failed to save assignment: ${persistError.message}`);
       return;
@@ -858,14 +862,14 @@ export default function ScheduleModal({ onClose, onRunComplete }) {
     if (movedCount > 0) {
       showNotification(
         `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved. Relocated ${movedCount} conflicted assignment${movedCount > 1 ? "s" : ""}.`,
-        { noConfetti: true },
+        { noGears: true },
       );
       return;
     }
 
     showNotification(
       `${toSave.length} assignment${toSave.length > 1 ? "s" : ""} saved!`,
-      { noConfetti: true },
+      { noGears: true },
     );
   };
 

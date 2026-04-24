@@ -2,80 +2,216 @@ import { useEffect, useRef } from "react";
 import styles from "./Notification.module.css";
 import { useNotification } from "../../context/NotificationContext";
 
-function spawnConfetti(canvas) {
+function drawGearShape(ctx, x, y, outerR, innerR, teeth, rotation) {
+  const toothAngle = (Math.PI * 2) / teeth;
+  ctx.beginPath();
+  for (let i = 0; i < teeth; i++) {
+    const a0 = rotation + i * toothAngle - toothAngle * 0.2;
+    const a1 = rotation + i * toothAngle + toothAngle * 0.2;
+    const a2 = rotation + i * toothAngle + toothAngle * 0.5;
+    const a3 = rotation + i * toothAngle + toothAngle * 0.7;
+    if (i === 0)
+      ctx.moveTo(x + Math.cos(a0) * innerR, y + Math.sin(a0) * innerR);
+    else ctx.lineTo(x + Math.cos(a0) * innerR, y + Math.sin(a0) * innerR);
+    ctx.lineTo(x + Math.cos(a0) * outerR, y + Math.sin(a0) * outerR);
+    ctx.lineTo(x + Math.cos(a1) * outerR, y + Math.sin(a1) * outerR);
+    ctx.lineTo(x + Math.cos(a1) * innerR, y + Math.sin(a1) * innerR);
+    ctx.lineTo(x + Math.cos(a2) * innerR, y + Math.sin(a2) * innerR);
+    ctx.lineTo(x + Math.cos(a3) * innerR, y + Math.sin(a3) * innerR);
+  }
+  ctx.closePath();
+}
+
+function spawnGears(canvas) {
   const ctx = canvas.getContext("2d");
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
-  const W = canvas.width,
-    H = canvas.height;
-  const COLORS = [
-    "#3fb950",
-    "#2f81f7",
-    "#bc8cff",
-    "#f0c500",
-    "#ff7b7b",
-    "#00d4aa",
-    "#ff9f43",
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Anchor point: just above the toast (bottom-right area)
+  const ax = W - 175;
+  const ay = H - 115;
+
+  // Many gears: xs, xs, sm, sm, md, md, lg, xl — outline only, transparent fill
+  // dir: 1 = clockwise, -1 = counter-clockwise
+  const gears = [
+    // xl anchor gear
+    {
+      x: ax + 115,
+      y: ay + 10,
+      outerR: 34,
+      innerR: 23,
+      holeR: 8,
+      teeth: 13,
+      speed: 0.012,
+      dir: 1,
+    },
+    // large
+    {
+      x: ax + 58,
+      y: ay + 5,
+      outerR: 26,
+      innerR: 17,
+      holeR: 6,
+      teeth: 10,
+      speed: 0.018,
+      dir: -1,
+    },
+    // medium
+    {
+      x: ax + 10,
+      y: ay - 10,
+      outerR: 20,
+      innerR: 13,
+      holeR: 5,
+      teeth: 8,
+      speed: 0.024,
+      dir: 1,
+    },
+    {
+      x: ax + 155,
+      y: ay - 18,
+      outerR: 22,
+      innerR: 14,
+      holeR: 6,
+      teeth: 9,
+      speed: 0.021,
+      dir: -1,
+    },
+    // small
+    {
+      x: ax - 25,
+      y: ay + 8,
+      outerR: 14,
+      innerR: 9,
+      holeR: 4,
+      teeth: 6,
+      speed: 0.034,
+      dir: -1,
+    },
+    {
+      x: ax + 185,
+      y: ay + 8,
+      outerR: 15,
+      innerR: 10,
+      holeR: 4,
+      teeth: 6,
+      speed: 0.031,
+      dir: 1,
+    },
+    // xs
+    {
+      x: ax - 45,
+      y: ay - 10,
+      outerR: 9,
+      innerR: 6,
+      holeR: 3,
+      teeth: 5,
+      speed: 0.052,
+      dir: 1,
+    },
+    {
+      x: ax + 32,
+      y: ay - 28,
+      outerR: 8,
+      innerR: 5,
+      holeR: 2,
+      teeth: 5,
+      speed: 0.058,
+      dir: -1,
+    },
+    {
+      x: ax + 88,
+      y: ay - 32,
+      outerR: 9,
+      innerR: 6,
+      holeR: 3,
+      teeth: 5,
+      speed: 0.055,
+      dir: 1,
+    },
+    {
+      x: ax + 140,
+      y: ay - 40,
+      outerR: 7,
+      innerR: 5,
+      holeR: 2,
+      teeth: 4,
+      speed: 0.065,
+      dir: -1,
+    },
+    {
+      x: ax + 200,
+      y: ay - 15,
+      outerR: 8,
+      innerR: 5,
+      holeR: 2,
+      teeth: 5,
+      speed: 0.06,
+      dir: 1,
+    },
   ];
-  const SHAPES = ["rect", "circle", "ribbon"];
-  const particles = Array.from({ length: 110 }, () => {
-    const angle = (Math.random() * 60 - 30) * (Math.PI / 180);
-    const speed = 6 + Math.random() * 7;
-    return {
-      x: W - 60 - Math.random() * 200,
-      y: H - 60,
-      vx: -Math.cos(angle) * speed * (0.5 + Math.random()),
-      vy: -(speed + Math.random() * 5),
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      shape: SHAPES[Math.floor(Math.random() * SHAPES.length)],
-      w: 6 + Math.random() * 8,
-      h: 4 + Math.random() * 5,
-      r: 0,
-      dr: (Math.random() - 0.5) * 0.25,
-      gravity: 0.18 + Math.random() * 0.1,
-      alpha: 1,
-    };
-  });
+
+  const STROKE_COLOR = "#3fb950";
+
+  let rotation = 0;
   let frame;
+  let elapsed = 0;
+  const FADE_IN = 35;
+  const HOLD = 110;
+  const FADE_OUT = 45;
+
   function draw() {
+    elapsed++;
     ctx.clearRect(0, 0, W, H);
-    let alive = false;
-    particles.forEach((p) => {
-      if (p.alpha <= 0) return;
-      alive = true;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += p.gravity;
-      p.vx *= 0.99;
-      p.r += p.dr;
-      if (p.y > H - 40) p.alpha -= 0.04;
-      else if (p.vy > 0 && p.y > H * 0.6) p.alpha -= 0.012;
+
+    let alpha;
+    if (elapsed <= FADE_IN) {
+      alpha = elapsed / FADE_IN;
+    } else if (elapsed <= FADE_IN + HOLD) {
+      alpha = 1;
+    } else if (elapsed <= FADE_IN + HOLD + FADE_OUT) {
+      alpha = 1 - (elapsed - FADE_IN - HOLD) / FADE_OUT;
+    } else {
+      ctx.clearRect(0, 0, W, H);
+      return;
+    }
+
+    rotation += 0.018;
+
+    gears.forEach((g) => {
+      const angle = rotation * (g.speed / 0.018) * g.dir;
+
       ctx.save();
-      ctx.globalAlpha = Math.max(0, p.alpha);
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.r);
-      ctx.fillStyle = p.color;
-      if (p.shape === "circle") {
-        ctx.beginPath();
-        ctx.arc(0, 0, p.w / 2, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (p.shape === "ribbon") {
-        ctx.beginPath();
-        ctx.moveTo(-p.w, 0);
-        ctx.bezierCurveTo(-p.w / 2, -p.h, p.w / 2, p.h, p.w, 0);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = p.color;
-        ctx.stroke();
-      } else {
-        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-      }
+      ctx.globalAlpha = alpha;
+
+      // Gear body — transparent fill, green outline only
+      drawGearShape(ctx, g.x, g.y, g.outerR, g.innerR, g.teeth, angle);
+      ctx.fillStyle = "transparent";
+      ctx.fill();
+      ctx.strokeStyle = STROKE_COLOR;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // Center hole — outline only
+      ctx.beginPath();
+      ctx.arc(g.x, g.y, g.holeR, 0, Math.PI * 2);
+      ctx.strokeStyle = STROKE_COLOR;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
       ctx.restore();
     });
-    if (alive) frame = requestAnimationFrame(draw);
-    else ctx.clearRect(0, 0, W, H);
+
+    frame = requestAnimationFrame(draw);
   }
+
   draw();
-  return () => cancelAnimationFrame(frame);
+  return () => {
+    cancelAnimationFrame(frame);
+    ctx.clearRect(0, 0, W, H);
+  };
 }
 
 function spawnShatter(canvas, type) {
@@ -238,14 +374,14 @@ export default function Notification() {
     if (cleanupRef.current) cleanupRef.current();
     const canvas = canvasRef.current;
     if (canvas) {
-      if (notification.noConfetti) {
+      if (notification.noGears) {
         const ctx = canvas.getContext("2d");
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         cleanupRef.current = null;
       } else {
         cleanupRef.current =
           notification.type === "success"
-            ? spawnConfetti(canvas)
+            ? spawnGears(canvas)
             : spawnShatter(canvas, notification.type);
       }
     }

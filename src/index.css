@@ -1,20 +1,22 @@
 @import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
 
 :root {
-  --bg: #0d1117;
-  --surface: #161b22;
-  --surface2: #1c2333;
-  --surface3: #21262d;
-  --border: #30363d;
-  --accent: #2f81f7;
-  --accent2: #388bfd;
-  --green: #3fb950;
-  --red: #f85149;
-  --orange: #d29922;
-  --purple: #bc8cff;
-  --text: #e6edf3;
-  --text2: #8b949e;
-  --text3: #6e7681;
+  /* Color vars are injected dynamically by ThemeContext.jsx */
+  /* Fallback: Midnight dark theme */
+  --bg: #0e1018;
+  --surface: #161923;
+  --surface2: #1d2235;
+  --surface3: #242840;
+  --border: #2e3350;
+  --accent: #6c8ef7;
+  --accent2: #8aa3fa;
+  --green: #3ecf8e;
+  --red: #f66d6d;
+  --orange: #f0a04b;
+  --purple: #b987fa;
+  --text: #e8eaf6;
+  --text2: #8b90a8;
+  --text3: #565b78;
   --mono: "Space Mono", monospace;
   --sans: "DM Sans", sans-serif;
 }
@@ -36,21 +38,22 @@ body {
 }
 
 /* ============ LIGHT THEME ============ */
+/* Light mode fallback — actual values injected by ThemeContext */
 body.light {
-  --bg: #f6f8fa;
-  --surface: #fff;
-  --surface2: #f3f4f6;
-  --surface3: #eaecef;
-  --border: #d0d7de;
-  --accent: #2f81f7;
-  --accent2: #1750b1;
-  --green: #22863a;
-  --red: #cf222e;
-  --orange: #b08800;
-  --purple: #8250df;
-  --text: #24292f;
-  --text2: #57606a;
-  --text3: #8c959f;
+  --bg: #eef0f7;
+  --surface: #ffffff;
+  --surface2: #f4f5fb;
+  --surface3: #e8eaf4;
+  --border: #ced3e8;
+  --accent: #4361ee;
+  --accent2: #2744d4;
+  --green: #1a9e6e;
+  --red: #e03e3e;
+  --orange: #c97a1a;
+  --purple: #7c4ddb;
+  --text: #1e2235;
+  --text2: #4a5070;
+  --text3: #7c84a8;
 }
 
 /* Smooth theme transition */
@@ -199,11 +202,19 @@ main {
   overflow: hidden;
   transition:
     border-color 0.2s,
-    transform 0.2s;
+    transform 0.2s,
+    box-shadow 0.2s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+body.light .stat-card {
+  box-shadow:
+    0 1px 3px rgba(80, 90, 160, 0.05),
+    0 4px 12px rgba(80, 90, 160, 0.04);
 }
 .stat-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
 }
 .stat-card::before {
   content: "";
@@ -272,6 +283,12 @@ main {
   border-radius: 10px;
   overflow: hidden;
   margin-bottom: 20px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+body.light .card {
+  box-shadow:
+    0 1px 3px rgba(80, 90, 160, 0.05),
+    0 4px 16px rgba(80, 90, 160, 0.04);
 }
 .card-header {
   padding: 14px 20px;
@@ -318,8 +335,11 @@ tr:last-child td {
   border-bottom: none;
 }
 tr:hover td {
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
+}
+body.light tr:hover td {
+  background: rgba(0, 0, 0, 0.02);
 }
 .monospace {
   font-family: var(--mono);
@@ -754,7 +774,9 @@ tr:hover td {
 .room-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.3),
+    0 0 0 1px var(--accent) 18;
 }
 .room-number {
   font-family: var(--mono);
