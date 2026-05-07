@@ -35,6 +35,10 @@ const navGroups = [
       { to: "/analytics", icon: "📊", label: "Analytics", adminOnly: true },
     ],
   },
+  {
+    section: "Help",
+    items: [{ to: "/user-guide", icon: "📖", label: "User Guide" }],
+  },
 ];
 
 export default function Sidebar() {

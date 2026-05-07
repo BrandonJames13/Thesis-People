@@ -17,6 +17,7 @@ import FacultyPage from "./pages/FacultyPage";
 import AlgorithmPage from "./pages/AlgorithmPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import UserManagementPage from "./pages/UserManagementPage";
+import UserGuidePage from "./pages/UserGuidePage";
 
 export default function App() {
   return (
@@ -41,6 +42,7 @@ export default function App() {
                         <Route path="/analytics" element={<AnalyticsPage />} />
                         <Route path="/users" element={<UserManagementPage />} />
                       </Route>
+                      <Route path="/user-guide" element={<UserGuidePage />} />
                     </Route>
                   </Route>
                   <Route path="*" element={<Navigate to="/" replace />} />
