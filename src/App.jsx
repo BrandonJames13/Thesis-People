@@ -17,7 +17,7 @@ import FacultyPage from "./pages/FacultyPage";
 import AlgorithmPage from "./pages/AlgorithmPage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import UserManagementPage from "./pages/UserManagementPage";
-import UserGuidePage from "./pages/UserGuidePage";
+import UserGuidePage from "./pages/Userguidepage";
 
 export default function App() {
   return (

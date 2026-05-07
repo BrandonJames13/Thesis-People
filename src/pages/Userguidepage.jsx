@@ -1,4 +1,4 @@
-import UserGuidePage from "./pages/Userguidepage";
+import styles from "./UserGuidePage.module.css";
 
 // ── Small reusable pieces ──────────────────────────────────────────────────
 
