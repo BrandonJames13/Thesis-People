@@ -42,6 +42,22 @@ export const PALETTES = [
     preview: ["#150b05", "#1e1008", "#ff6b35", "#ffc857"],
   },
   {
+    id: "aurora-dark",
+    name: "Aurora",
+    mode: "dark",
+    description: "Northern lights, icy glow",
+    accent: "#00e5cc",
+    preview: ["#080e1a", "#0d1630", "#00e5cc", "#a78bfa"],
+  },
+  {
+    id: "crimson-dark",
+    name: "Crimson",
+    mode: "dark",
+    description: "Bold red, dark steel",
+    accent: "#ef4444",
+    preview: ["#0f0a0a", "#1c1010", "#ef4444", "#fb923c"],
+  },
+  {
     id: "default-light",
     name: "Slate",
     mode: "light",
@@ -64,6 +80,22 @@ export const PALETTES = [
     description: "Warm white, deep rose",
     accent: "#d63884",
     preview: ["#fdf0f3", "#fff5f8", "#d63884", "#0d8a54"],
+  },
+  {
+    id: "mint-fresh",
+    name: "Mint Fresh",
+    mode: "light",
+    description: "Crisp white, fresh teal",
+    accent: "#0d9488",
+    preview: ["#f0fdfa", "#ffffff", "#0d9488", "#6366f1"],
+  },
+  {
+    id: "lavender-light",
+    name: "Lavender",
+    mode: "light",
+    description: "Soft purple, airy white",
+    accent: "#7c3aed",
+    preview: ["#f5f3ff", "#ffffff", "#7c3aed", "#db2777"],
   },
 ];
 
@@ -148,6 +180,38 @@ export const PALETTE_VARS = {
     "--text2": "#c4906a",
     "--text3": "#7a5438",
   },
+  "aurora-dark": {
+    "--bg": "#080e1a",
+    "--surface": "#0b1225",
+    "--surface2": "#0d1630",
+    "--surface3": "#111e3d",
+    "--border": "#1a2d50",
+    "--accent": "#00e5cc",
+    "--accent2": "#33edd9",
+    "--green": "#34d399",
+    "--red": "#f87171",
+    "--orange": "#fb923c",
+    "--purple": "#a78bfa",
+    "--text": "#e0f2fe",
+    "--text2": "#7ab4cc",
+    "--text3": "#3d6880",
+  },
+  "crimson-dark": {
+    "--bg": "#0f0a0a",
+    "--surface": "#160d0d",
+    "--surface2": "#1c1010",
+    "--surface3": "#231414",
+    "--border": "#3a1a1a",
+    "--accent": "#ef4444",
+    "--accent2": "#f87171",
+    "--green": "#4ade80",
+    "--red": "#ff6b6b",
+    "--orange": "#fb923c",
+    "--purple": "#c084fc",
+    "--text": "#fef2f2",
+    "--text2": "#c4908a",
+    "--text3": "#7a5058",
+  },
   "default-light": {
     "--bg": "#eef0f7",
     "--surface": "#ffffff",
@@ -196,92 +260,184 @@ export const PALETTE_VARS = {
     "--text2": "#7a3858",
     "--text3": "#b07090",
   },
+  "mint-fresh": {
+    "--bg": "#f0fdfa",
+    "--surface": "#ffffff",
+    "--surface2": "#f0fdf9",
+    "--surface3": "#ccfbf1",
+    "--border": "#99f6e4",
+    "--accent": "#0d9488",
+    "--accent2": "#0f766e",
+    "--green": "#059669",
+    "--red": "#dc2626",
+    "--orange": "#d97706",
+    "--purple": "#6366f1",
+    "--text": "#134e4a",
+    "--text2": "#2d6b65",
+    "--text3": "#5eaba3",
+  },
+  "lavender-light": {
+    "--bg": "#f5f3ff",
+    "--surface": "#ffffff",
+    "--surface2": "#faf5ff",
+    "--surface3": "#ede9fe",
+    "--border": "#ddd6fe",
+    "--accent": "#7c3aed",
+    "--accent2": "#6d28d9",
+    "--green": "#059669",
+    "--red": "#dc2626",
+    "--orange": "#d97706",
+    "--purple": "#db2777",
+    "--text": "#1e1b4b",
+    "--text2": "#4c3d8f",
+    "--text3": "#7c6fba",
+  },
 };
 
 const ThemeContext = createContext();
 
-export function ThemeProvider({ children }) {
-  const [paletteId, setPaletteId] = useState(() => {
-    try {
-      return localStorage.getItem("paletteId") || "default-dark";
-    } catch {
-      return "default-dark";
-    }
-  });
+function applyDisplayPrefs({ fontSize, density, animationsEnabled }) {
+  const el = document.documentElement;
 
-  // Remember the last chosen palette per mode so the toggle can restore it
-  const [lastDarkId, setLastDarkId] = useState(() => {
+  // Font size → CSS vars used across the app
+  const fontMap = {
+    small: { base: "12px", sm: "11px", xs: "10px", lg: "14px", xl: "18px" },
+    medium: { base: "13px", sm: "12px", xs: "11px", lg: "16px", xl: "20px" },
+    large: { base: "15px", sm: "13px", xs: "12px", lg: "18px", xl: "24px" },
+  };
+  const f = fontMap[fontSize] ?? fontMap.medium;
+  el.style.setProperty("--font-base", f.base);
+  el.style.setProperty("--font-sm", f.sm);
+  el.style.setProperty("--font-xs", f.xs);
+  el.style.setProperty("--font-lg", f.lg);
+  el.style.setProperty("--font-xl", f.xl);
+
+  // Density → spacing vars
+  const densityMap = {
+    compact: { pad: "16px", gap: "10px", pagePad: "18px" },
+    comfortable: { pad: "24px", gap: "16px", pagePad: "28px" },
+    spacious: { pad: "32px", gap: "24px", pagePad: "40px" },
+  };
+  const d = densityMap[density] ?? densityMap.comfortable;
+  el.style.setProperty("--spacing-pad", d.pad);
+  el.style.setProperty("--spacing-gap", d.gap);
+  el.style.setProperty("--page-pad", d.pagePad);
+
+  // Animations
+  const speed = animationsEnabled ? "0.15s" : "0s";
+  const speedSlow = animationsEnabled ? "0.4s" : "0s";
+  el.style.setProperty("--transition-speed", speed);
+  el.style.setProperty("--transition-slow", speedSlow);
+  document.body.setAttribute(
+    "data-animations",
+    animationsEnabled ? "on" : "off",
+  );
+}
+
+export function ThemeProvider({ children }) {
+  const load = (key, fallback) => {
     try {
-      return localStorage.getItem("lastDarkId") || "default-dark";
+      return localStorage.getItem(key) ?? fallback;
     } catch {
-      return "default-dark";
+      return fallback;
     }
-  });
-  const [lastLightId, setLastLightId] = useState(() => {
+  };
+  const loadBool = (key, fallback) => {
     try {
-      return localStorage.getItem("lastLightId") || "default-light";
+      const v = localStorage.getItem(key);
+      return v === null ? fallback : v === "true";
     } catch {
-      return "default-light";
+      return fallback;
     }
-  });
+  };
+
+  const [paletteId, setPaletteIdRaw] = useState(() =>
+    load("paletteId", "default-dark"),
+  );
+  const [darkPaletteId, setDarkPaletteId] = useState(() =>
+    load("darkPaletteId", "default-dark"),
+  );
+  const [lightPaletteId, setLightPaletteId] = useState(() =>
+    load("lightPaletteId", "default-light"),
+  );
+  const [fontSize, setFontSize] = useState(() => load("fontSize", "medium"));
+  const [density, setDensity] = useState(() => load("density", "comfortable"));
+  const [sidebarStyle, setSidebarStyle] = useState(() =>
+    load("sidebarStyle", "full"),
+  );
+  const [animationsEnabled, setAnimationsEnabled] = useState(() =>
+    loadBool("animationsEnabled", true),
+  );
 
   const palette = PALETTES.find((p) => p.id === paletteId) ?? PALETTES[0];
   const theme = palette.mode;
 
-  // Wrapped setter: also tracks last-used per mode
   const applyPalette = (id) => {
     const p = PALETTES.find((x) => x.id === id);
     if (!p) return;
-    setPaletteId(id);
-    if (p.mode === "dark") {
-      setLastDarkId(id);
-      try {
-        localStorage.setItem("lastDarkId", id);
-      } catch {
-        /* ignore */
-      }
-    } else {
-      setLastLightId(id);
-      try {
-        localStorage.setItem("lastLightId", id);
-      } catch {
-        /* ignore */
-      }
-    }
+    setPaletteIdRaw(id);
+    try {
+      localStorage.setItem("paletteId", id);
+    } catch {}
   };
 
+  // Apply palette color vars + body.light class
   useEffect(() => {
     const vars = PALETTE_VARS[paletteId] ?? PALETTE_VARS["default-dark"];
-
-    // ── KEY FIX ──────────────────────────────────────────────────────────────
-    // Apply vars to document.body, NOT document.documentElement (:root).
-    // index.css has `body.light { --bg: ... }` which has HIGHER specificity
-    // than :root, so it was overriding JS-injected :root vars for light themes.
-    // Setting vars directly on body.style beats both :root AND body.light rules.
-    // ─────────────────────────────────────────────────────────────────────────
-    const el = document.body;
-    Object.entries(vars).forEach(([key, val]) => {
-      el.style.setProperty(key, val);
-    });
-
-    // Keep .light class for any remaining mode-based CSS (shadows, table hover)
-    el.classList.toggle("light", theme === "light");
-
+    Object.entries(vars).forEach(([key, val]) =>
+      document.body.style.setProperty(key, val),
+    );
+    document.body.classList.toggle("light", theme === "light");
     try {
-      localStorage.setItem("paletteId", paletteId);
       localStorage.setItem("theme", theme);
-    } catch {
-      /* ignore */
-    }
+    } catch {}
   }, [paletteId, theme]);
 
-  // Toggle: flips mode and restores the last-used palette for that mode
+  // Apply display prefs whenever any of them change
+  useEffect(() => {
+    applyDisplayPrefs({ fontSize, density, animationsEnabled });
+    try {
+      localStorage.setItem("fontSize", fontSize);
+      localStorage.setItem("density", density);
+      localStorage.setItem("animationsEnabled", String(animationsEnabled));
+    } catch {}
+  }, [fontSize, density, animationsEnabled]);
+
+  // Sidebar style persistence
+  useEffect(() => {
+    try {
+      localStorage.setItem("sidebarStyle", sidebarStyle);
+    } catch {}
+  }, [sidebarStyle]);
+
+  // Bulk save from settings modal — nothing applies until Save is clicked
+  const savePrefs = ({
+    darkPaletteId: dp,
+    lightPaletteId: lp,
+    fontSize: fs,
+    density: dn,
+    sidebarStyle: ss,
+    animationsEnabled: ae,
+  }) => {
+    try {
+      localStorage.setItem("darkPaletteId", dp);
+      localStorage.setItem("lightPaletteId", lp);
+    } catch {}
+    setDarkPaletteId(dp);
+    setLightPaletteId(lp);
+    setFontSize(fs);
+    setDensity(dn);
+    setSidebarStyle(ss);
+    setAnimationsEnabled(ae);
+    const currentMode = (
+      PALETTES.find((p) => p.id === paletteId) ?? PALETTES[0]
+    ).mode;
+    applyPalette(currentMode === "dark" ? dp : lp);
+  };
+
   const toggleTheme = () => {
-    if (theme === "dark") {
-      applyPalette(lastLightId);
-    } else {
-      applyPalette(lastDarkId);
-    }
+    if (theme === "dark") applyPalette(lightPaletteId);
+    else applyPalette(darkPaletteId);
   };
 
   return (
@@ -292,6 +448,13 @@ export function ThemeProvider({ children }) {
         paletteId,
         setPaletteId: applyPalette,
         palette,
+        darkPaletteId,
+        lightPaletteId,
+        fontSize,
+        density,
+        sidebarStyle,
+        animationsEnabled,
+        savePrefs,
       }}
     >
       {children}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useTheme } from "../../context/ThemeContext";
 import { useNotification } from "../../context/NotificationContext";
@@ -7,81 +7,6 @@ import Modal from "../common/Modal";
 import ThemeSettingsModal from "../modals/ThemeSettingsModal";
 import styles from "./Header.module.css";
 
-// ─── Drag-to-slide theme toggle ───────────────────────────────────────────────
-function ThemeToggle({ theme, toggleTheme }) {
-  const isDark = theme === "dark";
-
-  const TRACK_W = 64;
-  const THUMB_W = 24;
-  const MAX_DRAG = TRACK_W - THUMB_W - 4; // 4px = 2px padding each side
-
-  const [dragX, setDragX] = useState(null);
-  const [hasSwitched, setHasSwitched] = useState(false);
-  const startRef = useRef(null);
-
-  const baseOffset = isDark ? 0 : MAX_DRAG;
-  const thumbOffset =
-    dragX !== null ? Math.max(0, Math.min(MAX_DRAG, dragX)) : baseOffset;
-  const isDragging = dragX !== null;
-
-  const handlePointerDown = (e) => {
-    e.preventDefault();
-    e.currentTarget.setPointerCapture(e.pointerId);
-    startRef.current = { clientX: e.clientX, baseOffset };
-    setDragX(baseOffset);
-    setHasSwitched(false);
-  };
-
-  const handlePointerMove = (e) => {
-    if (startRef.current === null) return;
-    const delta = e.clientX - startRef.current.clientX;
-    const next = Math.max(
-      0,
-      Math.min(MAX_DRAG, startRef.current.baseOffset + delta),
-    );
-    setDragX(next);
-
-    const midpoint = MAX_DRAG / 2;
-    const crossedToLight = next > midpoint && isDark && !hasSwitched;
-    const crossedToDark = next <= midpoint && !isDark && !hasSwitched;
-    if (crossedToLight || crossedToDark) {
-      setHasSwitched(true);
-      toggleTheme();
-    }
-  };
-
-  const handlePointerUp = (e) => {
-    if (startRef.current === null) return;
-    const totalDelta = Math.abs(e.clientX - startRef.current.clientX);
-    if (totalDelta < 4 && !hasSwitched) toggleTheme();
-    startRef.current = null;
-    setDragX(null);
-    setHasSwitched(false);
-  };
-
-  return (
-    <div className={styles.toggleTrack} data-dark={isDark}>
-      <span className={styles.toggleIconLeft}>🌙</span>
-      <span className={styles.toggleIconRight}>☀️</span>
-      <div
-        className={styles.toggleThumb}
-        style={{
-          transform: `translateX(${thumbOffset}px)`,
-          transition: isDragging
-            ? "none"
-            : "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
-          cursor: isDragging ? "grabbing" : "grab",
-        }}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-      />
-    </div>
-  );
-}
-
-// ─── Header ───────────────────────────────────────────────────────────────────
 export default function Header() {
   const { currentUser, logout, changePassword } = useAuth();
   const { theme, toggleTheme } = useTheme();
@@ -117,6 +42,7 @@ export default function Header() {
   };
 
   const isAdmin = currentUser?.role === "admin";
+  const isDark = theme === "dark";
 
   return (
     <header className={styles.header}>
@@ -129,22 +55,54 @@ export default function Header() {
       <div className={styles.headerRight}>
         <span className={styles.badge}>v1.0 · BETA</span>
 
+        {/* Dark/Light mode toggle — compact pill */}
+        <button
+          onClick={toggleTheme}
+          title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            background: "var(--surface3)",
+            border: "1px solid var(--border)",
+            borderRadius: 20,
+            color: "var(--text2)",
+            cursor: "pointer",
+            fontSize: 12,
+            fontWeight: 600,
+            padding: "4px 10px",
+            transition: "all 0.15s",
+            whiteSpace: "nowrap",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "var(--accent)";
+            e.currentTarget.style.color = "var(--accent)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.color = "var(--text2)";
+          }}
+        >
+          {isDark ? "🌙" : "☀️"} {isDark ? "Dark" : "Light"}
+        </button>
+
+        {/* Appearance settings button */}
         <button
           onClick={() => setThemeModalOpen(true)}
-          title="Appearance"
+          title="Appearance Settings"
           style={{
             background: "var(--surface3)",
             border: "1px solid var(--border)",
             borderRadius: 7,
             color: "var(--text2)",
             cursor: "pointer",
-            fontSize: 15,
+            fontSize: 14,
             width: 32,
             height: 32,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            transition: "background 0.15s, color 0.15s",
+            transition: "background 0.15s, color 0.15s, border-color 0.15s",
             flexShrink: 0,
           }}
           onMouseEnter={(e) => {
@@ -158,11 +116,10 @@ export default function Header() {
             e.currentTarget.style.borderColor = "var(--border)";
           }}
         >
-          🎨
+          ⚙️
         </button>
 
-        <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-
+        {/* User menu */}
         <div className={styles.userWrap} ref={menuRef}>
           <button
             className={styles.userTrigger}
@@ -219,25 +176,22 @@ export default function Header() {
                   </span>
                 </div>
               </div>
-
               <div className={styles.dropdownDivider} />
-
               <button className={styles.menuItem} onClick={openPwModal}>
-                <span className={styles.menuItemIcon}>🔑</span>
-                Change Password
+                <span className={styles.menuItemIcon}>🔑</span> Change Password
               </button>
               <button
                 className={`${styles.menuItem} ${styles.menuLogout}`}
                 onClick={logout}
               >
-                <span className={styles.menuItemIcon}>↩</span>
-                Logout
+                <span className={styles.menuItemIcon}>↩</span> Logout
               </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Change Password Modal */}
       <Modal
         isOpen={pwModalOpen}
         onClose={() => setPwModalOpen(false)}
@@ -292,6 +246,8 @@ export default function Header() {
           </button>
         </div>
       </Modal>
+
+      {/* Theme Settings Modal */}
       {themeModalOpen && (
         <ThemeSettingsModal onClose={() => setThemeModalOpen(false)} />
       )}

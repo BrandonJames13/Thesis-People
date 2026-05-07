@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
 import { useConflicts } from "../../context/ConflictContext";
 import { useAuth } from "../../context/AuthContext";
+import { useTheme } from "../../context/ThemeContext";
 import styles from "./Sidebar.module.css";
 
 const navGroups = [
@@ -39,6 +40,8 @@ const navGroups = [
 export default function Sidebar() {
   const { isAdmin } = useAuth();
   const { hardConflictCount } = useConflicts();
+  const { sidebarStyle } = useTheme();
+  const isIcons = sidebarStyle === "icons";
 
   const visibleNavItems = navGroups
     .map((group) => ({
@@ -48,23 +51,29 @@ export default function Sidebar() {
     .filter((group) => group.items.length > 0);
 
   return (
-    <nav className={styles.nav}>
+    <nav className={`${styles.nav} ${isIcons ? styles.navIcons : ""}`}>
       {visibleNavItems.map((group) => (
         <div key={group.section}>
-          <div className={styles.section}>{group.section}</div>
+          {!isIcons && <div className={styles.section}>{group.section}</div>}
+          {isIcons && <div className={styles.sectionDivider} />}
           {group.items.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.to === "/"}
+              title={isIcons ? item.label : undefined}
               className={({ isActive }) =>
                 `${styles.navItem} ${isActive ? styles.active : ""}`
               }
             >
               <span className={styles.icon}>{item.icon}</span>
-              {item.label}
+              {!isIcons && item.label}
               {item.hasBadge && (
-                <span className={styles.badge}>{hardConflictCount}</span>
+                <span
+                  className={`${styles.badge} ${isIcons ? styles.badgeIcons : ""}`}
+                >
+                  {hardConflictCount}
+                </span>
               )}
             </NavLink>
           ))}

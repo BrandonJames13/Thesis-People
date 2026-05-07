@@ -19,6 +19,18 @@
   --text3: #565b78;
   --mono: "Space Mono", monospace;
   --sans: "DM Sans", sans-serif;
+
+  /* Display pref vars — injected by ThemeContext, fallbacks = "comfortable/medium" defaults */
+  --font-base: 13px;
+  --font-sm: 12px;
+  --font-xs: 10px;
+  --font-lg: 16px;
+  --font-xl: 20px;
+  --spacing-pad: 24px;
+  --spacing-gap: 16px;
+  --page-pad: 28px;
+  --transition-speed: 0.15s;
+  --transition-slow: 0.4s;
 }
 
 * {
@@ -31,6 +43,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--sans);
+  font-size: var(--font-base);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -69,9 +82,9 @@ header,
 nav,
 main {
   transition:
-    background 0.4s,
-    color 0.4s,
-    border-color 0.4s;
+    background var(--transition-slow, 0.4s),
+    color var(--transition-slow, 0.4s),
+    border-color var(--transition-slow, 0.4s);
 }
 
 /* ============ ANIMATIONS ============ */
@@ -145,11 +158,11 @@ main {
   gap: 7px;
   padding: 8px 16px;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: var(--font-sm, 13px);
   font-weight: 600;
   cursor: pointer;
   border: none;
-  transition: all 0.15s;
+  transition: all var(--transition-speed, 0.15s);
   font-family: var(--sans);
   white-space: nowrap;
 }
@@ -190,20 +203,20 @@ main {
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 16px;
+  gap: var(--spacing-gap, 16px);
   margin-bottom: 28px;
 }
 .stat-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 20px;
+  padding: var(--spacing-pad, 20px);
   position: relative;
   overflow: hidden;
   transition:
-    border-color 0.2s,
-    transform 0.2s,
-    box-shadow 0.2s;
+    border-color var(--transition-speed, 0.2s),
+    transform var(--transition-speed, 0.2s),
+    box-shadow var(--transition-speed, 0.2s);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
 }
 body.light .stat-card {
@@ -311,12 +324,12 @@ body.light .card {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--font-sm, 13px);
 }
 th {
   padding: 10px 16px;
   text-align: left;
-  font-size: 11px;
+  font-size: var(--font-xs, 11px);
   font-weight: 700;
   color: var(--text3);
   text-transform: uppercase;
@@ -910,10 +923,10 @@ body.light tr:hover td {
   border-radius: 6px;
   padding: 7px 12px;
   color: var(--text);
-  font-size: 13px;
+  font-size: var(--font-sm, 13px);
   font-family: var(--sans);
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-speed, 0.15s);
   width: 220px;
 }
 .search-input:focus {
@@ -941,13 +954,13 @@ select.search-input {
   gap: 16px;
 }
 .section-title {
-  font-size: 20px;
+  font-size: var(--font-xl, 20px);
   font-weight: 700;
   color: var(--text);
   letter-spacing: -0.3px;
 }
 .section-subtitle {
-  font-size: 13px;
+  font-size: var(--font-sm, 13px);
   color: var(--text2);
   margin-top: 3px;
 }
@@ -956,12 +969,12 @@ select.search-input {
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 340px;
-  gap: 20px;
+  gap: var(--spacing-gap, 20px);
 }
 
 /* ============ PAGE CONTAINER ============ */
 .page-container {
-  padding: 28px;
+  padding: var(--page-pad, 28px);
   animation: fadeIn 0.2s ease;
 }
 
