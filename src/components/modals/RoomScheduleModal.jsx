@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Document,
   Packer,
@@ -153,10 +153,10 @@ async function exportToDocx(schedules, room, docMeta) {
   const timeSlots = generateTimeSlots();
   const grid = buildGrid(schedules);
 
-  // Column widths (landscape Letter: 15840 - 2*720 margin = 14400 DXA content)
-  // Time col: 900, 6 day cols: (14400-900)/6 = 2250 each
+  // Column widths (portrait Letter: 12240 - 2*720 margin = 10800 DXA content)
+  // Time col: 900, 6 day cols: (10800-900)/6 = 1650 each
   const TIME_COL = 900;
-  const DAY_COL = 2250;
+  const DAY_COL = 1650;
   const colWidths = [TIME_COL, ...DAYS.map(() => DAY_COL)];
   const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 14400
 
@@ -429,7 +429,7 @@ async function exportToDocx(schedules, room, docMeta) {
             size: {
               width: 12240,
               height: 15840,
-              orientation: PageOrientation.LANDSCAPE,
+              orientation: PageOrientation.PORTRAIT,
             },
             margin: { top: 720, right: 720, bottom: 720, left: 720 },
           },
@@ -559,6 +559,8 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
     approvalTitle: "",
   });
   const [exporting, setExporting] = useState(false);
+  const [exportingJpg, setExportingJpg] = useState(false);
+  const previewRef = useRef(null);
 
   const handleExport = async () => {
     setExporting(true);
@@ -569,6 +571,30 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
       alert("Export failed. Please try again.");
     } finally {
       setExporting(false);
+    }
+  };
+
+  const handleExportJpg = async () => {
+    if (!previewRef.current) return;
+    setExportingJpg(true);
+    try {
+      const html2canvas = (
+        await import("https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.esm.js")
+      ).default;
+      const canvas = await html2canvas(previewRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: "#ffffff",
+      });
+      const link = document.createElement("a");
+      link.download = `${docMeta.roomLabel ?? room.number}_Schedule.jpg`;
+      link.href = canvas.toDataURL("image/jpeg", 0.95);
+      link.click();
+    } catch (err) {
+      console.error("[SchedulePreviewModal] JPG export failed:", err);
+      alert("JPG export failed. Please try again.");
+    } finally {
+      setExportingJpg(false);
     }
   };
 
@@ -643,7 +669,7 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
             📄 Export Schedule — {room.number}
           </div>
           <div style={{ fontSize: 12, color: "var(--text3)" }}>
-            Customize document fields, then export as Word (.docx)
+            Customize document fields, then export as Word (.docx) or JPG image
           </div>
         </div>
         <button
@@ -725,6 +751,7 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
         {/* Right: preview pane */}
         <div style={{ flex: 1, overflowX: "auto" }}>
           <div
+            ref={previewRef}
             style={{
               background: "#fff",
               color: "#111",
@@ -909,9 +936,17 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
           Cancel
         </button>
         <button
+          className="btn btn-secondary"
+          onClick={handleExportJpg}
+          disabled={exportingJpg || exporting}
+          style={{ minWidth: 130 }}
+        >
+          {exportingJpg ? "Exporting…" : "🖼 Export .jpg"}
+        </button>
+        <button
           className="btn btn-primary"
           onClick={handleExport}
-          disabled={exporting}
+          disabled={exporting || exportingJpg}
           style={{ minWidth: 130 }}
         >
           {exporting ? "Exporting…" : "⬇ Export .docx"}
