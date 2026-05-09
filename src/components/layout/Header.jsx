@@ -90,6 +90,7 @@ export default function Header() {
         <button
           onClick={() => setThemeModalOpen(true)}
           title="Appearance Settings"
+          data-tour="header-theme"
           style={{
             background: "var(--surface3)",
             border: "1px solid var(--border)",

@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import OnboardingTour from "../components/onboarding/OnboardingTour";
 import styles from "./UserGuidePage.module.css";
 
 // ── Small reusable pieces ──────────────────────────────────────────────────
@@ -61,6 +64,22 @@ function TableWrap({ children }) {
 // ── Main page ──────────────────────────────────────────────────────────────
 
 export default function UserGuidePage() {
+  const { currentUser } = useAuth();
+  const [showTour, setShowTour] = useState(false);
+
+  const handleRestartTour = () => {
+    if (currentUser) {
+      localStorage.removeItem(`tour_done_${currentUser.id ?? "guest"}`);
+    }
+    setShowTour(true);
+  };
+
+  const handleTourDone = () => {
+    if (currentUser) {
+      localStorage.setItem(`tour_done_${currentUser.id ?? "guest"}`, "true");
+    }
+    setShowTour(false);
+  };
   const sections = [
     { id: "overview", icon: "🗺", label: "Overview" },
     { id: "login", icon: "🔐", label: "Logging In" },
@@ -82,6 +101,8 @@ export default function UserGuidePage() {
 
   return (
     <div className={styles.shell}>
+      {showTour && <OnboardingTour onDone={handleTourDone} />}
+
       {/* ── SIDEBAR TOC ── */}
       <nav className={styles.toc}>
         <div className={styles.tocBrand}>
@@ -159,6 +180,25 @@ export default function UserGuidePage() {
             <span>·</span>
             <span>React + Supabase</span>
           </div>
+          <button
+            onClick={handleRestartTour}
+            style={{
+              marginTop: 20,
+              background: "var(--accent)",
+              border: "none",
+              color: "var(--bg, #1a0505)",
+              fontWeight: 700,
+              fontSize: 13,
+              padding: "9px 20px",
+              borderRadius: 8,
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 7,
+            }}
+          >
+            🎯 Restart Interactive Tour
+          </button>
         </div>
 
         {/* ── 01 OVERVIEW ── */}

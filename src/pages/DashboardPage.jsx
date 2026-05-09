@@ -218,7 +218,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="stats-grid">
+      <div className="stats-grid" data-tour="dashboard-stats">
         <div className="stat-card blue">
           <div className="stat-icon">🏫</div>
           <div className="stat-label">Total Rooms</div>
@@ -369,7 +369,7 @@ export default function DashboardPage() {
         {/* Side Panel */}
         <div className="side-panel">
           {/* Quick Actions */}
-          <div className="card">
+          <div className="card" data-tour="quick-actions">
             <div className="card-header">
               <div className="card-title">⚡ Quick Actions</div>
             </div>

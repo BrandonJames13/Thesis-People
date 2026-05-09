@@ -9,20 +9,32 @@ const navGroups = [
     section: "Main",
     items: [
       { to: "/", icon: "⊞", label: "Dashboard" },
-      { to: "/schedule", icon: "📆", label: "Schedule" },
+      {
+        to: "/schedule",
+        icon: "📆",
+        label: "Schedule",
+        tourId: "nav-schedule",
+      },
       {
         to: "/conflicts",
         icon: "⚠",
         label: "Conflicts",
         hasBadge: true,
         adminOnly: true,
+        tourId: "nav-conflicts",
       },
     ],
   },
   {
     section: "Management",
     items: [
-      { to: "/rooms", icon: "🏫", label: "Rooms", adminOnly: true },
+      {
+        to: "/rooms",
+        icon: "🏫",
+        label: "Rooms",
+        adminOnly: true,
+        tourId: "nav-rooms",
+      },
       { to: "/faculty", icon: "👤", label: "Faculty", adminOnly: true },
       { to: "/subjects", icon: "📚", label: "Subjects", adminOnly: true },
       { to: "/users", icon: "👑", label: "Users", adminOnly: true },
@@ -31,7 +43,13 @@ const navGroups = [
   {
     section: "System",
     items: [
-      { to: "/algorithm", icon: "⚙", label: "Algorithm", adminOnly: true },
+      {
+        to: "/algorithm",
+        icon: "⚙",
+        label: "Algorithm",
+        adminOnly: true,
+        tourId: "nav-algorithm",
+      },
       { to: "/analytics", icon: "📊", label: "Analytics", adminOnly: true },
     ],
   },
@@ -66,6 +84,7 @@ export default function Sidebar() {
               to={item.to}
               end={item.to === "/"}
               title={isIcons ? item.label : undefined}
+              data-tour={item.tourId}
               className={({ isActive }) =>
                 `${styles.navItem} ${isActive ? styles.active : ""}`
               }
