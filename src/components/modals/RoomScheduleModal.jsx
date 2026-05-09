@@ -12,6 +12,7 @@ import {
   BorderStyle,
   ShadingType,
   VerticalAlign,
+  VerticalMergeType,
   PageOrientation,
 } from "docx";
 import { saveAs } from "file-saver";
@@ -59,7 +60,7 @@ const STATUS_COLORS = {
 };
 
 // ---------------------------------------------------------------------------
-// Day-grid helpers for the print preview
+// Day-grid helpers
 // ---------------------------------------------------------------------------
 
 const DAYS = [
@@ -70,18 +71,16 @@ const DAYS = [
   "Friday",
   "Saturday",
 ];
-const DAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-// Map pattern → which day indices are active
 const PATTERN_DAY_MAP = {
-  MW: [0, 2], // Mon, Wed
-  TTH: [1, 3], // Tue, Thu
-  WF: [2, 4], // Wed, Fri
-  TF: [1, 4], // Tue, Fri
-  MWF: [0, 2, 4], // Mon, Wed, Fri
-  SAT: [5], // Sat
-  MTH: [0, 3], // Mon, Thu
-  TW: [1, 2], // Tue, Wed
+  MW: [0, 2],
+  TTH: [1, 3],
+  WF: [2, 4],
+  TF: [1, 4],
+  MWF: [0, 2, 4],
+  SAT: [5],
+  MTH: [0, 3],
+  TW: [1, 2],
   MTWTHF: [0, 1, 2, 3, 4],
 };
 
@@ -90,32 +89,9 @@ function getPatternDayIndices(pattern) {
   return PATTERN_DAY_MAP[pattern.toUpperCase()] ?? [];
 }
 
-// Build a map: dayIndex → time slot key → assignment
-function buildGrid(schedules) {
-  const grid = {}; // grid[dayIdx][slotKey] = assignment
-  DAYS.forEach((_, i) => {
-    grid[i] = {};
-  });
-
-  schedules.forEach((s) => {
-    const startMin = parseSqlTimeToMinutes(s.time_start);
-    const endMin = parseSqlTimeToMinutes(s.time_end);
-    if (!Number.isFinite(startMin)) return;
-    const slotKey = `${startMin}-${endMin ?? startMin + 60}`;
-    const dayIndices = getPatternDayIndices(s.pattern);
-    dayIndices.forEach((di) => {
-      grid[di][slotKey] = s;
-    });
-  });
-  return grid;
-}
-
-// Generate 30-min time slots from 7:00 AM to 9:00 PM
 function generateTimeSlots() {
   const slots = [];
-  for (let min = 7 * 60; min < 21 * 60; min += 30) {
-    slots.push(min);
-  }
+  for (let min = 7 * 60; min < 21 * 60; min += 30) slots.push(min);
   return slots;
 }
 
@@ -127,42 +103,67 @@ function formatMinTo12(min) {
   return `${hh}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
-// Pattern → pastel cell color (matching image style)
 const PATTERN_CELL_COLORS = {
-  MW: "#fde9a2",
-  TTH: "#d4edda",
-  WF: "#cce5ff",
-  TF: "#e2d9f3",
-  MWF: "#fde9a2",
-  SAT: "#f8d7da",
-  MTH: "#fff3cd",
-  default: "#e8f4fd",
+  MW: "fde9a2",
+  TTH: "d4edda",
+  WF: "cce5ff",
+  TF: "e2d9f3",
+  MWF: "fde9a2",
+  SAT: "f8d7da",
+  MTH: "fff3cd",
+  default: "e8f4fd",
 };
 
-function getCellColor(pattern) {
+function getCellColorHex(pattern) {
   return (
     PATTERN_CELL_COLORS[pattern?.toUpperCase()] ?? PATTERN_CELL_COLORS.default
   );
 }
 
+function getCellColor(pattern) {
+  return "#" + getCellColorHex(pattern);
+}
+
+// Build cellContent map: "di-slotMin" => { ...assignment, _spanRows } | "skip"
+function buildCellContent(schedules) {
+  const cellContent = {};
+  schedules.forEach((s) => {
+    const startMin = parseSqlTimeToMinutes(s.time_start);
+    const endMin = parseSqlTimeToMinutes(s.time_end);
+    if (!Number.isFinite(startMin)) return;
+    const end = Number.isFinite(endMin) ? endMin : startMin + 60;
+    const spanRows = Math.max(1, Math.round((end - startMin) / 30));
+    const dayIndices = getPatternDayIndices(s.pattern);
+    dayIndices.forEach((di) => {
+      cellContent[`${di}-${startMin}`] = { ...s, _spanRows: spanRows };
+      for (let m = startMin + 30; m < end; m += 30) {
+        cellContent[`${di}-${m}`] = "skip";
+      }
+    });
+  });
+  return cellContent;
+}
+
 // ---------------------------------------------------------------------------
-// Export to DOCX  (client-side via docx npm package loaded from CDN)
+// Export to DOCX with correct vertical row-spanning
 // ---------------------------------------------------------------------------
 
 async function exportToDocx(schedules, room, docMeta) {
   const timeSlots = generateTimeSlots();
-  const grid = buildGrid(schedules);
+  const cellContent = buildCellContent(schedules);
 
-  // Column widths (portrait Letter: 12240 - 2*720 margin = 10800 DXA content)
-  // Time col: 900, 6 day cols: (10800-900)/6 = 1650 each
-  const TIME_COL = 900;
-  const DAY_COL = 1650;
+  // Portrait: 8.5" x 11" = 12240 x 15840 twips, margins 720 each side
+  // Content width = 12240 - 1440 = 10800 twips
+  const TIME_COL = 800;
+  const DAY_COL = Math.floor((10800 - TIME_COL) / 6); // 1666 each
   const colWidths = [TIME_COL, ...DAYS.map(() => DAY_COL)];
-  const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 14400
+  const tableWidth = colWidths.reduce((a, b) => a + b, 0);
 
   const thinBorder = { style: BorderStyle.SINGLE, size: 4, color: "CCCCCC" };
   const thickBorder = { style: BorderStyle.SINGLE, size: 8, color: "999999" };
-  const borders = {
+  const noBorder = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+
+  const allBorders = {
     top: thinBorder,
     bottom: thinBorder,
     left: thinBorder,
@@ -175,52 +176,38 @@ async function exportToDocx(schedules, room, docMeta) {
     right: thickBorder,
   };
 
-  // Build table rows
   const rows = [];
 
-  // Header row: Time | Mon | Tue | ...
+  // ── Header row ────────────────────────────────────────────────────────────
   rows.push(
     new TableRow({
       tableHeader: true,
+      height: { value: 360, rule: "exact" },
       children: [
         new TableCell({
           width: { size: TIME_COL, type: WidthType.DXA },
           borders: headerBorders,
           shading: { fill: "4472C4", type: ShadingType.CLEAR },
           verticalAlign: VerticalAlign.CENTER,
-          margins: { top: 60, bottom: 60, left: 80, right: 80 },
-          children: [
-            new Paragraph({
-              alignment: AlignmentType.CENTER,
-              children: [
-                new TextRun({
-                  text: "",
-                  bold: true,
-                  color: "FFFFFF",
-                  size: 16,
-                  font: "Arial",
-                }),
-              ],
-            }),
-          ],
+          children: [new Paragraph({ children: [] })],
         }),
         ...DAYS.map(
-          (day, i) =>
+          (day) =>
             new TableCell({
               width: { size: DAY_COL, type: WidthType.DXA },
               borders: headerBorders,
               shading: { fill: "4472C4", type: ShadingType.CLEAR },
               verticalAlign: VerticalAlign.CENTER,
-              margins: { top: 60, bottom: 60, left: 80, right: 80 },
+              margins: { top: 40, bottom: 40, left: 60, right: 60 },
               children: [
                 new Paragraph({
                   alignment: AlignmentType.CENTER,
                   children: [
                     new TextRun({
-                      text: day,
+                      text: day.toUpperCase(),
                       bold: true,
                       color: "FFFFFF",
-                      size: 16,
+                      size: 14,
                       font: "Arial",
                     }),
                   ],
@@ -232,46 +219,26 @@ async function exportToDocx(schedules, room, docMeta) {
     }),
   );
 
-  // Build a set of occupied (dayIdx, slotKey) pairs to skip merged cells
-  // For simplicity: each assignment spans from start to end slot
-  const cellContent = {}; // "dayIdx-slotMin" => assignment | null | "skip"
-
-  schedules.forEach((s) => {
-    const startMin = parseSqlTimeToMinutes(s.time_start);
-    const endMin = parseSqlTimeToMinutes(s.time_end);
-    if (!Number.isFinite(startMin)) return;
-    const end = Number.isFinite(endMin) ? endMin : startMin + 60;
-    const dayIndices = getPatternDayIndices(s.pattern);
-    dayIndices.forEach((di) => {
-      // Mark start cell with assignment
-      cellContent[`${di}-${startMin}`] = s;
-      // Mark subsequent slots as "skip"
-      for (let m = startMin + 30; m < end; m += 30) {
-        cellContent[`${di}-${m}`] = "skip";
-      }
-    });
-  });
-
-  // Data rows
-  timeSlots.forEach((slotMin, rowIdx) => {
+  // ── Data rows — one per 30-min slot ──────────────────────────────────────
+  timeSlots.forEach((slotMin) => {
     const isHour = slotMin % 60 === 0;
 
     const timeCell = new TableCell({
       width: { size: TIME_COL, type: WidthType.DXA },
-      borders,
+      borders: allBorders,
       shading: { fill: isHour ? "F2F2F2" : "FAFAFA", type: ShadingType.CLEAR },
       verticalAlign: VerticalAlign.CENTER,
-      margins: { top: 40, bottom: 40, left: 60, right: 60 },
+      margins: { top: 20, bottom: 20, left: 40, right: 40 },
       children: [
         new Paragraph({
           alignment: AlignmentType.RIGHT,
           children: [
             new TextRun({
               text: formatMinTo12(slotMin),
-              size: 14,
+              size: isHour ? 13 : 11,
               bold: isHour,
               font: "Arial",
-              color: "444444",
+              color: isHour ? "444444" : "AAAAAA",
             }),
           ],
         }),
@@ -282,29 +249,36 @@ async function exportToDocx(schedules, room, docMeta) {
       const key = `${di}-${slotMin}`;
       const cell = cellContent[key];
 
+      // "skip" = this slot is covered by a rowspan from a cell above
+      // Use VerticalMergeType.CONTINUE to continue the merge
       if (cell === "skip") {
-        // Empty continuation cell (visually empty, no shading)
         return new TableCell({
           width: { size: DAY_COL, type: WidthType.DXA },
-          borders,
-          margins: { top: 40, bottom: 40, left: 60, right: 60 },
+          borders: {
+            top: noBorder,
+            bottom: noBorder,
+            left: thinBorder,
+            right: thinBorder,
+          },
+          verticalMerge: VerticalMergeType.CONTINUE,
           children: [new Paragraph({ children: [] })],
         });
       }
 
-      if (cell && cell !== "skip") {
-        const s = cell;
-        const subjectCode = s.subject_code ?? s.course_code ?? s.code ?? "";
-        const section = s.section ?? "";
-        const instructor = s.instructor_name ?? s.instructor ?? "";
-        const fillHex = getCellColor(s.pattern).replace("#", "");
+      if (cell) {
+        const subjectCode =
+          cell.subject_code ?? cell.course_code ?? cell.code ?? "";
+        const section = cell.section ?? "";
+        const instructor = cell.instructor_name ?? cell.instructor ?? "";
+        const fillHex = getCellColorHex(cell.pattern);
 
         return new TableCell({
           width: { size: DAY_COL, type: WidthType.DXA },
-          borders,
+          borders: allBorders,
           shading: { fill: fillHex, type: ShadingType.CLEAR },
           verticalAlign: VerticalAlign.CENTER,
-          margins: { top: 40, bottom: 40, left: 60, right: 60 },
+          verticalMerge: VerticalMergeType.RESTART,
+          margins: { top: 40, bottom: 40, left: 40, right: 40 },
           children: [
             new Paragraph({
               alignment: AlignmentType.CENTER,
@@ -312,9 +286,9 @@ async function exportToDocx(schedules, room, docMeta) {
               children: [
                 new TextRun({
                   text: "-Sched. 1-",
-                  size: 14,
+                  size: 12,
                   font: "Arial",
-                  color: "333333",
+                  color: "555555",
                 }),
               ],
             }),
@@ -337,7 +311,7 @@ async function exportToDocx(schedules, room, docMeta) {
               children: [
                 new TextRun({
                   text: section,
-                  size: 14,
+                  size: 13,
                   font: "Arial",
                   color: "333333",
                 }),
@@ -345,14 +319,14 @@ async function exportToDocx(schedules, room, docMeta) {
             }),
             new Paragraph({
               alignment: AlignmentType.CENTER,
-              spacing: { before: 40, after: 0 },
+              spacing: { before: 20, after: 0 },
               border: {
                 top: { style: BorderStyle.SINGLE, size: 4, color: "999999" },
               },
               children: [
                 new TextRun({
                   text: instructor,
-                  size: 13,
+                  size: 12,
                   font: "Arial",
                   color: "444444",
                 }),
@@ -365,13 +339,17 @@ async function exportToDocx(schedules, room, docMeta) {
       // Empty cell
       return new TableCell({
         width: { size: DAY_COL, type: WidthType.DXA },
-        borders,
-        margins: { top: 40, bottom: 40, left: 60, right: 60 },
+        borders: allBorders,
         children: [new Paragraph({ children: [] })],
       });
     });
 
-    rows.push(new TableRow({ children: [timeCell, ...dayCells] }));
+    rows.push(
+      new TableRow({
+        height: { value: 260, rule: "atLeast" },
+        children: [timeCell, ...dayCells],
+      }),
+    );
   });
 
   const scheduleTable = new Table({
@@ -380,22 +358,11 @@ async function exportToDocx(schedules, room, docMeta) {
     rows,
   });
 
-  // Signature block helper
-  function sigBlock(label, name, title) {
+  // ── Signature block helper ────────────────────────────────────────────────
+  function sigBlock(name, title) {
     return [
       new Paragraph({
-        spacing: { before: 0, after: 40 },
-        children: [
-          new TextRun({
-            text: `${label}`,
-            size: 20,
-            font: "Arial",
-            bold: false,
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { before: 200, after: 0 },
+        spacing: { before: 300, after: 0 },
         border: {
           bottom: {
             style: BorderStyle.SINGLE,
@@ -410,17 +377,23 @@ async function exportToDocx(schedules, room, docMeta) {
         alignment: AlignmentType.CENTER,
         spacing: { before: 40, after: 0 },
         children: [
-          new TextRun({ text: name, size: 20, bold: true, font: "Arial" }),
+          new TextRun({
+            text: name || "",
+            size: 20,
+            bold: true,
+            font: "Arial",
+          }),
         ],
       }),
       new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 20, after: 0 },
-        children: [new TextRun({ text: title, size: 18, font: "Arial" })],
+        children: [new TextRun({ text: title || "", size: 18, font: "Arial" })],
       }),
     ];
   }
 
+  // ── Assemble document ─────────────────────────────────────────────────────
   const doc = new Document({
     sections: [
       {
@@ -435,7 +408,6 @@ async function exportToDocx(schedules, room, docMeta) {
           },
         },
         children: [
-          // ── Header text ──────────────────────────────────────────────
           new Paragraph({
             alignment: AlignmentType.CENTER,
             spacing: { before: 0, after: 40 },
@@ -443,7 +415,7 @@ async function exportToDocx(schedules, room, docMeta) {
               new TextRun({
                 text: docMeta.schoolName,
                 bold: true,
-                size: 24,
+                size: 26,
                 font: "Arial",
               }),
             ],
@@ -462,7 +434,7 @@ async function exportToDocx(schedules, room, docMeta) {
               new TextRun({
                 text: "CLASSROOM SCHEDULE",
                 bold: true,
-                size: 22,
+                size: 24,
                 font: "Arial",
               }),
             ],
@@ -487,7 +459,7 @@ async function exportToDocx(schedules, room, docMeta) {
           }),
           new Paragraph({
             alignment: AlignmentType.CENTER,
-            spacing: { before: 0, after: 120 },
+            spacing: { before: 0, after: 160 },
             children: [
               new TextRun({
                 text: `Room: ${docMeta.roomLabel}`,
@@ -497,42 +469,81 @@ async function exportToDocx(schedules, room, docMeta) {
             ],
           }),
 
-          // ── Schedule Table ────────────────────────────────────────────
           scheduleTable,
 
-          // ── Footer signature area ─────────────────────────────────────
           new Paragraph({
-            spacing: { before: 360, after: 0 },
+            spacing: { before: 400, after: 0 },
             children: [new TextRun("")],
           }),
-          new Paragraph({
-            spacing: { before: 0, after: 40 },
-            children: [
-              new TextRun({
-                text: "Prepared By:",
-                size: 18,
-                font: "Arial",
-                color: "555555",
+
+          // Two-column signature area using a borderless table
+          new Table({
+            width: { size: tableWidth, type: WidthType.DXA },
+            columnWidths: [tableWidth / 2, tableWidth / 2],
+            borders: {
+              top: { style: BorderStyle.NONE },
+              bottom: { style: BorderStyle.NONE },
+              left: { style: BorderStyle.NONE },
+              right: { style: BorderStyle.NONE },
+              insideH: { style: BorderStyle.NONE },
+              insideV: { style: BorderStyle.NONE },
+            },
+            rows: [
+              new TableRow({
+                children: [
+                  new TableCell({
+                    borders: {
+                      top: { style: BorderStyle.NONE },
+                      bottom: { style: BorderStyle.NONE },
+                      left: { style: BorderStyle.NONE },
+                      right: { style: BorderStyle.NONE },
+                    },
+                    margins: { right: 400 },
+                    children: [
+                      new Paragraph({
+                        spacing: { before: 0, after: 40 },
+                        children: [
+                          new TextRun({
+                            text: "Prepared By:",
+                            size: 18,
+                            font: "Arial",
+                            color: "555555",
+                          }),
+                        ],
+                      }),
+                      ...sigBlock(
+                        docMeta.preparedByName,
+                        docMeta.preparedByTitle,
+                      ),
+                    ],
+                  }),
+                  new TableCell({
+                    borders: {
+                      top: { style: BorderStyle.NONE },
+                      bottom: { style: BorderStyle.NONE },
+                      left: { style: BorderStyle.NONE },
+                      right: { style: BorderStyle.NONE },
+                    },
+                    margins: { left: 400 },
+                    children: [
+                      new Paragraph({
+                        spacing: { before: 0, after: 40 },
+                        children: [
+                          new TextRun({
+                            text: "Recommending Approval:",
+                            size: 18,
+                            font: "Arial",
+                            color: "555555",
+                          }),
+                        ],
+                      }),
+                      ...sigBlock(docMeta.approvalName, docMeta.approvalTitle),
+                    ],
+                  }),
+                ],
               }),
             ],
           }),
-          ...sigBlock("", docMeta.preparedByName, docMeta.preparedByTitle),
-          new Paragraph({
-            spacing: { before: 240, after: 0 },
-            children: [new TextRun("")],
-          }),
-          new Paragraph({
-            spacing: { before: 0, after: 40 },
-            children: [
-              new TextRun({
-                text: "Recommending Approval:",
-                size: 18,
-                font: "Arial",
-                color: "555555",
-              }),
-            ],
-          }),
-          ...sigBlock("", docMeta.approvalName, docMeta.approvalTitle),
         ],
       },
     ],
@@ -561,6 +572,9 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
   const [exporting, setExporting] = useState(false);
   const [exportingJpg, setExportingJpg] = useState(false);
   const previewRef = useRef(null);
+
+  const timeSlots = generateTimeSlots();
+  const cellContent = buildCellContent(schedules);
 
   const handleExport = async () => {
     setExporting(true);
@@ -598,28 +612,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
     }
   };
 
-  const timeSlots = generateTimeSlots();
-  const grid = buildGrid(schedules);
-
-  // Collect unique cell entries for preview rendering
-  const cellContent = {};
-  schedules.forEach((s) => {
-    const startMin = parseSqlTimeToMinutes(s.time_start);
-    const endMin = parseSqlTimeToMinutes(s.time_end);
-    if (!Number.isFinite(startMin)) return;
-    const end = Number.isFinite(endMin) ? endMin : startMin + 60;
-    const dayIndices = getPatternDayIndices(s.pattern);
-    dayIndices.forEach((di) => {
-      cellContent[`${di}-${startMin}`] = {
-        ...s,
-        _spanRows: Math.max(1, Math.round((end - startMin) / 30)),
-      };
-      for (let m = startMin + 30; m < end; m += 30) {
-        cellContent[`${di}-${m}`] = "skip";
-      }
-    });
-  });
-
   const inputStyle = {
     background: "var(--surface2)",
     border: "1px solid var(--border)",
@@ -655,7 +647,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
 
   return (
     <Modal isOpen onClose={onClose} size="xl">
-      {/* Modal Header */}
       <div
         style={{
           display: "flex",
@@ -691,7 +682,7 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
       <div style={{ borderTop: "1px solid var(--border)", marginBottom: 20 }} />
 
       <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
-        {/* Left: editable fields */}
+        {/* Sidebar fields */}
         <div style={{ width: 240, flexShrink: 0 }}>
           <div
             style={{
@@ -710,7 +701,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
           {field("semester", "Semester")}
           {field("building", "Building")}
           {field("roomLabel", "Room Label")}
-
           <div
             style={{ borderTop: "1px solid var(--border)", margin: "14px 0" }}
           />
@@ -748,7 +738,7 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
           )}
         </div>
 
-        {/* Right: preview pane */}
+        {/* Preview pane */}
         <div style={{ flex: 1, overflowX: "auto" }}>
           <div
             ref={previewRef}
@@ -763,7 +753,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
               fontFamily: "Arial, sans-serif",
             }}
           >
-            {/* Document header preview */}
             <div style={{ textAlign: "center", marginBottom: 8 }}>
               <div style={{ fontWeight: 700, fontSize: 12 }}>
                 {docMeta.schoolName}
@@ -777,7 +766,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
               <div>Room: {docMeta.roomLabel}</div>
             </div>
 
-            {/* Schedule grid preview */}
             <table
               style={{ width: "100%", borderCollapse: "collapse", fontSize: 9 }}
             >
@@ -822,7 +810,8 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
                           textAlign: "right",
                           whiteSpace: "nowrap",
                           fontWeight: isHour ? 700 : 400,
-                          fontSize: 8,
+                          fontSize: isHour ? 8 : 7,
+                          color: isHour ? "#333" : "#aaa",
                         }}
                       >
                         {formatMinTo12(slotMin)}
@@ -880,7 +869,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
               </tbody>
             </table>
 
-            {/* Footer preview */}
             <div
               style={{ display: "flex", gap: 40, marginTop: 16, fontSize: 9 }}
             >
@@ -921,7 +909,6 @@ function SchedulePreviewModal({ room, schedules, onClose }) {
         </div>
       </div>
 
-      {/* Footer actions */}
       <div
         style={{
           borderTop: "1px solid var(--border)",
@@ -975,7 +962,6 @@ export default function RoomScheduleModal({ room, onClose }) {
         .select("*")
         .eq("room_id", room.id)
         .order("time_start", { ascending: true });
-
       if (fetchError) throw fetchError;
       setSchedules(data ?? []);
     } catch (err) {
@@ -1010,7 +996,6 @@ export default function RoomScheduleModal({ room, onClose }) {
   return (
     <>
       <Modal isOpen onClose={onClose} size="lg">
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -1065,7 +1050,6 @@ export default function RoomScheduleModal({ room, onClose }) {
           style={{ borderTop: "1px solid var(--border)", marginBottom: 20 }}
         />
 
-        {/* Body */}
         {loading ? (
           <div
             style={{
@@ -1111,7 +1095,6 @@ export default function RoomScheduleModal({ room, onClose }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-            {/* Summary bar */}
             <div
               style={{
                 display: "flex",
@@ -1138,7 +1121,6 @@ export default function RoomScheduleModal({ room, onClose }) {
               </span>
             </div>
 
-            {/* Schedule groups by pattern */}
             {sortedPatterns.map((pattern) => (
               <div key={pattern}>
                 <div
@@ -1163,17 +1145,16 @@ export default function RoomScheduleModal({ room, onClose }) {
                     {grouped[pattern].length > 1 ? "es" : ""}
                   </span>
                 </div>
-
                 <div
                   style={{ display: "flex", flexDirection: "column", gap: 6 }}
                 >
                   {grouped[pattern]
                     .slice()
-                    .sort((a, b) => {
-                      const aMin = parseSqlTimeToMinutes(a.time_start) ?? 9999;
-                      const bMin = parseSqlTimeToMinutes(b.time_start) ?? 9999;
-                      return aMin - bMin;
-                    })
+                    .sort(
+                      (a, b) =>
+                        (parseSqlTimeToMinutes(a.time_start) ?? 9999) -
+                        (parseSqlTimeToMinutes(b.time_start) ?? 9999),
+                    )
                     .map((s, idx) => {
                       const statusStyle =
                         STATUS_COLORS[s.status] ?? STATUS_COLORS["Pending"];
@@ -1183,7 +1164,6 @@ export default function RoomScheduleModal({ room, onClose }) {
                       const instructor =
                         s.instructor_name ?? s.instructor ?? "—";
                       const timeDisplay = getTimeDisplay(s);
-
                       return (
                         <div
                           key={s.id ?? idx}
@@ -1270,7 +1250,6 @@ export default function RoomScheduleModal({ room, onClose }) {
           </div>
         )}
 
-        {/* Footer */}
         <div
           style={{
             borderTop: "1px solid var(--border)",
